@@ -188,7 +188,13 @@ extension Defaults.Keys {
     static let customAccentColorData = Key<Data?>("customAccentColorData", default: nil)
     // Show or hide the title bar
     static let hideTitleBar = Key<Bool>("hideTitleBar", default: true)
-    
+
+    // MARK: Agent (Claude Code session monitor — NotchNerd)
+    static let agentEnabled = Key<Bool>("agentEnabled", default: false)
+    static let agentPanelEnabled = Key<Bool>("agentPanelEnabled", default: true)
+    static let agentAutoInstallHooks = Key<Bool>("agentAutoInstallHooks", default: false)
+    static let agentClaudeConfigDir = Key<String>("agentClaudeConfigDir", default: "")
+
     // Helper to determine the default media controller based on NowPlaying deprecation status
     static var defaultMediaController: MediaControllerType {
         if MusicManager.shared.isNowPlayingDeprecated {

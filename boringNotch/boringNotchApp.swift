@@ -84,6 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         MusicManager.shared.destroy()
         cleanupDragDetectors()
+        AgentBridgeManager.shared.stop()
         cleanupWindows()
         XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()
     }
@@ -434,6 +435,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showOnboardingWindow(step: .musicPermission)
             }
         }
+
+        // Start the Claude Code agent monitor (no-op unless Defaults[.agentEnabled]).
+        AgentBridgeManager.shared.start()
 
         previousScreens = NSScreen.screens
     }
