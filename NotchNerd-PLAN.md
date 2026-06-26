@@ -132,3 +132,13 @@ Reviewed whether NotchNerd's monitoring can extend to the Claude **Desktop app**
 **Why approve/deny is CLI-only (the one hard limit):** NotchNerd's signature approve/deny works by holding the hook *subprocess* blocked and writing a directive to its stdout. Desktop/Cowork permission gates run in the cloud (chat) or the desktop app's host-loop + React UI (Cowork) — **there is no host-side hook process to block**. The only way to resolve a desktop prompt is brittle Accessibility clicking (not recommended). So **live status + jump are the realistic desktop ceiling; approve/deny stays a Claude-Code-CLI exclusive.**
 
 **Dropped from scope:** chat-app heuristic status / AX automation, and any MCP-based monitor (it only ever sees calls to its *own* tools, never the session or the permission prompt). The embedded Cowork Claude-Code path can't be hooked either (its `CLAUDE_CONFIG_DIR` is redirected to a per-session isolated `.claude` with `hooks:null`, and tools run inside the VM) — it routes to the Phase-7 read-only watcher instead.
+
+## 9. Rebrand / identity (2026-06-26) — deconflict from the user's daily boring.notch
+
+To stop NotchNerd colliding with the user's installed boring.notch (shared prefs/TCC/auto-update), the app was given a distinct identity:
+- **Name:** NotchNerd. **App bundle id:** `eth.7amza.notchnerd`. **XPC helper bundle id:** `eth.7amza.notchnerd.XPCHelper` (+ the hardcoded `serviceName` in `XPCHelperClient.swift` and the protocol doc comment updated to match).
+- **Sparkle disabled:** removed `SUFeedURL`/`SUPublicEDKey`, set `SUEnableAutomaticChecks=false` — so it can NEVER auto-update into boring.notch's appcast. (Re-add our own appcast later if we ship updates.)
+- **Display name** `TheBoringNotch` → `NotchNerd`; high-visibility labels fixed (menu "Restart NotchNerd", "NotchNerd Settings" window title, onboarding "NotchNerd" heading).
+- **Icon + accent:** new app icon (violet "notched screen wearing nerd glasses" on a dark squircle) generated into `AppIcon.appiconset`; accent color → violet (`#7C5CFF`, sRGB 0.486/0.361/1.0).
+- **Deferred (the "full branding" pass):** descriptive onboarding copy + the ~34 `Localizable.xcstrings` brand strings + internal symbol names (`BoringNotch*` types — harmless, left as-is). Build target/scheme names also left as `boringNotch` (renaming the Xcode target is risky and invisible to users).
+- **Note for Phase 2:** the bridge socket + managed-hooks identity must key off this new bundle id (locked decision #8).
