@@ -812,6 +812,7 @@
 				14CEF4102C5CAED300855D72 /* Resources */,
 				B1ECFA062C6FE58A002ACD87 /* Embed Frameworks */,
 				11F748412EC8051E00F841DB /* Embed XPC Services */,
+				55D83D7D764538F73B68BB91 /* Embed OpenIslandHooks CLI */,
 			);
 			buildRules = (
 			);
@@ -915,6 +916,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		55D83D7D764538F73B68BB91 /* Embed OpenIslandHooks CLI */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed OpenIslandHooks CLI";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nENGINE=\"$PROJECT_DIR/Vendor/OpenIslandEngine\"\nSWIFT=\"$(xcrun --find swift)\"\necho \"note: building OpenIslandHooks (release) from $ENGINE\"\n\"$SWIFT\" build --package-path \"$ENGINE\" --product OpenIslandHooks -c release\nBIN=\"$ENGINE/.build/release/OpenIslandHooks\"\nDEST=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nmkdir -p \"$DEST\"\ncp -f \"$BIN\" \"$DEST/OpenIslandHooks\"\nchmod 0755 \"$DEST/OpenIslandHooks\"\ncodesign --force --options runtime -s \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" \"$DEST/OpenIslandHooks\" \\\n  || codesign --force -s - \"$DEST/OpenIslandHooks\"\necho \"note: embedded OpenIslandHooks at $DEST/OpenIslandHooks\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		11F7484B2EC9AABA00F841DB /* Sources */ = {
@@ -1250,7 +1272,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/mediaremote-adapter",
@@ -1304,6 +1326,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/mediaremote-adapter",
