@@ -14,7 +14,7 @@
 # This script is idempotent and non-destructive. It does NOT require sudo and does NOT add the
 # cert to the system trust store — local run + a stable identity is all the TCC-stability goal needs.
 #
-# Usage:  zsh notchnerd/scripts/setup-dev-signing.sh
+# Usage:  zsh tooling/scripts/setup-dev-signing.sh
 #
 set -euo pipefail
 
@@ -70,7 +70,7 @@ cat <<EOF
 
 ==> NEXT: point local dev builds at this identity (do NOT commit this — it's per-developer):
 
-  In Xcode:  target 'boringNotch' ▸ Signing & Capabilities ▸ uncheck
+  In Xcode:  target NotchNerd ▸ Signing & Capabilities ▸ uncheck
              "Automatically manage signing" ▸ set Signing Certificate to "${IDENTITY_NAME}".
 
   OR via a local-only xcconfig (gitignored), set:

@@ -1,3 +1,16 @@
+=============================================================================
+                        GNU GENERAL PUBLIC LICENSE v3
+   applies to (the GPL-v3 works this app is built from — full text in ./LICENSE):
+     - boring.notch — the notch shell NotchNerd is forked from.
+       Copyright (c) TheBoredTeam.
+       https://github.com/TheBoredTeam/boring.notch
+     - Open Island / open-vibe-island — the agent-monitoring engine vendored as
+       OpenIslandCore + the OpenIslandHooks CLI under Vendor/OpenIslandEngine/.
+       Copyright (c) Octane0411. Vendored verbatim at upstream commit 1e26dfc;
+       provenance in Vendor/OpenIslandEngine/VENDORED-FROM.md.
+       https://github.com/Octane0411/open-vibe-island
+=============================================================================
+
 -----------------------------------------------------------------------------
                         BSD 3-Clause License
         applies to:

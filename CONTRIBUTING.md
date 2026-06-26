@@ -1,10 +1,14 @@
+> **Note:** NotchNerd is a personal fork of boring.notch. The guidelines below are inherited from
+> upstream and may not all apply — there is no Crowdin project or `dev` branch for this fork (it uses
+> `main`). For architecture see [spec.md](./spec.md); for the roadmap see [NotchNerd-PLAN.md](./NotchNerd-PLAN.md).
+
 # Contributing
 
 Thank you for taking the time to contribute! ❤️
 
 These guidelines help streamline the contribution process for everyone involved. By following them, you'll make it easier for maintainers to review your work and collaborate with you effectively.
 
-You can contribute in many ways: writing code, improving documentation, reporting bugs, requesting features, or creating tutorials and blog posts. Every contribution, large or small, helps make Boring Notch better.
+You can contribute in many ways: writing code, improving documentation, reporting bugs, requesting features, or creating tutorials and blog posts. Every contribution, large or small, helps make NotchNerd better.
 
 ## Table of Contents
 
@@ -130,4 +134,4 @@ If you need help or have questions:
 
 ---
 
-Thank you for contributing to Boring Notch! Your efforts help make this project better for everyone. 🎉
+Thank you for contributing to NotchNerd! Your efforts help make this project better for everyone. 🎉

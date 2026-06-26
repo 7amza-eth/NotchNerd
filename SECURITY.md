@@ -1,11 +1,16 @@
 # Security Policy
 
+NotchNerd is a personal, open-source fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch).
+It runs **unsandboxed**, and — only when you enable the agent monitor — installs hooks into
+`~/.claude/settings.json` and reads `~/.claude/projects/`. Review the code before granting that access.
+
 ## Reporting a Vulnerability
 
-The Bored Team and community take security bugs in Boring Notch seriously. We appreciate your efforts to responsibly disclose your findings, and will make every effort to acknowledge your contributions.
+Open an issue (or a private security report, if enabled) on the NotchNerd repository:
+https://github.com/7amza-eth/NotchNerd
 
-To report a security issue, please use the GitHub Security Advisory ["Report a Vulnerability"](https://github.com/TheBoredTeam/boring.notch/security/advisories/new) tab.
+For issues inherited from upstream, also consider reporting there:
+- boring.notch — https://github.com/TheBoredTeam/boring.notch/security
+- Open Island — https://github.com/Octane0411/open-vibe-island
 
-The Bored Team will send a response indicating the next steps in handling your report. After the initial reply to your report, we will keep you informed of the progress towards a fix and full announcement, and may ask for additional information or guidance.
-
-Report security bugs in third-party dependencies to the person or team maintaining the package or dependency.
+Report security bugs in third-party dependencies to their respective maintainers.
