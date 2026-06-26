@@ -146,6 +146,7 @@
 		B1FEB4992C7686630066EBBC /* PanGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1FEB4982C7686630066EBBC /* PanGesture.swift */; };
 		E3E7E0A839C22FA4C78209C2 /* OpenIslandCore in Frameworks */ = {isa = PBXBuildFile; productRef = B11E5C1F3836AF0C941BEAD6 /* OpenIslandCore */; };
 		F38DE6482D8243E7008B5C6D /* BatteryActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */; };
+		FF11EDF9050DB4E6A7FEBA39 /* AgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D0FD510B346C0ABAC10B21 /* AgentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -311,6 +312,7 @@
 		B1F0A0012E60000100000001 /* BrightnessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessManager.swift; sourceTree = "<group>"; };
 		B1F747F82EC7E94000F841DB /* LottieView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieView.swift; sourceTree = "<group>"; };
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
+		B6D0FD510B346C0ABAC10B21 /* AgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentView.swift; sourceTree = "<group>"; };
 		E6DBF7837B002A75F1DC3B59 /* AgentBridgeManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentBridgeManager.swift; sourceTree = "<group>"; };
 		E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActiveAgentProcessDiscovery.swift; sourceTree = "<group>"; };
 		F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityManager.swift; sourceTree = "<group>"; };
@@ -790,6 +792,7 @@
 			children = (
 				E6DBF7837B002A75F1DC3B59 /* AgentBridgeManager.swift */,
 				E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */,
+				B6D0FD510B346C0ABAC10B21 /* AgentView.swift */,
 			);
 			name = Agent;
 			path = Agent;
@@ -1082,6 +1085,7 @@
 				B1F0A0022E60000100000001 /* BrightnessManager.swift in Sources */,
 				615EC13A975ECB423A5E5329 /* AgentBridgeManager.swift in Sources */,
 				7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */,
+				FF11EDF9050DB4E6A7FEBA39 /* AgentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
