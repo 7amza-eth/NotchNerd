@@ -84,6 +84,13 @@ struct AgentSessionRow: View {
                 Text(session.title.isEmpty ? "Claude Code" : session.title)
                     .font(.subheadline).lineLimit(1)
                 Spacer(minLength: 4)
+                if agent.canJump(session) {
+                    Button { agent.jump(sessionID: session.id) } label: {
+                        Image(systemName: "arrow.uturn.forward.square")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Jump to the Ghostty terminal")
+                }
                 Text(session.phase.displayName).font(.caption2).foregroundStyle(.secondary)
             }
             if !session.summary.isEmpty {

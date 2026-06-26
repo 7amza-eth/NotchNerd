@@ -253,6 +253,18 @@ final class AgentBridgeManager: ObservableObject {
         republish()
     }
 
+    /// Bring the session's Ghostty terminal to the foreground (Phase 4, Ghostty-only).
+    func jump(sessionID: String) {
+        guard let session = state.session(id: sessionID), let target = session.jumpTarget else { return }
+        Task.detached(priority: .userInitiated) {
+            _ = GhosttyJumpService.jump(to: target)
+        }
+    }
+
+    func canJump(_ session: AgentSession) -> Bool {
+        GhosttyJumpService.canJump(to: session.jumpTarget)
+    }
+
     private func send(_ command: BridgeCommand) {
         Task { [weak self] in
             guard let self else { return }
