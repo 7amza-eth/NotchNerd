@@ -1,5 +1,5 @@
 //
-//  BoringViewModel.swift
+//  NotchNerdViewModel.swift
 //  boringNotch
 //
 //  Created by Harsh Vardhan  Goswami  on 04/08/24.
@@ -9,11 +9,11 @@ import Combine
 import Defaults
 import SwiftUI
 
-class BoringViewModel: NSObject, ObservableObject {
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
+class NotchNerdViewModel: NSObject, ObservableObject {
+    @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
     @ObservedObject var detector = FullscreenMediaDetector.shared
 
-    let animationLibrary: BoringAnimations = .init()
+    let animationLibrary: NotchNerdAnimations = .init()
     let animation: Animation?
 
     @Published var contentType: ContentType = .normal

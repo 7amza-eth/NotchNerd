@@ -11,7 +11,7 @@
 //      styleMask contains .nonactivatingPanel   (clicking does not activate us)
 //      override canBecomeKey = true             (but we can still be the key window)
 //
-//  Contrast with BoringNotchWindow / BoringNotchSkyLightWindow, which hard-code
+//  Contrast with NotchNerdWindow / NotchNerdSkyLightWindow, which hard-code
 //  canBecomeKey=false (they are passive overlays). Do NOT reuse those here.
 //
 

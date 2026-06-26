@@ -10,7 +10,7 @@ import Defaults
 import SwiftUI
 
 struct CameraPreviewView: View {
-    @EnvironmentObject var vm: BoringViewModel
+    @EnvironmentObject var vm: NotchNerdViewModel
     @ObservedObject var webcamManager: WebcamManager
     
     // Track if authorization request is in progress to avoid multiple requests

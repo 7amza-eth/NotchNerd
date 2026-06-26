@@ -21,7 +21,7 @@ let tabs = [
 ]
 
 struct TabSelectionView: View {
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
     @Default(.agentPanelEnabled) var agentPanelEnabled
     @Namespace var animation
     private var displayedTabs: [TabModel] {
@@ -56,5 +56,5 @@ struct TabSelectionView: View {
 }
 
 #Preview {
-    BoringHeader().environmentObject(BoringViewModel())
+    NotchNerdHeader().environmentObject(NotchNerdViewModel())
 }

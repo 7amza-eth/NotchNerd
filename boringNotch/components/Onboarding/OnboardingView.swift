@@ -128,7 +128,7 @@ struct OnboardingView: View {
                 MusicControllerSelectionView(
                     onContinue: {
                         withAnimation(.easeInOut(duration: 0.6)) {
-                            BoringViewCoordinator.shared.firstLaunch = false
+                            NotchNerdViewCoordinator.shared.firstLaunch = false
                             step = .finished
                         }
                     }

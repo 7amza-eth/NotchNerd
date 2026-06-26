@@ -1,5 +1,5 @@
 //
-//  BoringExtrasMenu.swift
+//  NotchNerdExtrasMenu.swift
 //  boringNotch
 //
 //  Created by Harsh Vardhan  Goswami  on 04/08/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct BoringLargeButtons: View {
+struct NotchNerdLargeButtons: View {
     var action: () -> Void
     var icon: Image
     var title: String
@@ -27,8 +27,8 @@ struct BoringLargeButtons: View {
     }
 }
 
-struct BoringExtrasMenu : View {
-    @ObservedObject var vm: BoringViewModel
+struct NotchNerdExtrasMenu : View {
+    @ObservedObject var vm: NotchNerdViewModel
     
     var body: some View {
         VStack{
@@ -41,7 +41,7 @@ struct BoringExtrasMenu : View {
     }
     
     var github: some View {
-        BoringLargeButtons(
+        NotchNerdLargeButtons(
             action: {
                 if let url = URL(string: "https://github.com/TheBoredTeam/boring.notch") {
                     NSWorkspace.shared.open(url)
@@ -71,7 +71,7 @@ struct BoringExtrasMenu : View {
     }
     
     var hide: some View {
-        BoringLargeButtons(
+        NotchNerdLargeButtons(
             action: {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                     //vm.openMusic()
@@ -83,7 +83,7 @@ struct BoringExtrasMenu : View {
     }
     
     var close: some View {
-        BoringLargeButtons(
+        NotchNerdLargeButtons(
             action: {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -99,5 +99,5 @@ struct BoringExtrasMenu : View {
 
 
 #Preview {
-    BoringExtrasMenu(vm: .init())
+    NotchNerdExtrasMenu(vm: .init())
 }

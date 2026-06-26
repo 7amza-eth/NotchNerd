@@ -11,7 +11,7 @@
 //
 //  Created in applicationDidFinishLaunching. Visibility gated by its own Defaults
 //  key + a MenuBarExtra item + a KeyboardShortcuts global hotkey — never bound to
-//  BoringViewModel.notchState.
+//  NotchNerdViewModel.notchState.
 //
 //  Float-over-fullscreen strategy:
 //    GO path      — insert the panel into NotchSpaceManager.shared.notchSpace
@@ -136,7 +136,7 @@ final class NotepadWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func preferredScreen() -> NSScreen? {
-        if let s = NSScreen.screen(withUUID: BoringViewCoordinator.shared.selectedScreenUUID) {
+        if let s = NSScreen.screen(withUUID: NotchNerdViewCoordinator.shared.selectedScreenUUID) {
             return s
         }
         return NSScreen.main ?? NSScreen.screens.first

@@ -1,5 +1,5 @@
 //
-//  BoringHeader.swift
+//  NotchNerdHeader.swift
 //  boringNotch
 //
 //  Created by Harsh Vardhan  Goswami  on 04/08/24.
@@ -8,10 +8,10 @@
 import Defaults
 import SwiftUI
 
-struct BoringHeader: View {
-    @EnvironmentObject var vm: BoringViewModel
+struct NotchNerdHeader: View {
+    @EnvironmentObject var vm: NotchNerdViewModel
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
     @StateObject var tvm = ShelfStateViewModel.shared
     var body: some View {
         HStack(spacing: 0) {
@@ -78,7 +78,7 @@ struct BoringHeader: View {
                             .buttonStyle(PlainButtonStyle())
                         }
                         if Defaults[.showBatteryIndicator] {
-                            BoringBatteryView(
+                            NotchNerdBatteryView(
                                 batteryWidth: 30,
                                 isCharging: batteryModel.isCharging,
                                 isInLowPowerMode: batteryModel.isInLowPowerMode,
@@ -113,5 +113,5 @@ struct BoringHeader: View {
 }
 
 #Preview {
-    BoringHeader().environmentObject(BoringViewModel())
+    NotchNerdHeader().environmentObject(NotchNerdViewModel())
 }

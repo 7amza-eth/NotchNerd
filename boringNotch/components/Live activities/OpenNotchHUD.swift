@@ -9,7 +9,7 @@ import SwiftUI
 import Defaults
 
 struct OpenNotchHUD: View {
-    @EnvironmentObject var vm: BoringViewModel
+    @EnvironmentObject var vm: NotchNerdViewModel
     @Binding var type: SneakContentType
     @Binding var value: CGFloat
     @Binding var icon: String
@@ -100,7 +100,7 @@ struct OpenNotchHUD: View {
 
 #Preview {
     OpenNotchHUD(type: .constant(.volume), value: .constant(0.5), icon: .constant(""))
-        .environmentObject(BoringViewModel())
+        .environmentObject(NotchNerdViewModel())
         .padding()
         .background(Color.gray)
 }

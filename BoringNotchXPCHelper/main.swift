@@ -1,6 +1,6 @@
 //
 //  main.swift
-//  BoringNotchXPCHelper
+//  NotchNerdXPCHelper
 //
 //  Created by Alexander on 2025-11-16.
 //
@@ -14,10 +14,10 @@ class ServiceDelegate: NSObject, NSXPCListenerDelegate {
         
         // Configure the connection.
         // First, set the interface that the exported object implements.
-        newConnection.exportedInterface = NSXPCInterface(with: (any BoringNotchXPCHelperProtocol).self)
+        newConnection.exportedInterface = NSXPCInterface(with: (any NotchNerdXPCHelperProtocol).self)
         
         // Next, set the object that the connection exports. All messages sent on the connection to this service will be sent to the exported object to handle. The connection retains the exported object.
-        let exportedObject = BoringNotchXPCHelper()
+        let exportedObject = NotchNerdXPCHelper()
         newConnection.exportedObject = exportedObject
         
         // Resuming the connection allows the system to deliver more incoming messages.
