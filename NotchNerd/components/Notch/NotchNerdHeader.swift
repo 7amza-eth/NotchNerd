@@ -58,6 +58,21 @@ struct NotchNerdHeader: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
+                        Button(action: {
+                            NotepadWindowController.shared.toggle()
+                        }) {
+                            Capsule()
+                                .fill(.black)
+                                .frame(width: 30, height: 30)
+                                .overlay {
+                                    Image(systemName: "note.text")
+                                        .foregroundColor(.white)
+                                        .padding()
+                                        .imageScale(.medium)
+                                }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Toggle the always-open notepad")
                         if Defaults[.settingsIconInNotch] {
                             Button(action: {
                                 DispatchQueue.main.async {
