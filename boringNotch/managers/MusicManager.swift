@@ -1,6 +1,6 @@
 //
 //  MusicManager.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Harsh Vardhan  Goswami  on 03/08/24.
 //

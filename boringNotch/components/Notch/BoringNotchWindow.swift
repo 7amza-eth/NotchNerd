@@ -1,6 +1,6 @@
 //
 //  NotchNerdWindow.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Harsh Vardhan  Goswami  on 06/08/24.
 //

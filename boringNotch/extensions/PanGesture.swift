@@ -1,6 +1,6 @@
 //
 //  PanGesture.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Richard Kunkli on 21/08/2024.
 //

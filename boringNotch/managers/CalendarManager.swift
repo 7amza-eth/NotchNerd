@@ -1,6 +1,6 @@
 //
 //  CalendarManager.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Harsh Vardhan  Goswami  on 08/09/24.
 //

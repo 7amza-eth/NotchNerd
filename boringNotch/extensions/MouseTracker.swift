@@ -1,6 +1,6 @@
 //
 //  MouseTracker.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Richard Kunkli on 12/08/2024.
 //

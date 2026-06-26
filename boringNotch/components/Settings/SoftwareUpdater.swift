@@ -1,6 +1,6 @@
 //
 //  SoftwareUpdater.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Richard Kunkli on 09/08/2024.
 //

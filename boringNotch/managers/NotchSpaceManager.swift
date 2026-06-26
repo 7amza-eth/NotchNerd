@@ -1,6 +1,6 @@
 //
 //  NotchSpaceManager.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Alexander on 2024-10-27.
 //

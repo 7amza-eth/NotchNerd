@@ -1,6 +1,6 @@
 //
 //  TabButton.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Hugo Persson on 2024-08-24.
 //

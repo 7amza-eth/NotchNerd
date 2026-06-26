@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  boringNotchApp
+//  NotchNerd
 //
 //  Created by Harsh Vardhan Goswami  on 02/08/24
 //  Modified by Richard Kunkli on 24/08/2024.

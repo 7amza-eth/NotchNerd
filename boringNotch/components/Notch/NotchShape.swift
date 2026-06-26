@@ -1,6 +1,6 @@
 //
 //  NotchShape.swift
-//  boringNotch
+//  NotchNerd
 //
 // Created by Kai Azim on 2023-08-24.
 // Original source: https://github.com/MrKai77/DynamicNotchKit

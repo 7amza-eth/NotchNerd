@@ -1,6 +1,6 @@
 //
 //  AppIcons.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Harsh Vardhan  Goswami  on 16/08/24.
 //

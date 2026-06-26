@@ -1,6 +1,6 @@
 //
 //  ActionBar.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Richard Kunkli on 15/09/2024.
 //

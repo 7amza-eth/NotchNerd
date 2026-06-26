@@ -1,6 +1,6 @@
 //
 //  YouTubeMusicNetworking.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Alexander on 2025-09-14.
 //

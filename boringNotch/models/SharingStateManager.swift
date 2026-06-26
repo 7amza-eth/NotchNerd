@@ -1,6 +1,6 @@
 //
 //  SharingStateManager.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Alexander on 2025-10-10.
 //

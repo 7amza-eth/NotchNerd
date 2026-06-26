@@ -1,6 +1,6 @@
 //
 //  Image2Color.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Richard Kunkli on 07/08/2024.
 //

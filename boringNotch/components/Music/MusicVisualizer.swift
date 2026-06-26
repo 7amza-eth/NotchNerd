@@ -1,6 +1,6 @@
 //
 //  MusicVisualizer.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Harsh Vardhan  Goswami  on 02/08/24.
 //

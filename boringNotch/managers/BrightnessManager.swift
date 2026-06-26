@@ -1,5 +1,5 @@
 //  BrightnessManager.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by JeanLouis on 08/22/24.
 

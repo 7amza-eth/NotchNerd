@@ -1,6 +1,6 @@
 //
 //  ApplicationRelauncher.swift
-//  boringNotch
+//  NotchNerd
 //
 //  Created by Corentin132 on 03/10/2025.
 //
