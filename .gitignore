@@ -56,3 +56,6 @@ build/
 
 # NotchNerd: reference clone of Open Island (has its own git history); kept locally for vendoring
 sources/open-vibe-island/
+
+# compiled notepad spike harness binary
+spikes/notepad-focus/harness/harness
