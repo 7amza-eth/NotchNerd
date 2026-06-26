@@ -29,13 +29,16 @@ struct DynamicNotchApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("boring.notch", systemImage: "sparkle", isInserted: $showMenuBarIcon) {
+        MenuBarExtra("NotchNerd", systemImage: "sparkle", isInserted: $showMenuBarIcon) {
             Button("Settings") {
                 DispatchQueue.main.async {
                     SettingsWindowController.shared.showWindow()
                 }
             }
             .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
+            Button("Notepad") {
+                NotepadWindowController.shared.toggle()
+            }
             CheckForUpdatesView(updater: updaterController.updater)
             Divider()
             Button("Restart NotchNerd") {
@@ -85,6 +88,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MusicManager.shared.destroy()
         cleanupDragDetectors()
         AgentBridgeManager.shared.stop()
+        NotesStore.shared.flush()
         cleanupWindows()
         XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()
     }
@@ -438,6 +442,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Start the Claude Code agent monitor (no-op unless Defaults[.agentEnabled]).
         AgentBridgeManager.shared.start()
+
+        // Restore the always-open notepad if it was visible last session.
+        NotepadWindowController.shared.restoreIfNeeded()
 
         previousScreens = NSScreen.screens
     }
