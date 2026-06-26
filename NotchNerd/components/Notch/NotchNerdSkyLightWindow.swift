@@ -109,6 +109,9 @@ class NotchNerdSkyLightWindow: NSPanel {
     
     private var observers: Set<AnyCancellable> = []
     
-    override var canBecomeKey: Bool { false }
+    // Normally the notch is a click-through, non-key overlay. It may only take keyboard focus
+    // while the in-notch Notepad tab is active (so its TextEditor can receive text). The
+    // .nonactivatingPanel style means becoming key does NOT activate the app / steal the menu bar.
+    override var canBecomeKey: Bool { NotepadNotchFocus.allowsNotchKey }
     override var canBecomeMain: Bool { false }
 }

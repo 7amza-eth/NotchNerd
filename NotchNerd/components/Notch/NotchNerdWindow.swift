@@ -41,9 +41,9 @@ class NotchNerdWindow: NSPanel {
     }
     
     override var canBecomeKey: Bool {
-        false
+        NotepadNotchFocus.allowsNotchKey
     }
-    
+
     override var canBecomeMain: Bool {
         false
     }
