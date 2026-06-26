@@ -53,3 +53,6 @@ build/
 *.xcarchive
 *.dSYM
 
+
+# NotchNerd: reference clone of Open Island (has its own git history); kept locally for vendoring
+sources/open-vibe-island/
