@@ -195,6 +195,9 @@ extension Defaults.Keys {
     static let agentAutoInstallHooks = Key<Bool>("agentAutoInstallHooks", default: false)
     static let agentClaudeConfigDir = Key<String>("agentClaudeConfigDir", default: "")
 
+    // MARK: Notepad
+    static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)
+
     // Helper to determine the default media controller based on NowPlaying deprecation status
     static var defaultMediaController: MediaControllerType {
         if MusicManager.shared.isNowPlayingDeprecated {

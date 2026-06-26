@@ -355,6 +355,8 @@ struct ContentView: View {
                         ShelfView()
                     case .agent:
                         AgentView()
+                    case .notepad:
+                        NotepadTabView()
                     }
                 }
                 .transition(

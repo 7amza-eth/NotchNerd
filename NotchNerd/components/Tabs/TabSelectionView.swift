@@ -23,9 +23,13 @@ let tabs = [
 struct TabSelectionView: View {
     @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
     @Default(.agentPanelEnabled) var agentPanelEnabled
+    @Default(.notepadTabEnabled) var notepadTabEnabled
     @Namespace var animation
     private var displayedTabs: [TabModel] {
-        agentPanelEnabled ? tabs + [TabModel(label: "Agent", icon: "sparkles", view: .agent)] : tabs
+        var result = tabs
+        if agentPanelEnabled { result.append(TabModel(label: "Agent", icon: "sparkles", view: .agent)) }
+        if notepadTabEnabled { result.append(TabModel(label: "Notes", icon: "note.text", view: .notepad)) }
+        return result
     }
     var body: some View {
         HStack(spacing: 0) {

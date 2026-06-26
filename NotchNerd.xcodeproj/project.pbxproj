@@ -107,6 +107,7 @@
 		14E9FEAA2C70BF610062E83F /* DownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEA92C70BF610062E83F /* DownloadView.swift */; };
 		14E9FEAE2C7325770062E83F /* Button+Bouncing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */; };
 		14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */; };
+		3B35AEFA27C6647596C04D48 /* NotepadTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */; };
 		3C36DE4F394A57A7EE45E3E2 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9DB0DB877CB83B59501DD04 /* NotesStore.swift */; };
 		507266DB2C908E2E00A2D00D /* HoverButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 507266DA2C908E2E00A2D00D /* HoverButton.swift */; };
 		5917FD112E57891600E87F1C /* MediaKeyInterceptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5917FD102E57891600E87F1C /* MediaKeyInterceptor.swift */; };
@@ -286,6 +287,7 @@
 		14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Button+Bouncing.swift"; sourceTree = "<group>"; };
 		14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DataTypes+Extensions.swift"; sourceTree = "<group>"; };
 		2EBBF33B3096E613DD622035 /* NotepadView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadView.swift; sourceTree = "<group>"; };
+		3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadTabView.swift; sourceTree = "<group>"; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
 		5917FD102E57891600E87F1C /* MediaKeyInterceptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaKeyInterceptor.swift; sourceTree = "<group>"; };
 		5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationRelauncher.swift; sourceTree = "<group>"; };
@@ -817,6 +819,7 @@
 				2EBBF33B3096E613DD622035 /* NotepadView.swift */,
 				C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */,
 				C9DB0DB877CB83B59501DD04 /* NotesStore.swift */,
+				3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */,
 			);
 			name = Notepad;
 			path = Notepad;
@@ -1115,6 +1118,7 @@
 				92AFD0C0E17DB24E008AB87F /* NotepadWindowController.swift in Sources */,
 				3C36DE4F394A57A7EE45E3E2 /* NotesStore.swift in Sources */,
 				643DEBDC400E040846AA790F /* GhosttyJumpService.swift in Sources */,
+				3B35AEFA27C6647596C04D48 /* NotepadTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -14,6 +14,9 @@ import SwiftUI
 
 struct NotepadView: View {
     @ObservedObject var store: NotesStore
+    /// When true the view is embedded in the notch tab, so it drops the floating-window
+    /// chrome (fixed min-size, material background, rounded border).
+    var inNotch: Bool = false
     @FocusState private var editorFocused: Bool
 
     // Bridges the selected note's body to the editor with autosave on every edit.
@@ -27,20 +30,26 @@ struct NotepadView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        let core = VStack(spacing: 0) {
             tabStrip
             Divider().opacity(0.4)
             editor
         }
-        .frame(minWidth: 320, minHeight: 220)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(.white.opacity(0.08), lineWidth: 1)
-        )
         .onAppear { focusEditorSoon() }
         .onChange(of: store.selectedNoteID) { _, _ in focusEditorSoon() }
+
+        if inNotch {
+            core
+        } else {
+            core
+                .frame(minWidth: 320, minHeight: 220)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                )
+        }
     }
 
     // MARK: Tabs / notes list (horizontal scrollable strip)
