@@ -116,7 +116,7 @@ A formal review pitted three directions against each other (independent advocate
 - `DESIGN.md` + production-intent code (`NotepadPanel.swift`, `NotepadWindowController.swift`, `NotesStore.swift` multi-note split body/index + debounced autosave, `NotepadView.swift`).
 - **Runnable harness** (`harness/main.swift` + `README.md`) — a single-file AppKit program (no Xcode needed): `cd spikes/notepad-focus/harness && swiftc -O main.swift -o harness && ./harness` (append `B` for CGS-space mode). It builds clean (`swiftc` exit 0) and replicates the real `CGSSpace.swift` `@_silgen_name` symbols 1:1, with a live status line (frontmost app / `ourApp.isActive` / `notepad.isKey`) and a PASS/FAIL → GO/NO-GO checklist.
 - **Key rule confirmed:** the controller must NEVER call `NSApp.activate`/`.regular` (unlike `SettingsWindowController`); `.nonactivatingPanel` + `canBecomeKey=true` is the focus mechanism.
-- **Prediction: GO at ~65–70%.** Not stealing foreground is low-risk (AppKit activation severance is independent of CGS reparenting). The one real risk is the macOS "key window must be in the active space" rule biting the reparented window (no caret / dropped keys) in CGS mode — exactly why the harness exists. Fallback (plain high-level floating panel, normal spaces) is a one-line `Defaults` switch. **You run the harness to get the verdict.**
+- **VERDICT: GO — validated on-device (2026-06-26).** In Mode B (max-level CGS space) the key-capable `.nonactivatingPanel` took text focus (caret blinked, keys landed) while the user's other app stayed frontmost (`ourApp.isActive` stayed `no` — no activation leak), AND it floated above a native-fullscreen app. **Phase 5 ships the CGS-space float; the plain-floating fallback is not needed.**
 
 ## 8. Claude Desktop surfaces — feasibility outcome (2026-06-25)
 
@@ -142,3 +142,13 @@ To stop NotchNerd colliding with the user's installed boring.notch (shared prefs
 - **Icon + accent:** new app icon (violet "notched screen wearing nerd glasses" on a dark squircle) generated into `AppIcon.appiconset`; accent color → violet (`#7C5CFF`, sRGB 0.486/0.361/1.0).
 - **Deferred (the "full branding" pass):** descriptive onboarding copy + the ~34 `Localizable.xcstrings` brand strings + internal symbol names (`BoringNotch*` types — harmless, left as-is). Build target/scheme names also left as `boringNotch` (renaming the Xcode target is risky and invisible to users).
 - **Note for Phase 2:** the bridge socket + managed-hooks identity must key off this new bundle id (locked decision #8).
+
+## 10. Implementation progress (2026-06-26, on Xcode 26.6)
+
+- ✅ **Fork set up** — repo root, branch `main`, `origin` = github.com/7amza-eth/NotchNerd, `upstream` = boring.notch (full history). Inherited boring.notch CI removed.
+- ✅ **Phase 0 — sandbox dropped & verified.** Builds unsandboxed (0 errors); `app-sandbox=false` in the signed binary; MediaRemoteAdapter `test` passes after re-sign (music survives); app launches clean. *(Visual UI confirmation pending — assistant shell lacks Screen Recording.)*
+- ✅ **Rebrand** — `eth.7amza.notchnerd`, name NotchNerd, Sparkle off, violet icon + accent. Distinct from boring.notch.
+- ✅ **Notepad focus-spike — GO** (validated on-device). Phase 5 ships the CGS-space float.
+- ✅ **Phase 1 (step 1) — engine vendored & compiles.** `Vendor/OpenIslandEngine/` (Core whole + hook CLI), slim `Package.swift` (tools 6.0); `swift build` ✅; hook CLI fail-opens ✅.
+- ⏭️ **Phase 1 (step 2) — xcodeproj integration** (next): add the local package via `XCLocalSwiftPackageReference`, link `OpenIslandCore` into the app, add a native command-line-tool target compiling `OpenIslandHooksCLI` + a Copy-Files phase embedding it into `Contents/Helpers` (clone the Embed-XPC-Services phase). Spike advises the Xcode UI for this.
+- ⏭️ **Phase 2** — `AgentBridgeManager` driver (design ready in `spikes/phase2-driver/`), namespaced socket per decision #8.
