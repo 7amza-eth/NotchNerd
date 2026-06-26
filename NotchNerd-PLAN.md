@@ -152,3 +152,19 @@ To stop NotchNerd colliding with the user's installed boring.notch (shared prefs
 - ✅ **Phase 1 (step 1) — engine vendored & compiles.** `Vendor/OpenIslandEngine/` (Core whole + hook CLI), slim `Package.swift` (tools 6.0); `swift build` ✅; hook CLI fail-opens ✅.
 - ⏭️ **Phase 1 (step 2) — xcodeproj integration** (next): add the local package via `XCLocalSwiftPackageReference`, link `OpenIslandCore` into the app, add a native command-line-tool target compiling `OpenIslandHooksCLI` + a Copy-Files phase embedding it into `Contents/Helpers` (clone the Embed-XPC-Services phase). Spike advises the Xcode UI for this.
 - ⏭️ **Phase 2** — `AgentBridgeManager` driver (design ready in `spikes/phase2-driver/`), namespaced socket per decision #8.
+
+## 11. BUILD STATUS — feature-complete (2026-06-26, Xcode 26.6)
+
+All phases implemented, build-verified (`xcodebuild ... BUILD SUCCEEDED`, 0 errors), committed, pushed.
+
+- ✅ **Phase 0** sandbox dropped; music/MediaRemote verified intact after re-sign.
+- ✅ **Phase 1** vendored `OpenIslandCore` + hook CLI; linked into the app via local SPM package; hook CLI embedded in `Contents/Helpers`. Headless engine round-trip smoke test PASSED.
+- ✅ **Phase 2** `AgentBridgeManager` driver (headless `BridgeServer` + observer + `SessionState`, hook install, approve/deny round-trip, transcript + process-liveness discovery), wired in AppDelegate (gated by `agentEnabled`, default off).
+- ✅ **Phase 3** Agent tab + session panel (Allow/Deny + question cards), settings pane, persistent closed-notch attention indicator.
+- ✅ **Phase 5** always-open multi-note notepad — key-capable `.nonactivatingPanel` in the CGS space (focus GO validated on-device), MenuBarExtra toggle, file-backed autosave.
+- ✅ **Phase 4** Ghostty terminal jump-back.
+- ✅ **Comprehensive rename → NotchNerd**: product `NotchNerd.app`, targets, `NotchNerd.xcodeproj`, source folders, every file name, all code symbols, UI copy + localization, display name, icon, and `Defaults` keys. Upstream attribution (boring.notch links, TheBoredTeam credit + logo) preserved per GPL.
+
+**The agent feature ships OFF by default** — enable in Settings → Agent, then Install hooks.
+
+**Remaining (not blockers):** runtime/visual QA on a real machine (notch draws, now-playing renders, agent approve/deny end-to-end against live Claude Code, notepad focus in daily use, TCC consent flows); the optional Phase 6 (http-hook spike, usage-HUD wrapper statusline) and Phase 7 (Cowork beta watcher).
