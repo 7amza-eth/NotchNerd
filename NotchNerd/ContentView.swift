@@ -607,7 +607,13 @@ struct ContentView: View {
             withAnimation(animationSpring) {
                 isHovering = false
             }
-            if !SharingStateManager.shared.preventNotchClose { 
+            // Swipe-up is an explicit dismiss. On the Notes tab it also overrides the keep-open
+            // pin so you can close the notch while editing.
+            if coordinator.currentView == .notepad {
+                NotepadNotchFocus.allowsNotchKey = false
+                SharingStateManager.shared.preventNotchClose = false
+            }
+            if !SharingStateManager.shared.preventNotchClose {
                 gestureProgress = .zero
                 vm.close()
             }
