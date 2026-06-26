@@ -10,7 +10,7 @@ import Combine
 import Foundation
 
 extension Notification.Name {
-	static let sharingDidFinish = Notification.Name("com.boringNotch.sharingDidFinish")
+	static let sharingDidFinish = Notification.Name("com.NotchNerd.sharingDidFinish")
 }
 
 @MainActor

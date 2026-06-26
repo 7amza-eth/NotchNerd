@@ -1,6 +1,6 @@
 //
 //  NotesStore.swift
-//  boringNotch (NotchNerd)
+//  NotchNerd (NotchNerd)
 //
 //  Multi-note model + on-disk persistence + debounced autosave for the always-
 //  open notepad. Pure Foundation + Combine, no host-app coupling, so it can be

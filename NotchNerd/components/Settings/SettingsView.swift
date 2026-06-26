@@ -932,7 +932,7 @@ struct Shelf: View {
     var body: some View {
         Form {
             Section {
-                Defaults.Toggle(key: .boringShelf) {
+                Defaults.Toggle(key: .shelfEnabled) {
                     Text("Enable shelf")
                 }
                 Defaults.Toggle(key: .openShelfByDefault) {

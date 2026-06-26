@@ -1,6 +1,6 @@
 //
 //  NotepadWindowController.swift
-//  boringNotch (NotchNerd)
+//  NotchNerd (NotchNerd)
 //
 //  Owns the always-open notepad panel's lifecycle. Modeled on
 //  SettingsWindowController (singleton + NSWindowController), but CRITICALLY

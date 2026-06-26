@@ -1,6 +1,6 @@
 //
 //  NotepadView.swift
-//  boringNotch (NotchNerd)
+//  NotchNerd (NotchNerd)
 //
 //  SwiftUI content for the notepad panel: a notes list/tabs strip + a TextEditor
 //  bound to the selected note. Hosted in NotepadPanel via NSHostingView.

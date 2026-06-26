@@ -28,7 +28,7 @@ final class YouTubeMusicHTTPClient: ObservableObject {
     
     // MARK: - Authentication
     func authenticate() async throws -> String {
-        guard let url = URL(string: "\(baseURL)/auth/boringNotch") else {
+        guard let url = URL(string: "\(baseURL)/auth/NotchNerd") else {
             throw YouTubeMusicError.invalidURL
         }
 

@@ -1,6 +1,6 @@
 //
 //  NotepadPanel.swift
-//  boringNotch (NotchNerd)
+//  NotchNerd (NotchNerd)
 //
 //  An independent, key-capable, non-activating panel for the always-open
 //  notepad. This is NOT one of the click-through notch panels — it is the one
