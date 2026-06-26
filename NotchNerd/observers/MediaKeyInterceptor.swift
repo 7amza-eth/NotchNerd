@@ -32,14 +32,25 @@ final class MediaKeyInterceptor {
     
     private init() {}
     
-    // MARK: - Accessibility (via XPC)
-    
-    func requestAccessibilityAuthorization() {
-        XPCHelperClient.shared.requestAccessibilityAuthorization()
+    // MARK: - Accessibility (checked IN-APP)
+    //
+    // The CGEventTap below runs in THIS (app) process, so the APP — not the XPC helper — must hold
+    // the Accessibility grant. NotchNerd is unsandboxed, so we call the AX APIs directly. Routing
+    // the check through the helper (a separate process / bundle id) checked the wrong process's
+    // trust, so the event tap could never be authorized.
+
+    @discardableResult
+    func isAccessibilityTrusted(prompt: Bool = false) -> Bool {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: prompt] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
     }
-    
+
+    func requestAccessibilityAuthorization() {
+        _ = isAccessibilityTrusted(prompt: true)
+    }
+
     func ensureAccessibilityAuthorization(promptIfNeeded: Bool = false) async -> Bool {
-        await XPCHelperClient.shared.ensureAccessibilityAuthorization(promptIfNeeded: promptIfNeeded)
+        isAccessibilityTrusted(prompt: promptIfNeeded)
     }
     
     // MARK: - Event Tap
@@ -53,8 +64,8 @@ final class MediaKeyInterceptor {
             return
         }
         
-        // Check accessibility authorization
-        let authorized = await XPCHelperClient.shared.isAccessibilityAuthorized()
+        // Check accessibility authorization of THIS app process (the event tap needs it).
+        let authorized = isAccessibilityTrusted(prompt: false)
         if !authorized {
             if promptIfNeeded {
                 let granted = await ensureAccessibilityAuthorization(promptIfNeeded: true)

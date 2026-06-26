@@ -504,7 +504,7 @@ struct HUD: View {
 
                         HStack(spacing: 12) {
                             Button("Request Accessibility") {
-                                XPCHelperClient.shared.requestAccessibilityAuthorization()
+                                MediaKeyInterceptor.shared.requestAccessibilityAuthorization()
                             }
                             .buttonStyle(.borderedProminent)
                         }
