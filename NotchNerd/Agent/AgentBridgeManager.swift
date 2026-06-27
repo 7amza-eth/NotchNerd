@@ -60,6 +60,20 @@ final class AgentBridgeManager: ObservableObject {
     @Published private(set) var attentionCount: Int = 0
     @Published private(set) var runningCount: Int = 0
     @Published private(set) var liveSessionCount: Int = 0
+
+    /// Sessions that look like they're actively *working right now*: running, process alive, and
+    /// emitting events recently. The classic hooks only mark turn boundaries (UserPromptSubmit→Stop),
+    /// so a session whose Stop didn't fire — or one idle "waiting for you" — can linger in `.running`;
+    /// the recency guard filters those. A precise real-time signal awaits the Phase-6 http hooks.
+    var workingCount: Int {
+        let now = Date.now
+        return sessions.filter {
+            $0.phase == .running && $0.isProcessAlive
+                && now.timeIntervalSince($0.updatedAt) < Self.workingRecencyWindow
+        }.count
+    }
+    private static let workingRecencyWindow: TimeInterval = 60
+
     @Published private(set) var isBridgeReady: Bool = false
     @Published private(set) var hookInstallState: HookInstallState = .unknown
     @Published private(set) var lastStatusMessage: String = ""
@@ -466,7 +480,11 @@ final class AgentBridgeManager: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let changed = self.state.markProcessLiveness(aliveSessionIDs: aliveClaudeIDs)
-                if !changed.isEmpty { self.republish() }
+                // Also refresh while a session is running so the time-based `workingCount` updates
+                // (the "Claude working" indicator turns off ~recency-window after events stop).
+                if !changed.isEmpty || self.state.sessions.contains(where: { $0.phase == .running }) {
+                    self.republish()
+                }
             }
         }
         timer.resume()

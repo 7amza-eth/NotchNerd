@@ -323,9 +323,9 @@ struct ContentView: View {
                           // session shows inside its visualizer slot instead (see MusicLiveActivity).
                           MusicLiveActivity()
                               .frame(alignment: .center)
-                      } else if agent.runningCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
+                      } else if agent.workingCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
                           // No music is showing, but a Claude session is working — surface it here.
-                          AgentActiveIndicator(count: agent.runningCount)
+                          AgentActiveIndicator(count: agent.workingCount)
                               .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           NotchNerdFaceAnimation()
@@ -490,7 +490,7 @@ struct ContentView: View {
                 )
 
             HStack {
-                if agent.runningCount > 0 {
+                if agent.workingCount > 0 {
                     // An active Claude session takes over just the visualizer slot — the album art
                     // and track still show, so the music notch never disappears.
                     Image(systemName: "sparkles")
