@@ -323,9 +323,10 @@ struct ContentView: View {
                           // session shows inside its visualizer slot instead (see MusicLiveActivity).
                           MusicLiveActivity()
                               .frame(alignment: .center)
-                      } else if agent.workingCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
-                          // No music is showing, but a Claude session is working — surface it here.
-                          AgentActiveIndicator(count: agent.workingCount)
+                      } else if agent.liveSessionCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
+                          // No music is showing — surface Claude's status in the closed notch
+                          // ("N working" while cooking, otherwise "N active" for live sessions).
+                          AgentActiveIndicator(working: agent.workingCount, live: agent.liveSessionCount)
                               .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           NotchNerdFaceAnimation()
