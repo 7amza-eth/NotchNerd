@@ -187,6 +187,14 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .onChange(of: coordinator.currentView) { _, view in
+                        // The Agent tab opens taller than the other tabs — resize live on tab switch.
+                        if vm.notchState == .open {
+                            withAnimation(animationSpring) {
+                                vm.notchSize = vm.openSize(for: view)
+                            }
+                        }
+                    }
                     .onChange(of: vm.isBatteryPopoverActive) {
                         if !vm.isBatteryPopoverActive && !isHovering && vm.notchState == .open && !SharingStateManager.shared.preventNotchClose {
                             hoverTask?.cancel()
@@ -310,6 +318,11 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
+                      } else if agent.runningCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
+                          // A Claude session is actively working — show it in the closed notch
+                          // (takes the place of the music live activity while Claude runs).
+                          AgentActiveIndicator(count: agent.runningCount)
+                              .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)

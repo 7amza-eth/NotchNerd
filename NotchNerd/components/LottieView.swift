@@ -18,6 +18,7 @@ struct LottieView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let animationView = LottieAnimationView()
+        animationView.contentMode = .scaleAspectFit   // fit the whole animation; don't zoom/crop
         animationView.translatesAutoresizingMaskIntoConstraints = false
         let container = NSView()
         container.addSubview(animationView)

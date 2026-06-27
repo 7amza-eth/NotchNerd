@@ -14,7 +14,13 @@ let batterySneakSize: CGSize = .init(width: 160, height: 1)
 
 let shadowPadding: CGFloat = 20
 let openNotchSize: CGSize = .init(width: 640, height: 190)
-let windowSize: CGSize = .init(width: openNotchSize.width, height: openNotchSize.height + shadowPadding)
+/// The Agent tab opens taller than the music notch — the session list + permission/question cards
+/// need the room. Each tab renders at its own `notchSize`; the window below is sized for the largest.
+let agentNotchSize: CGSize = .init(width: 640, height: 320)
+/// The notch window is created once at the largest open size (it's top-anchored, transparent below
+/// the active notch shape, exactly like the closed notch already is). Per-tab `notchSize` controls
+/// the visible height within it, so the music notch is unaffected.
+let windowSize: CGSize = .init(width: openNotchSize.width, height: max(openNotchSize.height, agentNotchSize.height) + shadowPadding)
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
 enum MusicPlayerImageSizes {

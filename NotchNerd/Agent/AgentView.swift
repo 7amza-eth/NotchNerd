@@ -239,6 +239,22 @@ struct AgentClosedIndicator: View {
     }
 }
 
+/// Closed-notch indicator shown while a Claude session is actively working. Distinct from
+/// AgentClosedIndicator ("needs you") — this means Claude is busy, and it replaces the music
+/// live activity for the duration. A pulsing dot conveys the activity.
+struct AgentActiveIndicator: View {
+    let count: Int
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "sparkles").foregroundStyle(.purple)
+            AnimatedStatusDot(color: AgentStatusPalette.running, pulsing: true)
+            Text(count == 1 ? "Claude working" : "\(count) working")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
 // MARK: - Settings pane
 
 struct AgentSettings: View {

@@ -189,10 +189,15 @@ class NotchNerdViewModel: NSObject, ObservableObject {
         return false
     }
 
+    /// The open height depends on the tab — the Agent tab is taller (see matters.swift).
+    func openSize(for view: NotchViews) -> CGSize {
+        view == .agent ? agentNotchSize : openNotchSize
+    }
+
     func open() {
-        self.notchSize = openNotchSize
+        self.notchSize = openSize(for: coordinator.currentView)
         self.notchState = .open
-        
+
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
     }
