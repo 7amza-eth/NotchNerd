@@ -6,10 +6,11 @@ shelf, calendar, HUD, webcam) that adds a **Claude Code agent monitor** (a vendo
 
 ## Read first
 
-**[`spec.md`](./spec.md)** is the canonical hydration doc — overview, annotated repo tree, stack,
-architecture (agent pipeline + notepad + notch/CGS-space), build, key files, and gotchas. Read it
-before doing anything non-trivial. **[`NotchNerd-PLAN.md`](./NotchNerd-PLAN.md)** is the roadmap +
-decision log (phases, locked decisions). `spec.md`'s "References" section links the rest.
+**[`spec.md`](./spec.md)** is the single canonical doc. **Part I** is the reference — overview,
+annotated repo tree, stack, architecture (agent pipeline + notepad + notch/CGS-space), build, key
+files, and gotchas. **Part II** is the roadmap + decision log + consolidated TODO + deferred-work
+implementation reference. Read it before doing anything non-trivial. (`spec.md` absorbed the former
+`NotchNerd-PLAN.md` and `tooling/docs/deferred-work-notes.md`.)
 
 ## Build & run
 
@@ -29,10 +30,10 @@ xcodebuild -project NotchNerd.xcodeproj -scheme NotchNerd -configuration Debug b
 - **Two notch window classes; only `NotchNerdSkyLightWindow` is instantiated** at runtime. `NotchNerdWindow.swift` is dead. Notch panels are non-key (click-through) **except** while the Notes tab is active (`NotepadNotchFocus.allowsNotchKey`).
 - **Privileged ops must target the process that performs them.** The app is unsandboxed, so do Accessibility/AX checks **in-app** (the CGEventTap runs in the app), not via the XPC helper. (This was a real bug — see commit `c53ccfe`.)
 - **`Defaults.Keys` are split** across `NotchNerd/models/Constants.swift` and `NotchNerd/Notepad/NotepadWindowController.swift`.
-- **Deferred-work reference** (Phase 6 inherited-bug fix recipe, Phase 7 Cowork file formats) lives in `tooling/docs/deferred-work-notes.md`. The old `spikes/` prototypes + their design docs were removed once validated/shipped (recoverable in git history; durable facts are in `spec.md`).
-- **The agent monitor is OFF by default** (`Defaults[.agentEnabled]`), behind Settings → Agent. It only OBSERVES Claude Code via hooks — it never calls the Anthropic API and stores no credentials. Its UI surfaces are each independently gated: notification auto-pop (`agentNotificationsEnabled`), sounds (`agentSoundEnabled`), the usage HUD (`agentUsageEnabled`, which gets 5h/7d quotas from Claude Code's **statusline** payload, still no API/credentials). The in-notch notification pop **must never hijack an already-open notch** (opens only from `notchState == .closed`) — see PLAN §13 + `NotchNerdViewCoordinator.presentAgentNotification`.
+- **Deferred-work reference** (Phase 6 inherited-bug fix recipe, Phase 7 Cowork file formats) lives in `spec.md` Part II → "Reference: deferred-work implementation notes". The old `spikes/` prototypes + their design docs were removed once validated/shipped (recoverable in git history; durable facts are in `spec.md`).
+- **The agent monitor is OFF by default** (`Defaults[.agentEnabled]`), behind Settings → Agent. It only OBSERVES Claude Code via hooks — it never calls the Anthropic API and stores no credentials. Its UI surfaces are each independently gated: notification auto-pop (`agentNotificationsEnabled`), sounds (`agentSoundEnabled`), the usage HUD (`agentUsageEnabled`, which gets 5h/7d quotas from Claude Code's **statusline** payload, still no API/credentials). The in-notch notification pop **must never hijack an already-open notch** (opens only from `notchState == .closed`) — see `spec.md` Part II + `NotchNerdViewCoordinator.presentAgentNotification`.
 - **Preserve GPL attribution** (boring.notch / TheBoredTeam, Open Island / Octane0411) in `LICENSE`, `THIRD_PARTY_LICENSES`, source headers.
-- Some docs (`NotchNerd-PLAN.md` §3–9, `sources/_map_digest.md`) cite **pre-rename `boringNotch/*` paths** — map them 1:1 onto `NotchNerd/*`.
+- Some older notes (folded into `spec.md` Part II) and git history cite **pre-rename `boringNotch/*` paths** — map them 1:1 onto `NotchNerd/*`.
 
 ## Commit conventions
 

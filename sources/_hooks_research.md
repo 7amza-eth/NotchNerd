@@ -4,6 +4,10 @@ Compiled. Here is the brief.
 
 # Claude Code Hooks & Integration Surface — 2025-2026 Brief (for an Open-Island-style monitor)
 
+> **Freshness:** this is a **point-in-time snapshot pinned to Claude Code v2.1.186** — verify the
+> event/statusline schema against the current CLI before relying on it (the statusline `rate_limits`
+> payload was already re-verified against v2.1.195 — see `spec.md` Part II → Changelog / usage-HUD).
+
 Validated against the **official Anthropic docs** (`code.claude.com/docs/en/...`, the current canonical host; `docs.claude.com`/`docs.anthropic.com` redirect here) **and** the live install on this machine (**Claude Code v2.1.186**, `~/.claude/`).
 
 ## TL;DR — what a port must know

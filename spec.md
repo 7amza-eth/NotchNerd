@@ -1,8 +1,10 @@
 # NotchNerd — Spec / Hydration Doc
 
-> Canonical orientation doc for a fresh coding session. Everything here is verified against the
-> repo at `/Users/hamza/Developer/NotchNerd`. When in doubt, the authoritative roadmap is
-> [`NotchNerd-PLAN.md`](./NotchNerd-PLAN.md).
+> Canonical orientation doc for a fresh coding session — the **single** comprehensive doc for this
+> repo: reference (Part I below), plus roadmap, decision log, consolidated TODO, and deferred-work
+> implementation reference (**Part II**). Everything here is verified against the repo at
+> `/Users/hamza/Developer/NotchNerd`. When in doubt about remaining work, see Part II's
+> "Roadmap & TODO".
 
 ## Overview
 
@@ -74,7 +76,8 @@ NotchNerd/                          repo root
 │  │  ├─ AgentUsageManager.swift    statusline-wrapper install + ClaudeUsageLoader polling (5h/7d)
 │  │  ├─ UsageChip.swift            usage chip view for the Agent tab header
 │  │  ├─ ActiveAgentProcessDiscovery.swift  ps/lsof/tmux liveness probe
-│  │  └─ GhosttyJumpService.swift   osascript jump into a Ghostty pane (focus short-circuit + re-resolution)
+│  │  ├─ GhosttyJumpService.swift   osascript jump into a Ghostty pane (focus short-circuit + re-resolution)
+│  │  └─ TerminalAppJumpService.swift  Terminal.app jump + `enum AgentTerminalJump` dispatcher (canJump/jump/appName)
 │  ├─ Notepad/                      always-open notepad (NEW)
 │  │  ├─ NotepadWindowController.swift  floating panel singleton; CGS-space float strategy
 │  │  ├─ NotepadPanel.swift         nonactivating, canBecomeKey NSPanel
@@ -111,15 +114,13 @@ NotchNerd/                          repo root
 ├─ NotchNerd.xcodeproj/             2 native targets + "Embed OpenIslandHooks CLI" run-script phase
 ├─ sources/                         reference clones + research (read-only)
 │  ├─ open-vibe-island/             full Open Island clone (~141 Swift files) — re-pull source
-│  ├─ _map_digest.md                160KB dual-codebase map (boringNotch + OVI)
-│  └─ _hooks_research.md            Claude Code hooks brief (vs Claude Code v2.1.186)
+│  └─ _hooks_research.md            Claude Code hooks brief (point-in-time, vs Claude Code v2.1.186)
 ├─ tooling/
-│  ├─ docs/deferred-work-notes.md   Phase-6/7 impl reference (inherited-bug fix recipe, Cowork formats)
 │  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
 ├─ updater/                         appcast.xml + Sparkle (feed currently disabled)
-├─ NotchNerd-PLAN.md                authoritative phased build plan / decision log
+├─ spec.md                          this doc — reference + roadmap + decisions + TODO + deferred reference
 ├─ README.md  SECURITY.md  crowdin.yml
 ├─ LICENSE (GPL v3)  THIRD_PARTY_LICENSES
 └─ .github/  .devcontainer/  build/ (ignored Xcode output incl. boringNotch.build)
@@ -132,7 +133,12 @@ NotchNerd/                          repo root
   dynamically loads private `MediaRemote.framework` AND spawns the bundled
   `MediaRemoteAdapter.framework` helper to stream now-playing across macOS versions. Closed-notch
   `MusicLiveActivity` (album art + marquee + spectrogram/Lottie visualizer); open `NotchHomeView`
-  player (scrubber, control slots, volume, favorite, synced lyrics).
+  player (scrubber, control slots, volume, favorite, synced lyrics). Ships built-in
+  **music-visualizer presets** — real Equalizer / Spectrum / Sound Bars Lottie animations plus a
+  restored "Visualizer 4" (`components/Music/LottieAnimationView.swift`), version-seeded via Defaults
+  `visualizerPresetVersion` + `CustomVisualizer.presetVersion` (re-seeds new presets each version,
+  deduped by URL) with a Lottie sizing fix (`LottieView.sizeThatFits` + `scaleAspectFit` so animations
+  fit the tiny closed-notch visualizer slot).
 - **File shelf + AirDrop/share** — `components/Shelf/`, drop targets in `ContentView`,
   NSSharingService via `SharingStateManager`.
 - **Calendar** — `components/Calendar/NotchNerdCalendar.swift`, shown when `Defaults[.showCalendar]`.
@@ -146,11 +152,17 @@ NotchNerd/                          repo root
 - **Claude Code agent monitor** — observe-only, in-notch. Agent tab with an overview-counts row,
   pulsing per-phase status dots, **expandable session rows** (live subagents + task/todo checklists
   from `ClaudeSessionMetadata`), Allow Once/Deny permission cards, question option buttons, and a
-  Ghostty jump button (already-focused short-circuit + live re-resolution). **In-notch notification
-  mode** auto-pops the notch on permission/question/completion events (never hijacks an open notch;
+  terminal jump button (already-focused short-circuit + live re-resolution; Ghostty **or**
+  Terminal.app via the `AgentTerminalJump` dispatcher). **In-notch notification mode** auto-pops the
+  notch on permission/question/completion events (never hijacks an open notch; frontmost-suppression;
   completion auto-collapses after 10s) with optional **system-sound** alerts. **Usage HUD** chips
-  (5h/7d Claude quotas) via a vendored statusline wrapper. Closed-notch `AgentClosedIndicator` when
-  `attentionCount > 0`. **Off by default** (each surface independently gated in Settings → Agent).
+  (5h/7d Claude quotas) via a vendored statusline wrapper. **Closed-notch Claude status:**
+  `AgentClosedIndicator` when `attentionCount > 0`, plus `AgentBridgeManager.workingCount`
+  ("N working", pulsing — `running && process-alive && ~60s recency`) and `liveSessionCount`
+  ("N active" presence). An active session takes the music **visualizer slot** (the music notch never
+  disappears); the standalone status pill shows only when no music is playing. **Off by default**
+  (each surface independently gated in Settings → Agent: `agentNotificationsEnabled` /
+  `agentSoundEnabled` / `agentUsageEnabled`).
 - **Always-open Notepad** — floating key-capable panel + in-notch Notes tab over one shared
   multi-note store; toggled via menu-bar button and a global hotkey.
 
@@ -168,6 +180,12 @@ Two notch window classes exist; **only `NotchNerdSkyLightWindow` is instantiated
 `dlsym` of `SLSRemoveWindowsFromSpaces` for lock-screen display. `NotchNerdWindow.swift` is a
 simpler legacy variant, **not on the launch path**. Both gate `canBecomeKey` on
 `NotepadNotchFocus.allowsNotchKey` (normally false → click-through overlay).
+
+**Per-tab open height** (`NotchNerd/sizing/matters.swift`): the **Agent tab opens taller**
+(`agentNotchSize` 640×320) than music/home/shelf (`openNotchSize` 640×190). The window itself is
+created at the larger size (`windowSize` = `max(openNotchSize.height, agentNotchSize.height) +
+shadowPadding`) and **top-anchored**, so growing for the Agent tab leaves the music notch visually
+unchanged.
 
 **`AppDelegate` (not the SwiftUI `App` body) holds essentially all logic.** `NotchNerdApp`'s only
 Scene is a `MenuBarExtra`. `applicationDidFinishLaunching` creates the notch window(s) (one per
@@ -230,9 +248,14 @@ after `processNotSeenCount >= 2` so sessions can't get stuck-visible if the Sess
 arrives. Registry persistence is debounced 2s; reconnect uses a single 2s→30s backoff with a
 `connectionGeneration` guard against reconnect storms.
 
-**Ghostty jump** (`GhosttyJumpService`, Ghostty-only): `osascript` against
-`com.mitchellh.ghostty` matching `terminalSessionID` → `workingDirectory` → `paneTitle`. Requires
-the Automation TCC grant for Ghostty.
+**Terminal jump** (no longer Ghostty-only): `AgentBridgeManager` routes through the
+`AgentTerminalJump` dispatcher (`TerminalAppJumpService.swift`), which dispatches to
+`GhosttyJumpService` **or** `TerminalAppJumpService` (canJump/jump/appName). Both use `osascript`
+(Ghostty matches `com.mitchellh.ghostty` by `terminalSessionID` → `workingDirectory` → `paneTitle`;
+Terminal.app matches `com.apple.Terminal`) and require the Automation TCC grant for the target app.
+**Ghostty hardening** (`jumpResolving`): already-focused/frontmost short-circuit (no flicker),
+pre-jump live re-resolution recovering a stale/nil `terminalSessionID` from cwd→title, cwd-path
+normalization, and a bounded/concurrently-drained `osascript` runner.
 
 **Gating:** the bridge/hooks are gated entirely by `Defaults[.agentEnabled]` (default **false**) —
 `start()` early-returns otherwise. Auto-install of hooks is gated by `agentAutoInstallHooks`
@@ -243,10 +266,11 @@ Install/Remove/Refresh hooks.
 
 **Scope:** the vendored Core is multi-agent (Codex/Cursor/Gemini/Kimi/OpenCode/Warp types + a hook
 CLI advertising ~10 tools), but NotchNerd wires **only the Claude Code path** — it filters/persists
-`tool == .claudeCode`, `AgentView` is Claude-only, `GhosttyJumpService` is Ghostty-only. The rest is
-dormant surface area (broadening it is To-do — PLAN §13).
+`tool == .claudeCode`, `AgentView` is Claude-only, and terminal jump covers only Ghostty +
+Terminal.app. The rest is dormant surface area (broadening it is To-do — see Part II → Roadmap & TODO,
+and the porting recipes there).
 
-**Notification mode + sounds (batch-1 port, PLAN §13).** Beyond the persistent `AgentClosedIndicator`,
+**Notification mode + sounds (batch-1 port; see Part II → Changelog).** Beyond the persistent `AgentClosedIndicator`,
 agent events drive a transient auto-pop: `AgentBridgeManager.ingest` maps each `AgentEvent` →
 `emitNotification` → `notificationPublisher` (a `PassthroughSubject`, *not* `@Published` state, so a
 dismissed card can't be re-popped). `NotchNerdViewCoordinator.presentAgentNotification` plays the
@@ -348,6 +372,7 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 | `NotchNerd/Agent/AgentView.swift` | in-notch Agent tab UI (overview/rows/cards/chips) + AgentClosedIndicator + AgentSettings |
 | `NotchNerd/Agent/AgentSessionPresentation.swift` | verbatim OI presentation extension (spotlight*/island* computed props) |
 | `NotchNerd/Agent/AgentUsageManager.swift` | usage-HUD: statusline-wrapper install + `ClaudeUsageLoader` polling |
+| `NotchNerd/Agent/TerminalAppJumpService.swift` | Terminal.app jump + `enum AgentTerminalJump` dispatcher (routes Ghostty / Terminal.app) |
 | `NotchNerd/NotchNerdViewCoordinator.swift` (agent notifications) | owns the in-notch notification auto-pop / auto-collapse |
 | `NotchNerd/Notepad/NotepadWindowController.swift` | floating notepad singleton |
 | `NotchNerd/Notepad/NotepadTabView.swift` | in-notch Notes tab + key-focus trick |
@@ -361,29 +386,23 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 
 ## Project status
 
-Per `NotchNerd-PLAN.md` §10/§11, the app is **feature-complete** — all implementation phases are
-shipped and the comprehensive rename to NotchNerd is done.
+The app is **feature-complete** — all core implementation phases are shipped and the comprehensive
+rename to NotchNerd is done. Full phase history is in **Part II → Changelog**; the canonical list of
+remaining work is **Part II → Roadmap & TODO**.
 
 - **Done:** Phase 0 (sandbox-off regression baseline), Phase 1 (vendor engine as local SPM), Phase 2
   (agent driver `AgentBridgeManager` — bridge + observer + reducer + hook install + approve/deny
   round-trip), Phase 3 (Agent tab UI), Phase 4 (Ghostty jump), Phase 5 (notepad — both surfaces,
-  spike validated GO on-device), the rebrand identity work (Phase 9: bundle id `eth.7amza.notchnerd`,
-  Sparkle disabled, violet icon), **Phase 5.5 (loose-thread audit & fixes — PLAN §12)**, and
-  **OI-feature-port batch 1 (PLAN §13: notification mode + sounds, expanded session panel, usage HUD,
-  Ghostty hardening)**.
-- **Remaining:**
-  - **Phase 6** — finish socket/hook namespacing off bundle id `eth.7amza.notchnerd` (the bridge
-    socket is still the shared `~/Library/Application Support/OpenIsland/bridge.sock` by deliberate
-    interim design; locked decision #8 requires namespacing so NotchNerd can't clobber a running
-    Open Island). Also complete the user-facing rebrand (README, attribution, residual "Open
-    Island" strings).
-  - **More terminals / more agents** (remainder of the OI feature review — PLAN §13 To-do): the rest
-    of `TerminalJumpService` (Terminal.app/iTerm2/tmux/Warp/…) and the other vendored agents
-    (Codex/Gemini/Kimi/OpenCode/Cursor/Claude-forks). Engine support is already vendored — these are
-    wiring jobs.
-  - **Phase 7** — optional beta: a read-only live-status watcher for Cowork / local-agent-mode
-    desktop surfaces (file formats + scope in `tooling/docs/deferred-work-notes.md §3`). Hard limit:
-    approve/deny remains CLI-only.
+  spike validated GO on-device), the rebrand identity work (bundle id `eth.7amza.notchnerd`, Sparkle
+  disabled, violet icon), Phase 5.5 (loose-thread audit & fixes), OI-feature-port batch 1
+  (notification mode + sounds, expanded session panel, usage HUD, Ghostty hardening), and this
+  session's work (Terminal.app jump, taller Agent tab, closed-notch working/active status, music
+  visualizer presets).
+- **Remaining (see Part II → Roadmap & TODO for the authoritative list):** Phase 6 (socket/hook +
+  statusline-cache namespacing off `eth.7amza.notchnerd`; the inherited pending-interaction overwrite
+  patch; http-hook spike; HookHealthCheck; residual rebrand), more terminals / more agents (engine
+  already vendored — wiring jobs), and the optional Phase 7 Cowork read-only watcher (approve/deny
+  stays CLI-only).
 
 ## Conventions / gotchas
 
@@ -394,7 +413,8 @@ shipped and the comprehensive rename to NotchNerd is done.
   still `OpenIsland/bridge.sock` until Phase 6.
 - **Don't edit `Vendor/OpenIslandEngine/Sources/`.** Those 45 files are copied **verbatim** from
   open-vibe-island (GPL v3, commit `1e26dfc`, 2026-06-26) and kept pristine for clean re-pull
-  (PLAN decision #6). Only `Package.swift` is locally authored. Re-pull steps are in `VENDORED-FROM.md`.
+  (decision #6 — Part II → Decisions & rationale). Only `Package.swift` is locally authored. Re-pull
+  steps are in `VENDORED-FROM.md`.
 - **`Defaults.Keys` are split across two files** — most in `models/Constants.swift`, but
   `notepadVisible` / `notepadFloatStrategy` live in `Notepad/NotepadWindowController.swift`.
 - **`AppDelegate`, not the App body, owns lifecycle.** Don't look for window/agent/notepad wiring
@@ -406,10 +426,12 @@ shipped and the comprehensive rename to NotchNerd is done.
   `setActivationPolicy(.regular)` / `NSApp.activate` for the notepad or it steals the frontmost app.
 - **Notch close paths all check `preventNotchClose`** (hover-out, sharingDidFinish, battery popover,
   drop debounce, swipe-up). Swipe-up is the explicit override that also clears the pin.
-- **Pre-rename paths in docs:** PLAN §3–9 and `sources/_map_digest.md` still cite `boringNotch/*`
-  paths — map them 1:1 onto `NotchNerd/*`.
-- **`sources/boring.notch` is NOT on disk** — `_map_digest.md` references it, but only
-  `sources/open-vibe-island/` exists.
+- **Agent-tab gesture fix:** the swipe-up-to-close gesture is gated **off** the Agent tab
+  (`coordinator.currentView != .agent` in `ContentView`) so it doesn't hijack the Agent tab's own
+  scrolling.
+- **Pre-rename paths:** some older notes (now folded into this doc's Part II) and git history cite
+  pre-rename `boringNotch/*` paths — map them 1:1 onto `NotchNerd/*`. There is **no boring.notch clone
+  on disk**; only `sources/open-vibe-island/` exists.
 - **Attribution gap (open):** `THIRD_PARTY_LICENSES` omits Open Island / open-vibe-island despite
   the verbatim vendor (same license, GPL v3). Provenance is recorded only in `VENDORED-FROM.md`.
 - **When listing the tree, exclude** `build/`, `Vendor/OpenIslandEngine/.build`, and
@@ -417,13 +439,13 @@ shipped and the comprehensive rename to NotchNerd is done.
 
 ## References
 
+> Roadmap, decision log, consolidated TODO, and deferred-work implementation notes now live in
+> **Part II of this doc** (below) — they are no longer separate files.
+
 | Doc | Why read it |
 |---|---|
-| [`NotchNerd-PLAN.md`](./NotchNerd-PLAN.md) | The authoritative roadmap + decision log — Direction-A decision, the 4 engineering decisions, phased roadmap (0–7), locked decisions (incl. #8 socket namespacing), spike outcomes, rebrand identity. The single most important source. |
 | [`Vendor/OpenIslandEngine/VENDORED-FROM.md`](./Vendor/OpenIslandEngine/VENDORED-FROM.md) | GPL provenance for the vendored engine — upstream commit `1e26dfc`, copied 2026-06-26, "kept pristine," and the rsync re-pull procedure. |
-| [`tooling/docs/deferred-work-notes.md`](./tooling/docs/deferred-work-notes.md) | Implementation reference for not-yet-built work — the Phase-6 pending-interaction fix recipe and the Phase-7 Cowork watcher file formats (consolidated from the now-removed Phase-2/notepad spikes + desktop-surfaces research). |
-| [`sources/_map_digest.md`](./sources/_map_digest.md) | Dual-codebase architecture map (boring.notch host + Open Island engine) — notch window/CGS-space system, the "add an Agent tab" recipe, Defaults persistence, music subsystem boundary. Pre-rename paths. |
-| [`sources/_hooks_research.md`](./sources/_hooks_research.md) | Claude Code hook-integration contract — event schema (9 classic → ~30 current), `PermissionRequest` vs `PreToolUse` vs `Notification`, the `defaultMode:"auto"` self-approve gotcha, transcript `.jsonl` structure. Pinned to Claude Code v2.1.186. |
+| [`sources/_hooks_research.md`](./sources/_hooks_research.md) | Claude Code hook-integration contract — event schema (9 classic → ~30 current), `PermissionRequest` vs `PreToolUse` vs `Notification`, the `defaultMode:"auto"` self-approve gotcha, transcript `.jsonl` structure. **Point-in-time snapshot** pinned to Claude Code v2.1.186 — verify against the current CLI before relying on schema detail. |
 | [`LICENSE`](./LICENSE) | GNU GPL v3 full text — preserve verbatim. |
 | [`THIRD_PARTY_LICENSES`](./THIRD_PARTY_LICENSES) | Third-party credits (note: no `.md` extension; missing Open Island attribution). |
 
@@ -434,4 +456,372 @@ by **TheBoredTeam** (GPL v3) and vendors a slice of **[Open Island / open-vibe-i
 by **Octane0411** (GPL v3). Both upstreams being GPL v3 is exactly why the merged work stays GPL v3
 and runs non-sandboxed. Also bundled: MediaRemoteAdapter (BSD-3), NotchDrop (MIT), Calendr /
 DynamicNotchKit (MIT), Parrot (MPL-2.0) — see `THIRD_PARTY_LICENSES`.
+
+---
+
+# Part II — Roadmap, decisions & deferred-work reference
+
+> Part I (above) is the architecture/reference. Part II is the merged roadmap + decision log +
+> consolidated TODO + deferred-implementation reference (folded in from the former
+> `NotchNerd-PLAN.md` and `tooling/docs/deferred-work-notes.md`). Dated narrative was dropped — git
+> history holds it; this keeps only the load-bearing **what + why** and the still-pending work.
+
+## Decisions & rationale
+
+### Direction A — boring.notch is the host
+
+A formal review (independent advocates → adversarial critics → a sandbox/build feasibility deep-dive
+→ a deciding judge) chose **Direction A: port Open Island's engine *into* boring.notch** (score 85)
+over porting music into Open Island (B, 46) or a ground-up rebuild (C, 38). **Why:** it leaves the
+beloved music notch byte-for-byte untouched; the engine (`OpenIslandCore`) is genuinely
+clean/portable; notepad + sandbox + transport are small surgical changes. **Critical reframe:**
+Direction A does **not** mean porting Open Island's `AppModel`/overlay/discovery coordinators (that
+glue is Open Island's UI nervous system and would be a from-scratch rebuild). Instead **vendor only
+the clean headless Core + the hook CLI and write a small fresh boring.notch-native driver on top** —
+`BridgeServer` already exposes a UI-free `public init(socketURL:)` / `start()` that runs headless
+in-process.
+
+The one real tension that drove everything: the agent features (writing `~/.claude/settings.json`,
+running `ps`/`lsof`/`osascript`/`open`, reading `~/.claude/projects`, AppleScript-controlling
+terminals) **require an unsandboxed app**; boring.notch shipped sandboxed.
+
+### The four engineering decisions
+
+1. **Build system — vendor Core as a local SPM package.** Copy `Sources/OpenIslandCore` +
+   `OpenIslandHooksCLI.swift` into `Vendor/OpenIslandEngine/`; hand-write a slim `Package.swift` (2
+   products, zero deps). **Toolchain trap:** upstream manifest is `swift-tools-version:6.2`, which the
+   host's pinned Xcode 16.4 (Swift 6.0) refuses to open → set the vendored manifest to
+   **`swift-tools-version:6.0` + `.swiftLanguageMode(.v6)`** (Core uses no 6.2-only syntax). Three
+   coexisting Swift modes (app 5.0 / hooks tool 6.0 / Core 6 library) is supported. **Do not** raise
+   the app to `SWIFT_STRICT_CONCURRENCY=complete`. Embed the hook CLI via a Copy-Files phase →
+   `Contents/Helpers`.
+2. **Sandbox — drop it in-place.** Flip `com.apple.security.app-sandbox` → `false` (entitlements-only;
+   **keep hardened runtime ON**; keep automation + network.client). Remove now-dead Sparkle sandbox
+   XPC shims and **re-qualify the full Sparkle download→install→relaunch cycle** (the EdDSA key is
+   load-bearing). **Don't** route privileged ops through the XPC helper to stay sandboxed — a
+   sandboxed app can't host the bridge socket, write `~/.claude`, or spawn `ps`/`osascript`.
+   Prerequisite: a **stable "NotchNerd Dev" signing identity** so TCC grants survive rebuilds.
+3. **Hook transport — proven socket+CLI first, modern http later.** Ship the battle-tested
+   Unix-socket + embedded-CLI + 24h-block design first (fail-open: if the app is down Claude proceeds
+   unchanged). The modern **`http` hook → in-app `127.0.0.1` listener** (no binary to ship/sign) is
+   the better long-term architecture *if it validates* — gate it behind a spike confirming Claude Code
+   holds a blocking HTTP response for the full interactive `PermissionRequest` timeout + the
+   `allowedHttpHookUrls` allowlist behavior. Install both `PreToolUse` (works headless, gates before
+   the prompt) and `PermissionRequest` (interactive allow/deny). ⚠️ `defaultMode:"auto"` makes many
+   calls self-approve and never raise `PermissionRequest`, so `PreToolUse` is the steadier signal.
+4. **Notepad — an independent key-capable panel, NOT a notch tab.** A `NotchViews` tab only renders
+   while the notch is *open* and is mutually exclusive with home/shelf, so it can't "stay visible
+   while you use the notch." Build a `NotepadPanel`: a `.nonactivatingPanel` overriding
+   **`canBecomeKey = true`** (the notch panels hard-code `canBecomeKey=false` for click-through). That
+   combo takes **text focus** for a `TextEditor` **without** flipping the `.accessory` app to
+   `.regular` or stealing the foreground app — the single hardest unproven problem. Own it via a
+   `NotepadWindowController` singleton; gate visibility on its own Defaults key + MenuBarExtra +
+   hotkey, never on `notchState`. For float-over-fullscreen, insert into the notch CGS space (the
+   key-focus-inside-CGS-space spike was load-bearing — validated GO on-device).
+
+### Locked decisions (2026-06-25)
+
+1. **Terminal jump scope → Ghostty only** (initial). Smallest robust surface; no Warp SQLite
+   fragility. *(Terminal.app has since been added; see Changelog / TODO.)*
+2. **Notepad richness → multiple notes / tabs.** Notes list + per-note persistence.
+3. **Notepad float → above fullscreen too.** Joins the CGS space (key-focus-in-CGS-space spike was
+   load-bearing — validated GO).
+4. **Usage HUD → yes, wrapper mode.** Preserve the user's existing custom statusline.
+5. **Transport → socket+CLI first, spike http later.** Not gambling the flagship feature.
+6. **Vendoring → Core whole** (clean upstream re-pull; only `Package.swift` locally authored).
+7. **XPC helper → keep it as-is** (brightness/AX only).
+8. **Namespace the bridge socket + hooks identity (load-bearing for Phase 6).** NotchNerd must NOT
+   use Open Island's default shared socket (`~/Library/Application Support/OpenIsland/bridge.sock`) —
+   `BridgeServer.start()` deletes any existing socket before binding, so it would **clobber a running
+   Open Island and steal its hook connections**. Use a NotchNerd-specific socket path, pass it as
+   `BridgeServer(socketURL:)`, bake `OPEN_ISLAND_SOCKET_PATH=<that path>` into the installed hook
+   command, and give the managed-hooks group + `ManagedHooksBinary` copy location a NotchNerd identity
+   so both apps coexist in one `~/.claude/settings.json`. **Still deferred** — the socket is
+   deliberately the shared OpenIsland path on purpose until Phase 6.
+
+### Why approve/deny is CLI-only (the one hard limit)
+
+NotchNerd's signature approve/deny works by holding the hook *subprocess* blocked and writing a
+directive to its stdout. Desktop/Cowork permission gates run in the cloud (chat) or the desktop app's
+host loop + React UI (Cowork) — **there is no host-side hook process to block**. So **live status +
+jump are the realistic desktop ceiling; approve/deny stays a Claude-Code-CLI exclusive.** Dropped from
+scope entirely: chat-app AX automation and any MCP-based monitor (MCP only ever sees calls to its
+*own* tools, never the session or the permission prompt).
+
+## Changelog
+
+Condensed per-phase summary of what shipped. (Build-verified `BUILD SUCCEEDED`, committed, pushed at
+each phase; git history holds the dated detail.)
+
+- **Phase 0 — Sandbox drop.** Flipped `app-sandbox=false`, kept hardened runtime; stood up stable dev
+  signing; confirmed MediaRemoteAdapter keeps its entitlement after re-sign (music survives); full
+  regression baseline (now-playing, Sparkle, camera, calendar, CGS-notch-over-fullscreen).
+- **Phase 1 — Vendor engine.** `Vendor/OpenIslandEngine/` (Core whole + hook CLI), slim
+  `Package.swift` (tools 6.0, Swift-6 mode); linked `OpenIslandCore` into the app via local SPM;
+  embedded the hook CLI into `Contents/Helpers`. Headless round-trip smoke test passed.
+- **Phase 2 — Agent driver.** `AgentBridgeManager` (headless `BridgeServer` + observer + `SessionState`
+  reducer, hook install, approve/deny round-trip, transcript + process-liveness discovery), wired in
+  `AppDelegate`, gated by `agentEnabled` (default off).
+- **Phase 3 — Agent tab.** In-notch Agent tab + session panel (Allow/Deny + question cards), settings
+  pane, persistent closed-notch attention indicator (dedicated `@Published`, not the auto-expiring
+  sneak-peek).
+- **Phase 4 — Ghostty jump.** Ported just the Ghostty path of `TerminalJumpService` (AppleScript
+  window-ID match) + TCC consent flow. Dropped Warp/iTerm/Terminal/tmux from initial scope.
+- **Phase 5 — Notepad.** Always-open multi-note notepad — key-capable `.nonactivatingPanel` in the CGS
+  space (focus GO validated on-device), MenuBarExtra/hotkey toggle, file-backed autosave, in-notch
+  Notes tab.
+- **Rebrand.** App bundle id `eth.7amza.notchnerd`, XPC helper `eth.7amza.notchnerd.XPCHelper`,
+  display name NotchNerd, Sparkle disabled (no auto-update into boring.notch's appcast), violet icon +
+  accent. Deconflicts from the user's daily boring.notch. (Residual brand strings + Xcode
+  target/scheme names deferred.)
+- **Phase 5.5 — Loose-thread audit.** 6 parallel finders → adversarial verification (13 raw findings →
+  6 distinct bugs fixed, 5 rejected as false positives). Fixed: **wrong-process Accessibility checks**
+  (the `c53ccfe` class — launch gate, Settings HUD read/monitor, onboarding all routed AX through the
+  XPC helper's never-granted bundle id → all moved in-app via `MediaKeyInterceptor`; all XPC
+  Accessibility calls now gone from app code, the helper still vends brightness per decision #7);
+  **residual brand leak** (vendored reducer's `"Permission denied in Open Island."` rewritten at the
+  `AgentBridgeManager.republish` projection boundary, keeping `Vendor/` pristine); **half-renamed icon
+  id** (`TipStore` now uses `bundleIdentifier`). Verified-and-deferred: the inherited
+  pending-interaction overwrite (structurally needs a `Vendor/` patch → Phase 6); reconnect storms
+  confirmed already correctly fixed.
+- **OI feature-port batch 1.** Four high-value OI features + Ghostty hardening (engine already carried
+  the data/logic; work was NotchNerd-native SwiftUI + driver wiring): (1) **in-notch notification
+  mode** (auto-pop on permission/question/completion; never hijacks an open notch; frontmost-suppress;
+  completion auto-collapse 10s); (2) **notification sounds**; (3) **expanded session panel** (overview
+  counts, pulsing per-phase status dots, age badges, spotlight lines, expandable subagent + task/todo
+  rows); (4) **usage HUD** (5h/7d quota chips via `installAsWrapper()` statusline shim — the
+  `rate_limits.{five_hour,seven_day}.{used_percentage,resets_at}` payload was re-verified against
+  Claude Code **2.1.195**, Pro/Max-only, post-first-response); (5) **Ghostty hardening**
+  (`jumpResolving`). New files added to the non-synchronized app target via
+  `tooling/scripts/add_agent_files.rb`.
+- **This session.** **Terminal.app jump** (`TerminalAppJumpService` + `AgentTerminalJump` dispatcher,
+  routed from `AgentBridgeManager`); **taller Agent tab** (`agentNotchSize` 640×320 vs `openNotchSize`
+  640×190; window created at the larger top-anchored size so the music notch is unchanged);
+  **closed-notch Claude status** (`workingCount` "N working" pulsing + `liveSessionCount` "N active";
+  an active session takes the music visualizer slot, standalone pill only when no music plays);
+  **music-visualizer presets** (real Equalizer/Spectrum/Sound Bars Lottie + restored "Visualizer 4",
+  version-seeded via `visualizerPresetVersion` / `CustomVisualizer.presetVersion` deduped by URL, +
+  Lottie `sizeThatFits`/`scaleAspectFit` sizing fix); **Agent-tab gesture fix** (swipe-up-to-close
+  gated off the Agent tab).
+
+## Roadmap & TODO
+
+The single source of truth for remaining work. Items reference the deferred-work and porting-recipe
+subsections below where an implementer needs the concrete recipe.
+
+### Phase 6 — Modernize & harden
+
+- **Socket / hooks / statusline-cache namespacing off `eth.7amza.notchnerd`** (locked decision #8).
+  The bridge socket is still the shared `~/Library/Application Support/OpenIsland/bridge.sock`, the
+  managed-hooks group/binary copy location reuses OI's identity, and the usage HUD reuses OI's
+  `/tmp/open-island-rl.json` statusline cache + script name. Namespace all of them so NotchNerd and a
+  running Open Island can coexist. ⚠️ **`sun_path` length trap** (see Reference: porting recipes) — a
+  long namespaced socket path under `~/Library/Application Support` can trip `socketPathTooLong`; the
+  legacy `/tmp` path stayed short for exactly this reason.
+- **Fix the inherited "pending-interaction overwrite" bug** — structurally needs a small documented
+  `Vendor/` patch (recipe in *Reference: deferred-work → §1*). Corroborated independently by
+  `WatchNotificationRelay.swift` (same same-session fan-out problem:
+  `actionableStateResolved` must clear **all** pending requests for a session). (Also note the
+  harmless duplicate condition `a != nil || a != nil` in `BridgeServer.hasSession(id:)` ~L2569.)
+- **http hook transport spike** — adopt the `http` hook → in-app `127.0.0.1` listener **only if** it
+  holds a blocking response for the full interactive timeout (recipe + the real-time "Claude working"
+  signal it would make exact in *Reference: deferred-work → §2*). Keep socket+CLI as default until
+  validated. When built, **replace `workingCount`'s recency heuristic with the real signal and drop
+  the liveness-tick republish hack.** First audit the current hook schema for a finer-grained
+  activity/heartbeat event — a newer classic hook may suffice without http.
+- **HookHealthCheck auto-repair + `settings.json` backup**; test against live Claude Code and handle
+  hook-schema drift (9 → ~30 events; `StopFailure` split from `Stop`).
+- **Finish the user-facing rebrand** — README, attribution (`THIRD_PARTY_LICENSES` still omits Open
+  Island / open-vibe-island despite the verbatim vendor), residual "Open Island" user strings, the
+  ~34 `Localizable.xcstrings` brand strings, onboarding copy. (Internal `BoringNotch*` symbol names +
+  the Xcode target/scheme name `boringNotch` are harmless — leave as-is.)
+
+### More terminals (remainder of OI review item #5)
+
+Engine support is vendored; these are wiring jobs. Recipe in *Reference: porting recipes → ADD-A-TERMINAL*.
+
+- **Small** (AppleScript or native CLI): iTerm2, tmux, WezTerm, Kaku, Zellij. *(Ghostty + Terminal.app
+  already shipped.)*
+- **Small-medium**: cmux (Unix-socket JSON-RPC), VS Code / JetBrains workspace-activation jumps
+  (trivial), Codex.app (`codex://` URL).
+- **Medium-large**: **Warp** — the hard one: needs hybrid Accessibility-menu-click ("Tab > Switch to
+  Next Tab") + read-only `warp.sqlite` (private schema, AX with no programmatic prompt, `KeystrokeInjector`
+  AX + Automation TCC).
+
+### More agents (remainder of OI review item #6)
+
+All hook payload models + installers are vendored in `OpenIslandCore`; `ActiveAgentProcessDiscovery`
+already detects 5 of them. There is **no agent protocol** — see *Reference: porting recipes →
+more-agents reality*: two parallel hardcoded enums + ~6 hardcoded switch sites.
+
+- **Small** (Claude forks — almost no code; reuse `ClaudeHookPayload`, differ by config dir +
+  `--source`; Kimi installs TOML): Qoder, Qwen, Factory, CodeBuddy, Kimi. Most savings are install/UI,
+  not the hot path.
+- **Small** (own hook payload + installer, already vendored): OpenCode, Gemini, Cursor.
+- **Medium**: **Codex** — the outlier: a second JSON-RPC app-server integration (~3000 lines, watches
+  rollout JSONL), not just a hook source.
+
+### Music / visualizer
+
+- **dotLottie (`.lottie`) support in `LottieView`** *(small-medium, user-requested)*. The current
+  loader (`LottieAnimation.loadedFrom(url:)`) only handles `.json`; the best purpose-built equalizer
+  visualizers (e.g. a Spotify-style 5-bar now-playing indicator) ship as **dotLottie**, so supporting
+  the container unlocks better/more presets. Touches `components/LottieView.swift` (add a `.lottie`
+  branch via `DotLottieFile.loadedFrom(url:)` alongside the existing JSON path + the `sizeThatFits` /
+  `scaleAspectFit` sizing fix) and the seed path (`visualizerPresetVersion` / `CustomVisualizer.presetVersion`).
+- *Follow-on (small):* once dotLottie lands, curate/seed more built-in presets beyond the current
+  Equalizer / Spectrum / Sound Bars / "Visualizer 4" set.
+
+### Phase 7 — Cowork (beta), optional
+
+Read-only live-status watcher for Claude **Cowork / "local agent mode"** (its agent runs on-device in
+an Apple-VZ + gVisor Linux microVM). **Live status + activate-app jump only — no approve/deny, no
+per-session jump** (the gate runs in the desktop app's host loop; there is no host-side hook process
+to block). Reuse the Phase-2 `ClaudeTranscriptDiscovery` design as a **second watcher root**, behind a
+Defaults flag with a schema-version/format-drift guard. File formats + foreclosed approaches in
+*Reference: deferred-work → §3*. **Read only session metadata/transcripts — never the
+`.audit-key`/token/MCP-secret files in those dirs.**
+
+### Net-new (not in Open Island — decide separately)
+
+Real macOS Notification Center banners (OI uses only the in-notch pop + sound), a session
+interrupt/stop button, a transcript viewer, copy-summary, IDE terminal-focus extensions
+(`~/.claude/ide/*.lock` → jump to an IDE's embedded terminal), and the Watch/iPhone relay (engine is
+in Core, UI is not).
+
+## Reference: deferred-work implementation notes
+
+> Implementation-load-bearing detail for work that is **planned but not yet built** (folded in from
+> the former `tooling/docs/deferred-work-notes.md`, itself extracted from removed spike/research
+> docs). Only the concrete file formats / fix recipes an implementer would otherwise re-derive.
+
+### §1 — Phase 6: fix the inherited "pending-interaction overwrite" bug
+
+**Status:** still present; lives in the **frozen** vendored engine + the resolve-command protocol, so
+it is *not* fixable from the driver alone — needs a small documented `Vendor/` patch.
+
+**Diagnosis.** `BridgeServer.pendingClaudeInteractions` is keyed by `sessionID` **only**
+(`BridgeServer.swift:731,757`), and `bindListener`-side resolution removes by `sessionID`
+(`:1806,2406,2473`). The `PendingClaudeInteraction` struct already carries a `toolUseID` field but it
+is unused as a key. So two *simultaneous* `PermissionRequest`s in the **same** session (parallel tool
+batches) overwrite each other → the first blocked hook never gets its directive and hangs to timeout.
+Subagent hooks are already suppressed, so this is specifically the same-session concurrency case.
+
+**Fix recipe (patches the pristine vendored engine — document the patch in `VENDORED-FROM.md`):**
+1. Key `pendingClaudeInteractions` by a composite **`sessionID + toolUseID`** (the hook payload
+   carries `toolUseID`, surfaced via `claudeToolUseID(for:)`). Apply the same to `pendingApprovals`
+   and `pendingClaudeToolContexts` (`permissionCorrelationKey`).
+2. Extend `BridgeCommand.resolvePermission` (and `AgentBridgeManager.resolve` / the engine's
+   `resolvePendingClaudeInteraction`) to carry the `toolUseID` so the UI resolves the **exact**
+   request, not "whichever is pending for this session."
+3. `AgentSession.permissionRequest` must expose the `toolUseID` to the card so the Allow/Deny
+   round-trip can pass it back.
+
+**Repro to confirm impact before patching:** in `default`/`plan` mode, get a single Claude session to
+raise two concurrent `PermissionRequest`s (parallel tool batch). If the current CLI can't do that, the
+fix is pre-emptive hardening; if it can, it's load-bearing.
+
+### §2 — Phase 6: http hook transport + a real-time "Claude is working" signal
+
+**Status:** transport is the unbuilt Phase-6 spike (decision #5). The "working" signal below is a
+*current heuristic* that http transport would make exact.
+
+**The transport.** Replace/augment the embedded Unix-socket + `OpenIslandHooks` CLI with the modern
+**`http` hook → in-app `127.0.0.1` listener** (no binary to ship/sign). Gate adoption behind a spike
+confirming Claude Code holds a *blocking* HTTP response for the full interactive `PermissionRequest`
+timeout, plus the `allowedHttpHookUrls` allowlist behavior. Keep socket+CLI as default until that
+validates.
+
+**The real-time activity signal** (the closed-notch "Claude working" indicator):
+- **Why it's a heuristic today.** Classic hooks fire at **turn boundaries** only (`UserPromptSubmit`/
+  `PreToolUse` → `.running`; `Stop` → `.completed`). There is no "generating *right now*" event, and a
+  missed `Stop` leaves a session stuck `.running`. So NotchNerd infers "working" with
+  `AgentBridgeManager.workingCount` = `phase == .running && isProcessAlive && now − updatedAt < 60s`
+  (recency guard filters stuck/idle sessions). The 3s liveness backstop republishes while any session
+  is `.running` so the time-based count updates. Consumed by the closed-notch visualizer-slot indicator
+  and the standalone "N working" pill.
+- **Failure modes the heuristic can't fix:** a stuck `.running` session still reads as working for
+  ~60s; a long *silent* op (>60s, no tool events) falsely reads as not-working.
+- **What http / newer hooks would give.** A persistent in-app connection (or newer hook events —
+  `Notification`, `SubagentStart/Stop`, the `Stop`/`StopFailure` split) can deliver a precise
+  start/stop-generating signal: no recency window, no stuck-session false positives, instant off on
+  turn end. **When building this, replace `workingCount`'s recency heuristic with the real signal and
+  drop the liveness-tick republish hack.** Audit the current hook schema for a finer-grained
+  activity/heartbeat event before assuming http is required.
+
+### §3 — Phase 7: Cowork ("local agent mode") read-only watcher
+
+**Status:** optional beta, unbuilt. Read-only **live status + activate-app jump only** — no
+approve/deny. Reuse the Phase-2 `ClaudeTranscriptDiscovery` design as a *second watcher root*. **Read
+only metadata/transcripts — never the `.audit-key` / token / MCP-secret files in those dirs.**
+
+**Session root layout:**
+```
+~/Library/Application Support/Claude/local-agent-mode-sessions/<accountId>/<orgId>/
+  ├─ local_<uuid>.json        # session metadata
+  └─ local_<uuid>/audit.jsonl # append-only, HMAC-signed transcript
+```
+
+**`local_<uuid>.json` keys (verified superset):** `sessionId`, `processName`, `cliSessionId`, `cwd`,
+`userSelectedFolders`, `createdAt`, `lastActivityAt`, `model`, `permissionMode`, `isArchived`,
+`title`, `vmProcessName`, `hostLoopMode`, `webFetchAllowedUrls`, `initialMessage`, `slashCommands`,
+`enabledMcpTools`, `remoteMcpServersConfig`, `fsDetectedFiles`, `egressAllowedDomains`,
+`orgCliExecPolicies`, `memoryEnabled`, `skillsEnabled`, `pluginsEnabled`, `spaceId`, `spaceIdSetBy`,
+`systemPrompt`, `accountName`, `emailAddress`. Use a subset (title/model/permissionMode/cwd/
+lastActivityAt/spaceId) for the chip; keep a **schema-version/format-drift guard**.
+
+**`audit.jsonl` format:** append-only stream-json. Record types `{user, assistant, system, result,
+rate_limit_event}`; per-record keys `type`, `uuid`, `session_id`, `parent_tool_use_id`,
+`client_platform`, `message`, `_audit_timestamp`, `_audit_hmac`. **Turn completion = a `result`
+record.** A **pending tool-permission can be *inferred*** (not resolved) in non-bypass modes by a
+`tool_use` event with no following matching `result` — the only read-only "waiting" signal for Cowork.
+
+**VM liveness:** prefer **FSEvents/mtime** of the VM bundle over `ps`
+(`vm_bundles/claudevm.bundle/`: `rootfs.img`, `sessiondata.img`; NAT `vmIP=172.16.10.3` host/guest). A
+guest hook can't reach a host listener (must cross the NAT) — which is *why* the embedded Cowork
+Claude-Code path can't be hooked.
+
+**Jump ceiling:** activate bundle id **`com.anthropic.claudefordesktop`** (single shared window). A
+per-session `claude://` deep-link is undocumented (would need a reverse-engineering spike first).
+
+**Foreclosed approaches (negative evidence — don't re-investigate):**
+- **Chat content is not locally readable.** The chat app's IndexedDB
+  (`https_claude.ai_0.indexeddb.leveldb`) has no plaintext role/human/assistant markers; Local Storage
+  leveldb holds only `claudeai.*` telemetry and is locked while the app runs.
+- **`mcp.log` can't signal a pending prompt.** It logs MCP tool calls only *after* user approval (a
+  Decline produces no traffic) — it reflects resolved approvals, never the pending prompt. So
+  MCP-as-monitor / `mcp.log` tailing cannot deliver approve/deny, even for the chat app.
+
+## Reference: porting recipes (terminals & agents)
+
+> Distilled from the dual-codebase map. Backs the **More terminals / More agents** TODO items above.
+
+**ADD-A-TERMINAL recipe.** (1) Add a `TerminalAppDescriptor` to the jump dispatch (bundleID +
+aliases) — in NotchNerd that's the `AgentTerminalJump` dispatcher + a per-terminal service like
+`TerminalAppJumpService`; (2) write a per-app focus routine; (3) teach
+`ActiveAgentProcessDiscovery.recognizedTerminalApp` the alias so discovery labels it; (4) optional
+precision via a target-resolver / attachment-probe.
+
+**Per-terminal jump strategy map:**
+- **AppleScript:** iTerm2, Terminal.app, Ghostty.
+- **Native CLI:** WezTerm, Kaku, Zellij, tmux, VS Code, JetBrains.
+- **Unix-socket JSON-RPC:** cmux (`surface.focus`).
+- **URL scheme:** Codex.app (`codex://`).
+- **Hybrid (the hard one):** Warp — Accessibility-menu-click ("Tab > Switch to Next Tab") + read-only
+  `warp.sqlite` (private SQLite schema + AX with no programmatic prompt).
+
+**More-agents reality.** There is **no agent protocol** — two parallel hardcoded enums (`AgentTool`,
+~10 agents; `AgentIdentifier`) + ~6 hardcoded switch sites. Claude forks (Qoder/Qwen/Factory/
+CodeBuddy/Kimi) carry almost no code — they reuse `ClaudeHookPayload` and differ only by config dir +
+`--source` (Kimi installs TOML) — so most fork savings are install/UI, not the hot path. **Codex is
+the outlier:** a second JSON-RPC app-server integration (~3000 lines, watches rollout JSONL).
+
+**Phase-6 socket-namespacing gotcha.** `sockaddr_un.sun_path` is ~104 bytes, so a long namespaced
+path under `~/Library/Application Support` can trip `socketPathTooLong` (the legacy `/tmp` path stayed
+short for exactly this reason) — check this when namespacing the socket off `eth.7amza.notchnerd`.
+
+**Inherited-bug corroboration.** `WatchNotificationRelay.swift` documents the same same-session
+pending-interaction fan-out problem (`actionableStateResolved` must clear **all** pending requests for
+a session) — independent confirmation of *Reference: deferred-work → §1*. Separately,
+`BridgeServer.hasSession(id:)` (~L2569) has a harmless duplicate condition `a != nil || a != nil`.
 

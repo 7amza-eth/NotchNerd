@@ -75,8 +75,8 @@ Agent tab is visible by default but simply shows "no active sessions" while moni
 
 ## Documentation
 
-- [`spec.md`](./spec.md) — architecture, data flow, key files, and gotchas for contributors.
-- [`NotchNerd-PLAN.md`](./NotchNerd-PLAN.md) — the phased build plan and decision log.
+- [`spec.md`](./spec.md) — the single canonical doc: architecture, data flow, key files, and gotchas
+  (Part I) + roadmap, decision log, TODO, and deferred-work reference (Part II).
 
 ## Credits & license
 
