@@ -8,6 +8,7 @@
 //  Binds to AgentBridgeManager.shared + AgentUsageManager.shared.
 //
 
+import AppKit
 import Defaults
 import SwiftUI
 import OpenIslandCore
@@ -117,7 +118,7 @@ struct AgentSessionRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 AnimatedStatusDot(
                     color: AgentStatusPalette.tint(for: session.phase),
@@ -126,8 +127,16 @@ struct AgentSessionRow: View {
                 Text(session.title.isEmpty ? "Claude Code" : session.title)
                     .font(.subheadline).lineLimit(1)
                 Spacer(minLength: 4)
+                if let progress = session.taskProgress {
+                    Label("\(progress.done)/\(progress.total)", systemImage: "checklist")
+                        .labelStyle(.titleAndIcon)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .help("\(progress.done) of \(progress.total) tasks done")
+                }
                 Text(session.spotlightAgeBadge)
                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
+                    .help("Time since last activity")
                 if hasDetail {
                     Button {
                         withAnimation(.easeInOut(duration: 0.18)) {
@@ -154,15 +163,19 @@ struct AgentSessionRow: View {
                     .buttonStyle(.plain)
                     .help("Jump to the terminal")
                 }
-                Text(session.phase.displayName).font(.caption2).foregroundStyle(.secondary)
             }
-            if let activity = session.spotlightActivityLineText, !activity.isEmpty {
-                Text(activity).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-            } else if !session.summary.isEmpty {
-                Text(session.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            // Identity context — branch · terminal · model · mode — so same-repo sessions are distinct.
+            if !session.identityChips.isEmpty {
+                Text(session.identityChips.joined(separator: "  ·  "))
+                    .font(.system(size: 9)).foregroundStyle(.tertiary).lineLimit(1)
             }
-            if let promptLine = session.spotlightPromptLineText {
-                Text(promptLine).font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1)
+            // Recap (the outcome / current activity) instead of a raw transcript line.
+            if let recap = session.recapLineText, !recap.isEmpty {
+                Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            }
+            // The session's goal (its initial prompt), so a long/drifted session still shows its purpose.
+            if let goal = session.recapGoalText, !goal.isEmpty {
+                Text("↳ \(goal)").font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1)
             }
             if isExpanded && hasDetail {
                 AgentSessionDetailView(session: session)
@@ -170,7 +183,9 @@ struct AgentSessionRow: View {
             if let request = session.permissionRequest, session.phase == .waitingForApproval {
                 permissionCard(request)
             } else if let question = session.questionPrompt, session.phase == .waitingForAnswer {
-                questionCard(question)
+                QuestionCard(prompt: question) { response in
+                    agent.answer(sessionID: session.id, response: response)
+                }
             }
         }
         .padding(8)
@@ -182,17 +197,32 @@ struct AgentSessionRow: View {
     }
 
     private func permissionCard(_ request: PermissionRequest) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(request.title).font(.caption).bold()
             if !request.summary.isEmpty {
                 Text(request.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
+            }
+            // Claude's structured one-tap options ("Yes, always allow Bash …", mode changes) — these
+            // allow AND persist the rule/mode, vs. the generic allow-once below. Round-trips through
+            // resolve(.allowWithUpdates) → the engine's allowOnce(updatedPermissions:).
+            if !request.suggestedUpdates.isEmpty {
+                ForEach(Array(request.suggestedUpdates.enumerated()), id: \.offset) { _, update in
+                    Button {
+                        agent.resolve(sessionID: session.id, action: .allowWithUpdates([update]))
+                    } label: {
+                        Label(update.displayLabel, systemImage: "checkmark.circle")
+                            .font(.caption2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered).tint(.green).controlSize(.small)
+                }
             }
             HStack(spacing: 8) {
                 Button(request.secondaryActionTitle.isEmpty ? "Deny" : request.secondaryActionTitle) {
                     agent.deny(sessionID: session.id)
                 }
                 .buttonStyle(.bordered).tint(.red).controlSize(.small)
-                Button(request.primaryActionTitle.isEmpty ? "Allow" : request.primaryActionTitle) {
+                Button(allowButtonTitle(for: request)) {
                     agent.approve(sessionID: session.id)
                 }
                 .buttonStyle(.borderedProminent).tint(.green).controlSize(.small)
@@ -203,62 +233,371 @@ struct AgentSessionRow: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.14)))
     }
 
-    private func questionCard(_ question: QuestionPrompt) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(question.title).font(.caption).bold()
-            if question.options.isEmpty {
+    private func allowButtonTitle(for request: PermissionRequest) -> String {
+        // When Claude offers persistent "always allow" options above, the generic button is allow-once.
+        if !request.suggestedUpdates.isEmpty { return "Allow once" }
+        return request.primaryActionTitle.isEmpty ? "Allow" : request.primaryActionTitle
+    }
+
+}
+
+/// Interactive answer card for Claude's AskUserQuestion. Renders EVERY question (not just the first),
+/// supports multi-select (toggle, no auto-submit), per-option ASCII/code previews, and a freeform
+/// "Other" answer, then submits all answers together via a single Submit. Mirrors the engine
+/// round-trip's per-question `answers` dict + preview annotations.
+struct QuestionCard: View {
+    let prompt: QuestionPrompt
+    let onSubmit: (QuestionPromptResponse) -> Void
+
+    @State private var selected: [Int: Set<String>] = [:]   // question index → selected option labels
+    @State private var freeform: [Int: String] = [:]        // question index → typed "Other" text
+    @State private var expandedPreviews: Set<UUID> = []     // option ids whose preview is expanded
+    @FocusState private var focusedQuestion: Int?           // which freeform field holds keyboard focus
+
+    /// Any question currently shows its freeform ("Other") field.
+    private var hasActiveFreeform: Bool {
+        prompt.questions.indices.contains { isFreeformActive(index: $0, question: prompt.questions[$0]) }
+    }
+    private var firstFreeformIndex: Int? {
+        prompt.questions.indices.first { isFreeformActive(index: $0, question: prompt.questions[$0]) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if prompt.questions.isEmpty {
+                Text(prompt.title).font(.caption).bold()
                 Text("Waiting for your answer in the terminal.")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
-                ForEach(question.options, id: \.self) { option in
-                    Button(option) {
-                        agent.answer(sessionID: session.id,
-                                     response: QuestionPromptResponse(rawAnswer: option))
-                    }
-                    .buttonStyle(.bordered).controlSize(.small)
+                if prompt.questions.count > 1 {
+                    Text(prompt.title).font(.caption).bold()
                 }
+                ForEach(Array(prompt.questions.enumerated()), id: \.offset) { index, question in
+                    questionSection(index: index, question: question)
+                }
+                Button("Submit") { submit() }
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    .disabled(!allAnswered)
             }
         }
         .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.yellow.opacity(0.12)))
+        .background {
+            // The notch panel is non-key (click-through) by default, so a TextField can't get keyboard
+            // input. While a freeform ("Other") field is showing, flip the shared gate + make the notch
+            // window key — the same trick the in-notch Notes tab uses — and keep the notch open.
+            if hasActiveFreeform { NotchFreeformKeyMaker() }
+        }
+        .onChange(of: hasActiveFreeform) { _, active in
+            NotepadNotchFocus.allowsNotchKey = active
+            SharingStateManager.shared.preventNotchClose = active
+            if active { focusedQuestion = firstFreeformIndex }
+        }
+        .onDisappear {
+            NotepadNotchFocus.allowsNotchKey = false
+            SharingStateManager.shared.preventNotchClose = false
+        }
+    }
+
+    @ViewBuilder
+    private func questionSection(index: Int, question: QuestionPromptItem) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(question.question).font(.caption).bold()
+            if question.multiSelect {
+                Text("Select all that apply").font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+            ForEach(question.options) { option in
+                optionRow(index: index, question: question, option: option)
+            }
+            if isFreeformActive(index: index, question: question) {
+                TextField("Type your answer", text: freeformBinding(index))
+                    .textFieldStyle(.roundedBorder).controlSize(.small)
+                    .focused($focusedQuestion, equals: index)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func optionRow(index: Int, question: QuestionPromptItem, option: QuestionOption) -> some View {
+        let isSelected = selected[index, default: []].contains(option.label)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .top, spacing: 6) {
+                Button {
+                    toggle(index: index, question: question, label: option.label)
+                } label: {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: selectionSymbol(multiSelect: question.multiSelect, isSelected: isSelected))
+                            .foregroundStyle(isSelected ? .green : .secondary)
+                            .font(.system(size: 11))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(option.label).font(.caption2)
+                            if !option.description.isEmpty {
+                                Text(option.description).font(.system(size: 9)).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                Spacer(minLength: 4)
+                if option.preview != nil {
+                    Button {
+                        if expandedPreviews.contains(option.id) {
+                            expandedPreviews.remove(option.id)
+                        } else {
+                            expandedPreviews.insert(option.id)
+                        }
+                    } label: {
+                        Image(systemName: expandedPreviews.contains(option.id) ? "eye.slash" : "eye")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Show preview")
+                }
+            }
+            if let preview = option.preview, expandedPreviews.contains(option.id) {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(preview)
+                        .font(.system(size: 9, design: .monospaced))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: true, vertical: true)
+                }
+                .frame(maxWidth: .infinity, maxHeight: 160, alignment: .topLeading)
+                .padding(6)
+                .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.4)))
+            }
+        }
+    }
+
+    private func selectionSymbol(multiSelect: Bool, isSelected: Bool) -> String {
+        if multiSelect { return isSelected ? "checkmark.square.fill" : "square" }
+        return isSelected ? "largecircle.fill.circle" : "circle"
+    }
+
+    private func toggle(index: Int, question: QuestionPromptItem, label: String) {
+        var set = selected[index, default: []]
+        if question.multiSelect {
+            if set.contains(label) { set.remove(label) } else { set.insert(label) }
+        } else {
+            set = set.contains(label) ? [] : [label]
+        }
+        selected[index] = set
+    }
+
+    private func isFreeformActive(index: Int, question: QuestionPromptItem) -> Bool {
+        let set = selected[index, default: []]
+        return question.options.contains { $0.allowsFreeform && set.contains($0.label) }
+    }
+
+    private func freeformBinding(_ index: Int) -> Binding<String> {
+        Binding(get: { freeform[index] ?? "" }, set: { freeform[index] = $0 })
+    }
+
+    private var allAnswered: Bool {
+        for (index, question) in prompt.questions.enumerated() {
+            let set = selected[index, default: []]
+            if set.isEmpty { return false }
+            if question.options.contains(where: { $0.allowsFreeform && set.contains($0.label) }),
+               (freeform[index] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func submit() {
+        var answers: [String: String] = [:]
+        var annotations: [String: QuestionAnswerAnnotation] = [:]
+        for (index, question) in prompt.questions.enumerated() {
+            let set = selected[index, default: []]
+            let typed = (freeform[index] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            var parts = question.options.filter { set.contains($0.label) && !$0.allowsFreeform }.map(\.label)
+            if question.options.contains(where: { $0.allowsFreeform && set.contains($0.label) }), !typed.isEmpty {
+                parts.append(typed)
+            }
+            let answer = parts.joined(separator: ", ")
+            guard !answer.isEmpty else { continue }
+            answers[question.question] = answer
+            if let preview = question.options.first(where: { set.contains($0.label) })?.preview, !preview.isEmpty {
+                annotations[question.question] = QuestionAnswerAnnotation(preview: preview)
+            }
+        }
+        onSubmit(QuestionPromptResponse(answers: answers, annotations: annotations))
+    }
+}
+
+/// Makes the hosting notch window key while a freeform answer field is shown, so it can take keyboard
+/// input (the notch panel is otherwise non-key / click-through). Mirrors the Notes tab's NotchKeyMaker.
+private struct NotchFreeformKeyMaker: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            NotepadNotchFocus.allowsNotchKey = true
+            view?.window?.makeKey()
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+// MARK: - NotchNerd recap / identity presentation
+//
+// Glanceable recap + session-identity helpers, kept OUT of the verbatim AgentSessionPresentation.swift
+// (which mirrors upstream for clean re-sync). Built only from already-captured hook metadata — no
+// transcript reads, no API.
+extension AgentSession {
+    /// The session's goal — its initial prompt — so a long / drifted session still shows what it's about.
+    var recapGoalText: String? {
+        guard spotlightShowsDetailLines,
+              let goal = initialUserPromptText?.condensedForRecap, !goal.isEmpty else {
+            return nil
+        }
+        return goal
+    }
+
+    /// A glanceable recap of the last exchange instead of a raw transcript: running → current
+    /// tool/activity; completed → "Claude: <last message>"; waiting → the pending ask.
+    var recapLineText: String? {
+        guard spotlightShowsDetailLines else { return nil }
+        switch phase {
+        case .waitingForApproval:
+            return permissionRequest?.summary.condensedForRecap
+        case .waitingForAnswer:
+            return questionPrompt?.title.condensedForRecap
+        case .running:
+            return spotlightActivityLineText
+        case .completed:
+            if let message = lastAssistantMessageText?.condensedForRecap, !message.isEmpty {
+                return "\(completionReplyRecipientName): \(message)"
+            }
+            return jumpTarget != nil ? "Idle" : "Completed"
+        }
+    }
+
+    /// Compact identity context: branch · terminal · friendly model · non-default permission mode.
+    var identityChips: [String] {
+        var chips: [String] = []
+        if let branch = spotlightWorktreeBranch { chips.append(branch) }
+        if let terminal = spotlightTerminalBadge { chips.append(terminal) }
+        if let model = claudeMetadata?.model, !model.isEmpty { chips.append(Self.friendlyModelName(model)) }
+        if let mode = claudeMetadata?.permissionMode, let label = Self.permissionModeLabel(mode) {
+            chips.append(label)
+        }
+        return chips
+    }
+
+    /// (done, total) of the session's task checklist, when it has one.
+    var taskProgress: (done: Int, total: Int)? {
+        let tasks = claudeMetadata?.activeTasks ?? []
+        guard !tasks.isEmpty else { return nil }
+        return (tasks.filter { $0.status == .completed }.count, tasks.count)
+    }
+
+    static func friendlyModelName(_ raw: String) -> String {
+        let lowered = raw.lowercased()
+        if lowered.contains("opus") { return "Opus" }
+        if lowered.contains("sonnet") { return "Sonnet" }
+        if lowered.contains("haiku") { return "Haiku" }
+        if lowered.contains("fable") { return "Fable" }
+        return raw
+    }
+
+    static func permissionModeLabel(_ mode: ClaudePermissionMode) -> String? {
+        switch mode {
+        case .default: return nil          // the norm — not worth a chip
+        case .acceptEdits: return "Accept Edits"
+        case .plan: return "Plan"
+        case .dontAsk: return "Don't Ask"
+        case .bypassPermissions: return "Bypass"
+        case .auto: return "Auto"
+        }
+    }
+}
+
+private extension String {
+    /// One line, whitespace-collapsed, length-capped — for a compact recap surface.
+    var condensedForRecap: String {
+        let collapsed = split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return collapsed.count > 140 ? String(collapsed.prefix(140)) + "…" : collapsed
     }
 }
 
 /// Persistent closed-notch attention indicator (shown when a session needs the user).
+///
+/// Laid out to **flank the hardware notch** — a sparkle hugging its left edge, the "needs you" label
+/// hugging its right edge, with a notch-width black spacer between. A plain centered pill would be
+/// narrower than the physical notch and render *behind* the cutout (invisible). The chin widens to
+/// match via `ContentView.computedChinWidth`.
 struct AgentClosedIndicator: View {
     let count: Int
+    /// Width of the physical notch cutout (`vm.closedNotchSize.width`).
+    let notchWidth: CGFloat
+    /// Per-side flank width (`ContentView.agentStatusFlankWidth`).
+    let side: CGFloat
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "sparkles").foregroundStyle(.purple)
-            Text("\(count)").font(.caption).bold().foregroundStyle(.white)
-            Text(count == 1 ? "needs you" : "need you")
-                .font(.caption2).foregroundStyle(.secondary)
+        HStack(spacing: 0) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(.purple)
+                .symbolEffect(.pulse, options: .repeating)
+                .frame(width: side, alignment: .trailing)
+                .padding(.trailing, 6)
+
+            Rectangle().fill(.black).frame(width: notchWidth)
+
+            HStack(spacing: 4) {
+                Text("\(count)").font(.caption).bold().foregroundStyle(.white)
+                Text(count == 1 ? "needs you" : "need you")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            .fixedSize()
+            .frame(width: side, alignment: .leading)
+            .padding(.leading, 6)
         }
-        .padding(.horizontal, 8)
     }
 }
 
 /// Closed-notch Claude status, shown when no music is playing. Pulses + "working" while Claude is
 /// actively cooking; otherwise a calm "active" presence for the live sessions. Distinct from
 /// AgentClosedIndicator ("needs you").
+///
+/// Same notch-flanking layout as `AgentClosedIndicator` so it isn't occluded by the physical notch.
 struct AgentActiveIndicator: View {
     let working: Int
     let live: Int
+    let notchWidth: CGFloat
+    let side: CGFloat
+
+    private var isWorking: Bool { working > 0 }
+    private var count: Int { isWorking ? working : live }
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "sparkles").foregroundStyle(.purple)
-            if working > 0 {
-                AnimatedStatusDot(color: AgentStatusPalette.running, pulsing: true)
-                Text(working == 1 ? "Claude working" : "\(working) working")
-                    .font(.caption2).foregroundStyle(.secondary)
-            } else {
-                AnimatedStatusDot(color: AgentStatusPalette.completed, pulsing: false)
-                Text(live == 1 ? "Claude active" : "\(live) active")
-                    .font(.caption2).foregroundStyle(.secondary)
+        HStack(spacing: 0) {
+            // Left flank: pulsing sparkle hugging the notch — purple while working, green when idle/active.
+            Image(systemName: "sparkles")
+                .font(.system(size: 12))
+                .foregroundStyle(isWorking ? .purple : .green)
+                .symbolEffect(.pulse, options: .repeating, isActive: isWorking)
+                .frame(width: side, alignment: .trailing)
+                .padding(.trailing, 3)
+
+            Rectangle().fill(.black).frame(width: notchWidth)
+
+            // Right flank: status dot (+ count when more than one session). No word label keeps it tight.
+            HStack(spacing: 3) {
+                AnimatedStatusDot(
+                    color: isWorking ? AgentStatusPalette.running : AgentStatusPalette.completed,
+                    pulsing: isWorking
+                )
+                if count > 1 {
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(width: side, alignment: .leading)
+            .padding(.leading, 3)
         }
-        .padding(.horizontal, 8)
     }
 }
 
@@ -296,6 +635,23 @@ struct AgentSettings: View {
                     Button("Remove hooks") { agent.uninstallHooks() }
                     Spacer()
                     Button("Refresh") { agent.refreshHookStatus() }
+                }
+                if let health = agent.hookHealth, !health.isHealthy {
+                    ForEach(Array(health.errors.enumerated()), id: \.offset) { _, issue in
+                        Label(issue.description, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                    if !health.repairableIssues.isEmpty {
+                        Button("Repair hooks") { agent.installHooks() }
+                    }
+                }
+                if let health = agent.hookHealth, !health.notices.isEmpty {
+                    ForEach(Array(health.notices.enumerated()), id: \.offset) { _, issue in
+                        Label(issue.description, systemImage: "info.circle")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } header: {
                 Text("Claude Code hooks")

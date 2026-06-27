@@ -43,6 +43,13 @@ struct ContentView: View {
 
     private let extendedHoverPadding: CGFloat = 30
     private let zeroHeightHoverPadding: CGFloat = 10
+    /// Per-side width for the compact closed-notch "working / active" status — a sparkle on one flank, a
+    /// status dot + count on the other, both flanking the hardware notch. Kept small (no word label) so
+    /// the pill stays tight; the chin widens to match (see `computedChinWidth`). The pill is centered
+    /// over the notch, so both flanks share this width — making it small is what removes the dead space.
+    private let agentStatusFlankWidth: CGFloat = 20
+    /// Wider per-side width for the "N need you" attention pill, which carries a text label.
+    private let agentAttentionFlankWidth: CGFloat = 78
 
     private var topCornerRadius: CGFloat {
        ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
@@ -59,10 +66,27 @@ struct ContentView: View {
         )
     }
 
+    /// True when the closed-notch music live-activity is on screen. Agent status then rides the music
+    /// visualizer slot rather than replacing the notch, so music and Claude status "play nice".
+    private var musicIsShowing: Bool {
+        (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
+            && vm.notchState == .closed
+            && (musicManager.isPlaying || !musicManager.isPlayerIdle)
+            && coordinator.musicLiveActivityEnabled
+            && !vm.hideOnClosed
+    }
+
     private var computedChinWidth: CGFloat {
         var chinWidth: CGFloat = vm.closedNotchSize.width
+        // Extra width the closed-notch agent status pills need to flank the hardware notch.
+        let attentionPadding = 2 * (agentAttentionFlankWidth + 6)
+        let statusPadding = 2 * (agentStatusFlankWidth + 6)
 
-        if coordinator.expandingView.type == .battery && coordinator.expandingView.show
+        // Mirror NotchLayout()'s closed-notch branch priority so the chin matches what's drawn:
+        // attention (only without music) → battery → music → agent-live → face.
+        if agent.attentionCount > 0 && vm.notchState == .closed && !musicIsShowing {
+            chinWidth += attentionPadding
+        } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
             chinWidth = 640
@@ -71,6 +95,8 @@ struct ContentView: View {
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
         {
             chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
+        } else if agent.liveSessionCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
+            chinWidth += statusPadding
         } else if !coordinator.expandingView.show && vm.notchState == .closed
             && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace]
             && !vm.hideOnClosed
@@ -285,9 +311,13 @@ struct ContentView: View {
                     .padding(.top, 40)
                     Spacer()
                 } else {
-                    if agent.attentionCount > 0 && vm.notchState == .closed {
-                        AgentClosedIndicator(count: agent.attentionCount)
-                            .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                    if agent.attentionCount > 0 && vm.notchState == .closed && !musicIsShowing {
+                        AgentClosedIndicator(
+                            count: agent.attentionCount,
+                            notchWidth: vm.closedNotchSize.width,
+                            side: agentAttentionFlankWidth
+                        )
+                        .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                     } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
                         && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
                     {
@@ -318,16 +348,21 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
-                      } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
-                          // Music takes priority so it can never be hidden by agent state; an active
-                          // session shows inside its visualizer slot instead (see MusicLiveActivity).
+                      } else if musicIsShowing {
+                          // Music is never hidden by agent state — Claude's status (needs-you / working)
+                          // rides the visualizer slot instead (see MusicLiveActivity), so the two play nice.
                           MusicLiveActivity()
                               .frame(alignment: .center)
                       } else if agent.liveSessionCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
                           // No music is showing — surface Claude's status in the closed notch
                           // ("N working" while cooking, otherwise "N active" for live sessions).
-                          AgentActiveIndicator(working: agent.workingCount, live: agent.liveSessionCount)
-                              .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                          AgentActiveIndicator(
+                              working: agent.workingCount,
+                              live: agent.liveSessionCount,
+                              notchWidth: vm.closedNotchSize.width,
+                              side: agentStatusFlankWidth
+                          )
+                          .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           NotchNerdFaceAnimation()
                        } else if vm.notchState == .open {
@@ -491,8 +526,19 @@ struct ContentView: View {
                 )
 
             HStack {
-                if agent.workingCount > 0 {
-                    // An active Claude session takes over just the visualizer slot — the album art
+                if agent.attentionCount > 0 {
+                    // Claude needs you — surface it in the visualizer slot so music keeps playing
+                    // (album art + title stay). Orange distinguishes it from the purple "working" sparkle.
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.orange)
+                        .symbolEffect(.pulse, options: .repeating)
+                        .frame(
+                            width: max(0, vm.effectiveClosedNotchHeight - 12),
+                            height: max(0, vm.effectiveClosedNotchHeight - 12)
+                        )
+                } else if agent.workingCount > 0 {
+                    // A working Claude session takes over just the visualizer slot — the album art
                     // and track still show, so the music notch never disappears.
                     Image(systemName: "sparkles")
                         .font(.system(size: 12))

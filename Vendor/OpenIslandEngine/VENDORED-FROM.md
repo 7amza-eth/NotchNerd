@@ -6,7 +6,11 @@
 - **Upstream commit:** `1e26dfc` ("Merge pull request #523 from SSakutaro/docs/homebrew-install")
 - **Copied:** 2026-06-26
 - **Copied dirs:** `Sources/OpenIslandCore` (45 files, whole — incl. inert Codex/Cursor/Gemini/OpenCode types), `Sources/OpenIslandHooks/OpenIslandHooksCLI.swift`
-- **Local changes:** none yet (kept pristine for clean upstream re-pull, per plan locked-decision #6). Only the `Package.swift` here is hand-written (tools 6.0 + Swift-6 mode + 2 products, vs upstream's 6.2 / 4-target manifest).
+- **Local changes:** kept as close to pristine as possible (per plan locked-decision #6); the only edits are the hand-written `Package.swift` and the small documented patches below.
+
+## NotchNerd patches (re-apply after a re-pull)
+
+- **`QuestionOption.preview`** — `Sources/OpenIslandCore/AgentSession.swift`: added `public var preview: String?` to `QuestionOption` (+ init param). `Sources/OpenIslandCore/ClaudeHooks.swift`: in the `questionPrompt` parser, populate it from `optionObject["preview"]?.stringValue`. **Why:** AskUserQuestion options can carry an ASCII/code `preview`; upstream drops it, so the Agent tab's question card couldn't show it. Backward-compatible (Optional → `decodeIfPresent`). Marked inline with `// NotchNerd patch`.
 
 ## Re-pulling upstream
 ```sh

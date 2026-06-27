@@ -58,24 +58,26 @@ final class AgentBridgeManager: ObservableObject {
     /// Count of sessions in `.waitingForApproval` / `.waitingForAnswer`.
     /// PERSISTENT closed-notch indicator source (never auto-expires).
     @Published private(set) var attentionCount: Int = 0
-    @Published private(set) var runningCount: Int = 0
     @Published private(set) var liveSessionCount: Int = 0
 
-    /// Sessions that look like they're actively *working right now*: running, process alive, and
-    /// emitting events recently. The classic hooks only mark turn boundaries (UserPromptSubmit→Stop),
-    /// so a session whose Stop didn't fire — or one idle "waiting for you" — can linger in `.running`;
-    /// the recency guard filters those. A precise real-time signal awaits the Phase-6 http hooks.
+    /// Sessions actively *working right now* = mid-turn (`phase == .running`) with a live process.
+    ///
+    /// We deliberately DON'T time-gate this. Classic hooks fire only at turn/tool boundaries, so during
+    /// long silent generation ("thinking") no event lands and `updatedAt` freezes — the old 60s recency
+    /// window then flipped "working" OFF mid-turn even though Claude was still going (the user-reported
+    /// "thinking doesn't show as working"). Now that liveness is reliable — `Stop`/`StopFailure`/
+    /// `SessionEnd` drive `.completed`, and a dead process is ended within ~6s by `markProcessLiveness`
+    /// — `phase == .running` is itself the precise on/off signal, matching the Agent tab's row dot.
     var workingCount: Int {
-        let now = Date.now
-        return sessions.filter {
-            $0.phase == .running && $0.isProcessAlive
-                && now.timeIntervalSince($0.updatedAt) < Self.workingRecencyWindow
-        }.count
+        sessions.filter { $0.phase == .running && $0.isProcessAlive }.count
     }
-    private static let workingRecencyWindow: TimeInterval = 60
 
     @Published private(set) var isBridgeReady: Bool = false
     @Published private(set) var hookInstallState: HookInstallState = .unknown
+    /// Deep hook-integrity diagnostic (stale command path / non-executable binary / malformed config /
+    /// other hooks present) — catches the failure the simple "managed hooks present" check can't. Drives
+    /// the Settings repair affordance; nil until first checked.
+    @Published private(set) var hookHealth: HookHealthReport?
     @Published private(set) var lastStatusMessage: String = ""
 
     // MARK: Notification signals (drive the in-notch auto-pop; observed by the coordinator)
@@ -100,7 +102,10 @@ final class AgentBridgeManager: ObservableObject {
 
     private lazy var installManager = makeInstallManager()
     private let registry = ClaudeSessionRegistry()
-    private let transcriptDiscovery = ClaudeTranscriptDiscovery()
+    // Tight window: with the `isVisibleInIsland` publish filter + TTY/cwd liveness match below,
+    // discovery's only remaining job is recovering a session that is *still running* but whose hooks
+    // we missed (app launched after Claude) — not resurfacing 24h of cleared/finished history.
+    private let transcriptDiscovery = ClaudeTranscriptDiscovery(maxAge: 15 * 60, maxFiles: 8)
 
     // MARK: Task / timer bookkeeping
 
@@ -233,9 +238,36 @@ final class AgentBridgeManager: ObservableObject {
 
     private func ingest(_ event: AgentEvent) {
         state.apply(event)                       // single source of truth
+        // Keep an actively-emitting session marked alive so a transient `ps`/`lsof` hiccup can't
+        // force-end a turn that's clearly still running (restores the per-event keep-alive that the
+        // slim driver had dropped vs. upstream). Idle-but-alive sessions are kept alive separately by
+        // the TTY/cwd process match in `startLivenessBackstop`. We deliberately do NOT revive a
+        // session whose terminal already went away (`isSessionEnded`).
+        let sid = Self.sessionID(of: event)
+        if let session = state.session(id: sid), session.tool == .claudeCode, !session.isSessionEnded {
+            state.markSingleSessionAlive(sessionID: sid)
+        }
         republish()
         schedulePersist()
         emitNotification(for: event)
+    }
+
+    /// Every `AgentEvent` payload carries the session it concerns.
+    private static func sessionID(of event: AgentEvent) -> String {
+        switch event {
+        case let .sessionStarted(p): return p.sessionID
+        case let .activityUpdated(p): return p.sessionID
+        case let .permissionRequested(p): return p.sessionID
+        case let .questionAsked(p): return p.sessionID
+        case let .sessionCompleted(p): return p.sessionID
+        case let .jumpTargetUpdated(p): return p.sessionID
+        case let .sessionMetadataUpdated(p): return p.sessionID
+        case let .claudeSessionMetadataUpdated(p): return p.sessionID
+        case let .geminiSessionMetadataUpdated(p): return p.sessionID
+        case let .openCodeSessionMetadataUpdated(p): return p.sessionID
+        case let .cursorSessionMetadataUpdated(p): return p.sessionID
+        case let .actionableStateResolved(p): return p.sessionID
+        }
     }
 
     /// Map an engine event → a notification signal (mirrors IslandSurface.notificationSurface).
@@ -257,10 +289,19 @@ final class AgentBridgeManager: ObservableObject {
 
     /// Recompute the @Published projection from the private reducer.
     private func republish() {
-        sessions = state.sessions.map(Self.debranded)
+        // Only surface sessions that are live in a terminal *right now* (`isVisibleInIsland`:
+        // hook-managed & not-ended, process-alive, or needing attention). This is what makes the tab
+        // show only what's currently running — it drops /clear'd session-ids (superseded → force-ended
+        // by the TTY match), dead processes, and the stale registry/transcript history that the engine
+        // otherwise keeps in `state.sessions` forever. The closed-notch counts already use this gate.
+        let visible = state.sessions.filter(\.isVisibleInIsland)
+        // Pin sessions that need you (approval/answer) to the top, preserving recency order within each
+        // group, so an actionable session is never buried under newer running noise.
+        let needsAttention = visible.filter { $0.phase.requiresAttention }
+        let others = visible.filter { !$0.phase.requiresAttention }
+        sessions = (needsAttention + others).map(Self.debranded)
         actionableSession = state.activeActionableSession.map(Self.debranded)
         attentionCount = state.attentionCount
-        runningCount = state.runningCount
         liveSessionCount = state.liveSessionCount
     }
 
@@ -349,12 +390,16 @@ final class AgentBridgeManager: ObservableObject {
 
     // MARK: - Hook installation
 
-    private func makeInstallManager() -> ClaudeHookInstallationManager {
+    /// The resolved `~/.claude` config directory (honours the `agentClaudeConfigDir` override).
+    private func claudeConfigDirectory() -> URL {
         let overridePath = Defaults[.agentClaudeConfigDir]
-        let claudeDir: URL = overridePath.isEmpty
+        return overridePath.isEmpty
             ? ClaudeConfigDirectory.resolved()
             : URL(fileURLWithPath: (overridePath as NSString).expandingTildeInPath, isDirectory: true)
-        return ClaudeHookInstallationManager(claudeDirectory: claudeDir, hookSource: "claude")
+    }
+
+    private func makeInstallManager() -> ClaudeHookInstallationManager {
+        ClaudeHookInstallationManager(claudeDirectory: claudeConfigDirectory(), hookSource: "claude")
     }
 
     /// The embedded hook binary at <app>/Contents/Helpers/OpenIslandHooks (Phase 1 step 2b).
@@ -366,7 +411,7 @@ final class AgentBridgeManager: ObservableObject {
 
     func installHooks() {
         guard let source = embeddedHooksBinaryURL() else {
-            hookInstallState = .failed("Embedded OpenIslandHooks binary not found in app bundle.")
+            hookInstallState = .failed("Agent hook helper not found in the app bundle.")
             lastStatusMessage = hookInstallStateMessage
             return
         }
@@ -381,6 +426,7 @@ final class AgentBridgeManager: ObservableObject {
                 }.value
                 self.hookInstallState = status.managedHooksPresent ? .installed : .notInstalled
                 self.lastStatusMessage = "Claude Code hooks installed."
+                self.checkHookHealth()
             } catch {
                 // Never destroy the user's settings.json; the installer already backed it up.
                 self.hookInstallState = .failed(error.localizedDescription)
@@ -415,6 +461,23 @@ final class AgentBridgeManager: ObservableObject {
             } catch {
                 self.hookInstallState = .unknown
             }
+            self.checkHookHealth()
+        }
+    }
+
+    /// Run the deep hook-integrity diagnostic (`HookHealthCheck`) and publish the report. Catches what
+    /// the simple "managed hooks present" status can't: a `settings.json` hook command pointing at a
+    /// binary that no longer exists (e.g. after the app moved, or a different build wrote the hooks) —
+    /// the #1 silent cause of missing live sessions. The repairable issues are all fixed by reinstalling.
+    func checkHookHealth() {
+        let claudeDir = claudeConfigDirectory()
+        let binary = embeddedHooksBinaryURL()
+        Task { [weak self] in
+            guard let self else { return }
+            let report = await Task.detached(priority: .utility) {
+                HookHealthCheck.checkClaude(claudeDirectory: claudeDir, hooksBinaryURL: binary)
+            }.value
+            self.hookHealth = report
         }
     }
 
@@ -473,12 +536,10 @@ final class AgentBridgeManager: ObservableObject {
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + Self.livenessInterval, repeating: Self.livenessInterval)
         timer.setEventHandler { [weak self] in
-            let snapshots = ActiveAgentProcessDiscovery().discover()  // shells out to ps/lsof
-            let aliveClaudeIDs = Set(snapshots.compactMap { snap -> String? in
-                snap.tool == .claudeCode ? snap.sessionID : nil
-            })
+            let snapshots = ActiveAgentProcessDiscovery().discover()  // shells out to ps/lsof (off-actor)
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                let aliveClaudeIDs = self.aliveClaudeSessionIDs(from: snapshots)
                 let changed = self.state.markProcessLiveness(aliveSessionIDs: aliveClaudeIDs)
                 // Also refresh while a session is running so the time-based `workingCount` updates
                 // (the "Claude working" indicator turns off ~recency-window after events stop).
@@ -489,6 +550,64 @@ final class AgentBridgeManager: ObservableObject {
         }
         timer.resume()
         livenessTimer = timer
+    }
+
+    /// Resolve which tracked Claude sessions are *currently hosted by a live terminal*, for the
+    /// `markProcessLiveness` backstop.
+    ///
+    /// A normally-launched `claude` exposes no session-id to `ps`/`lsof` (no `--session-id`/`--resume`
+    /// arg, and the transcript fd is closed between writes), so the old "match the snapshot's
+    /// `sessionID`" set was almost always empty — every hook-managed session then accrued misses and
+    /// got force-ended ~6s after start (which is why the closed-notch "working/active" indicator never
+    /// stuck, and why the heuristic looked unreliable). Instead, match each tracked session to a live
+    /// `claude` process by its captured **terminal (TTY)** (`ProcessSnapshot.terminalTTY` from ps/lsof
+    /// vs. `AgentSession.jumpTarget.terminalTTY`, which the registry persists so an open-but-idle
+    /// session survives a restart), or by an exact session-id a live process happens to advertise.
+    ///
+    /// `/clear` mints a NEW session-id on the SAME terminal while the old id stops receiving events,
+    /// so among sessions sharing a terminal we keep only the most-recently-updated one. The superseded
+    /// (cleared) id then misses the alive set and is force-ended within ~6s — which is exactly what
+    /// drops it from the Agent tab.
+    private func aliveClaudeSessionIDs(
+        from snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]
+    ) -> Set<String> {
+        let claudeSnaps = snapshots.filter { $0.tool == .claudeCode }
+        guard !claudeSnaps.isEmpty else { return [] }
+
+        let aliveTTYs = Set(claudeSnaps.compactMap(\.terminalTTY))
+        let aliveSessionIDs = Set(claudeSnaps.compactMap(\.sessionID))   // rarely available, but definitive
+
+        // Resolve, per terminal, the single "current" session: prefer one whose exact id a live
+        // process advertises, else the most-recently-updated session on that terminal. Folding the
+        // authoritative match INTO the per-terminal contest (instead of short-circuiting it) is what
+        // drops /clear's stale predecessor — same terminal, older — instead of leaving it alive
+        // alongside the new session.
+        struct LiveCandidate { let id: String; let authoritative: Bool; let updatedAt: Date }
+        var byTerminal: [String: LiveCandidate] = [:]
+
+        for session in state.sessions where session.tool == .claudeCode && !session.isSessionEnded {
+            let tty = session.jumpTarget?.terminalTTY
+            let isAuthoritative = aliveSessionIDs.contains(session.id)
+            // A session is "live in a terminal" only if its captured tty still hosts a live `claude`,
+            // or a live process advertises its exact id. We deliberately do NOT match by working
+            // directory: a finished/cleared/recovered session (a discovered transcript or a restored
+            // registry record — both carry no tty) would otherwise be kept alive merely because some
+            // *other* terminal is open in the same repo. That cwd overlap is what left 4h/14h-old
+            // sessions stuck in the list (e.g. an old transcript rescued by the very session monitoring
+            // it). Real terminal sessions always carry a tty (the hook reads the parent `claude`
+            // process's controlling tty), so nothing genuinely live is lost.
+            let matchesTTY = tty.map(aliveTTYs.contains) ?? false
+            guard isAuthoritative || matchesTTY else { continue }
+
+            let key = tty ?? session.id
+            let candidate = LiveCandidate(id: session.id, authoritative: isAuthoritative, updatedAt: session.updatedAt)
+            guard let existing = byTerminal[key] else { byTerminal[key] = candidate; continue }
+            let wins = (candidate.authoritative && !existing.authoritative)
+                || (candidate.authoritative == existing.authoritative && candidate.updatedAt > existing.updatedAt)
+            if wins { byTerminal[key] = candidate }
+        }
+
+        return Set(byTerminal.values.map(\.id))
     }
 
     // MARK: - Registry persistence (debounced)
@@ -504,7 +623,9 @@ final class AgentBridgeManager: ObservableObject {
 
     private func persistRegistryNow() {
         let records = state.sessions
-            .filter { $0.tool == .claudeCode && $0.origin != .demo }
+            // Persist only what's currently live, so a relaunch doesn't re-seed cleared/finished
+            // sessions (they'd be filtered out of the UI anyway, but this keeps the registry clean).
+            .filter { $0.tool == .claudeCode && $0.origin != .demo && $0.isVisibleInIsland }
             .map { ClaudeTrackedSessionRecord(session: $0) }
         Task.detached(priority: .utility) { [registry] in
             try? registry.save(records)

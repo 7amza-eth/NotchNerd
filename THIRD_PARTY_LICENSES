@@ -12,6 +12,40 @@
 =============================================================================
 
 -----------------------------------------------------------------------------
+        Swift Package Manager dependencies (linked into the built app)
+-----------------------------------------------------------------------------
+
+These packages are resolved via SPM and linked into the distributed binary.
+Each is under its own license; the authoritative license text lives in each
+project's repository. The MIT / BSD-3-Clause / MPL-2.0 texts elsewhere in this
+file apply to the MIT/BSD entries below.
+
+  MIT License:
+  - Defaults — Copyright (c) Sindre Sorhus — https://github.com/sindresorhus/Defaults
+  - KeyboardShortcuts — Copyright (c) Sindre Sorhus — https://github.com/sindresorhus/KeyboardShortcuts
+  - LaunchAtLogin-Modern — Copyright (c) Sindre Sorhus — https://github.com/sindresorhus/LaunchAtLogin-Modern
+  - SwiftUIIntrospect — Copyright (c) Siteline and contributors — https://github.com/siteline/swiftui-introspect
+  - SkyLightWindow — Copyright (c) Lakr233 — https://github.com/Lakr233/SkyLightWindow
+
+  BSD-3-Clause:
+  - AsyncXPCConnection — Copyright (c) ChimeHQ — https://github.com/ChimeHQ/AsyncXPCConnection
+
+  Apache License 2.0 (full text in the linked repositories):
+  - Lottie (lottie-spm / lottie-ios) — Copyright (c) Airbnb, Inc. — https://github.com/airbnb/lottie-spm
+  - swift-collections — Copyright (c) Apple Inc. — https://github.com/apple/swift-collections
+  - swift-syntax — Copyright (c) Apple Inc. — https://github.com/apple/swift-syntax
+
+  Other (see each project's repository for its license):
+  - Sparkle — Copyright (c) The Sparkle Project — https://github.com/sparkle-project/Sparkle
+  - MacroVisionKit — Copyright (c) TheBoredTeam — https://github.com/TheBoredTeam/MacroVisionKit
+
+Note: Pow (https://github.com/movingparts-io/Pow) is declared in the package
+manifest but is NOT linked into the app, so it is not part of the distributed
+binary and no attribution is reproduced for it here.
+
+=============================================================================
+
+-----------------------------------------------------------------------------
                         BSD 3-Clause License
         applies to:
         - MediaRemoteAdapter, Copyright (c) 2025, Jonas van den Berg and contributors

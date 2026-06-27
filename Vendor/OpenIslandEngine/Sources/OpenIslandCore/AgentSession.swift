@@ -219,17 +219,23 @@ public struct QuestionOption: Equatable, Identifiable, Codable, Sendable {
     public var description: String
     /// When true, the submitted answer is the user's typed text, not the label.
     public var allowsFreeform: Bool
+    /// Optional preview content (ASCII mockup, code snippet, diagram) the model attached to this
+    /// option so the user can compare choices. NotchNerd patch — surfaced in the Agent tab's question
+    /// card; see Vendor/OpenIslandEngine/VENDORED-FROM.md.
+    public var preview: String?
 
     public init(
         id: UUID = UUID(),
         label: String,
         description: String = "",
-        allowsFreeform: Bool = false
+        allowsFreeform: Bool = false,
+        preview: String? = nil
     ) {
         self.id = id
         self.label = label
         self.description = description
         self.allowsFreeform = allowsFreeform
+        self.preview = preview
     }
 }
 

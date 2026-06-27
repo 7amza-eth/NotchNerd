@@ -432,8 +432,10 @@ remaining work is **Part II → Roadmap & TODO**.
 - **Pre-rename paths:** some older notes (now folded into this doc's Part II) and git history cite
   pre-rename `boringNotch/*` paths — map them 1:1 onto `NotchNerd/*`. There is **no boring.notch clone
   on disk**; only `sources/open-vibe-island/` exists.
-- **Attribution gap (open):** `THIRD_PARTY_LICENSES` omits Open Island / open-vibe-island despite
-  the verbatim vendor (same license, GPL v3). Provenance is recorded only in `VENDORED-FROM.md`.
+- **Attribution (resolved):** `THIRD_PARTY_LICENSES` credits both boring.notch (TheBoredTeam) and
+  Open Island / open-vibe-island (Octane0411, commit `1e26dfc`); provenance + the NotchNerd patch-set
+  are in `VENDORED-FROM.md`. (Open item: that file lists a few unused deps and omits some actually-linked
+  SPM deps — reconcile with `Package.resolved` before a public binary release.)
 - **When listing the tree, exclude** `build/`, `Vendor/OpenIslandEngine/.build`, and
   `Vendor/OpenIslandEngine/build` (large generated artifacts).
 
@@ -528,7 +530,17 @@ terminals) **require an unsandboxed app**; boring.notch shipped sandboxed.
    load-bearing — validated GO).
 4. **Usage HUD → yes, wrapper mode.** Preserve the user's existing custom statusline.
 5. **Transport → socket+CLI first, spike http later.** Not gambling the flagship feature.
-6. **Vendoring → Core whole** (clean upstream re-pull; only `Package.swift` locally authored).
+6. **Vendoring → Core whole, now a documented patch-set** (was "verbatim, only `Package.swift`
+   authored"). We've started patching the engine (`QuestionOption.preview`; the Phase-6
+   pending-interaction fix will too), so the model is **a clean `Sources/` tree + a re-appliable,
+   documented patch series in `VENDORED-FROM.md`** — re-pull becomes a patch-rebase, not a verbatim
+   rsync. The vendor-merge audit says **keep the SPM boundary** (load-bearing: the hook-CLI is a
+   separate Mach-O that must share Core, and the Swift-6-vs-Swift-5 language-mode split must stay
+   isolated — see decision #1) while unifying *identity* in tiers: rename the products/module off
+   "OpenIsland" via a `path: "Sources/OpenIslandCore"` override (keeps the re-pull dir; touches
+   `Package.swift` + 1 pbxproj ref + ~10 `import` sites, not the 45 vendored files), then namespace the
+   socket / hook-binary / statusline paths (decision #8). GPL: a rename strips nothing (vendored files
+   have no per-file headers; attribution lives in LICENSE / THIRD_PARTY_LICENSES / README / VENDORED-FROM).
 7. **XPC helper → keep it as-is** (brightness/AX only).
 8. **Namespace the bridge socket + hooks identity (load-bearing for Phase 6).** NotchNerd must NOT
    use Open Island's default shared socket (`~/Library/Application Support/OpenIsland/bridge.sock`) —
@@ -603,6 +615,38 @@ each phase; git history holds the dated detail.)
   version-seeded via `visualizerPresetVersion` / `CustomVisualizer.presetVersion` deduped by URL, +
   Lottie `sizeThatFits`/`scaleAspectFit` sizing fix); **Agent-tab gesture fix** (swipe-up-to-close
   gated off the Agent tab).
+- **Agent UX overhaul + rebrand start (latest session).** Major rework of the Claude integration plus
+  the start of NotchNerd's own identity:
+  - **Liveness / session accuracy** — `AgentBridgeManager.aliveClaudeSessionIDs` matches live `claude`
+    processes by **terminal (TTY)**, newest-per-terminal (handles `/clear`), replacing the sessionID-only
+    match that force-ended every session ~6s after start; cwd-matching removed (it rescued dead sessions
+    via sibling terminals in the same repo); per-event keep-alive restored; the published list + counts
+    filter on `isVisibleInIsland`, discovery tightened (15min/8 files), persistence filters to visible.
+    So the tab/notch show only sessions live in a terminal — phantom / `/clear`'d / historical no longer
+    linger.
+  - **Real-time "working" signal** — `workingCount` dropped its 60s recency window → `phase == .running
+    && isProcessAlive` (so *thinking* reads as working), now reliable because liveness reaches
+    `.completed` on Stop and ends dead processes. (http-transport audit: http is **not** needed for the
+    signal — all turn/tool-boundary hooks already flow; http stays a deferred transport cleanup, verified
+    viable.)
+  - **Closed-notch indicator** — fixed the notch-occlusion layout (pill flanks the hardware notch);
+    **music + Claude coexist** (needs-you = orange sparkle, working = purple, in the visualizer slot —
+    music never hidden); standalone working/active pill is compact (sparkle + dot + count).
+  - **Agent tab** — rows are a **recap, not a transcript**: goal (initial prompt) → outcome (`Claude: …`)
+    / current activity, **identity chips** (branch · terminal · model · mode), a `k/n` task badge,
+    attention-first sort, speaker-labeled lines.
+  - **Question card** — full `AskUserQuestion`: multiple questions, **multi-select** (toggle + Submit, no
+    auto-submit), **ASCII/code option previews**, freeform "Other" (notch becomes key via the Notes-tab
+    `makeKey` trick to type). Needed a small **documented Vendor patch** — `QuestionOption.preview`
+    (recorded in `VENDORED-FROM.md`, marked `// NotchNerd patch`).
+  - **Permission card** — renders Claude's `suggestedUpdates` as one-tap "always allow X" / mode options
+    (allow + persist) alongside Allow-once / Deny.
+  - **HookHealthCheck wired** — Settings → Agent runs the (previously dormant) engine diagnostic on
+    launch/refresh/install and offers **Repair hooks**.
+  - **Rebrand (user-visible)** — first-run welcome screen uses NotchNerd's own app icon + drops the
+    "TheBoringTeam" wordmark; About tagline, "Enable webcam mirror", hook-error string, and release
+    codename de-branded; README refreshed (features + first-run/permissions + tester `xattr` note). Dead
+    `runningCount` removed. Remaining rebrand is structural (module/socket/binary naming) — see Phase 6.
 
 ## Roadmap & TODO
 
@@ -623,18 +667,27 @@ subsections below where an implementer needs the concrete recipe.
   `WatchNotificationRelay.swift` (same same-session fan-out problem:
   `actionableStateResolved` must clear **all** pending requests for a session). (Also note the
   harmless duplicate condition `a != nil || a != nil` in `BridgeServer.hasSession(id:)` ~L2569.)
-- **http hook transport spike** — adopt the `http` hook → in-app `127.0.0.1` listener **only if** it
-  holds a blocking response for the full interactive timeout (recipe + the real-time "Claude working"
-  signal it would make exact in *Reference: deferred-work → §2*). Keep socket+CLI as default until
-  validated. When built, **replace `workingCount`'s recency heuristic with the real signal and drop
-  the liveness-tick republish hack.** First audit the current hook schema for a finer-grained
-  activity/heartbeat event — a newer classic hook may suffice without http.
-- **HookHealthCheck auto-repair + `settings.json` backup**; test against live Claude Code and handle
-  hook-schema drift (9 → ~30 events; `StopFailure` split from `Stop`).
-- **Finish the user-facing rebrand** — README, attribution (`THIRD_PARTY_LICENSES` still omits Open
-  Island / open-vibe-island despite the verbatim vendor), residual "Open Island" user strings, the
-  ~34 `Localizable.xcstrings` brand strings, onboarding copy. (Internal `BoringNotch*` symbol names +
-  the Xcode target/scheme name `boringNotch` are harmless — leave as-is.)
+- **http hook transport spike — VERIFIED VIABLE, DEFERRED.** The docs confirm `http` hooks block
+  synchronously with a raisable per-hook `timeout` (so they *could* carry approve/deny). But the audit
+  concluded http is **not needed for the activity signal**: all turn/tool-boundary hooks already flow
+  over the socket, and `workingCount`'s recency window was **dropped** in favour of `phase == .running`
+  (latest session). http remains an optional transport cleanup (no embedded binary to ship/sign), not a
+  signal fix. The `workingCount` recency heuristic + liveness-tick republish concern in §2 is resolved.
+- **HookHealthCheck — DONE.** Wired into Settings → Agent (diagnose on launch/refresh/install + a
+  Repair-hooks action reusing the installer's `settings.json` backup). Remaining: exercise against more
+  live hook-schema drift (`StopFailure` is already handled).
+- **Finish the rebrand.** **User-visible surfaces DONE** (welcome-screen icon/wordmark, About tagline,
+  "webcam mirror", hook-error string, release codename, README). `THIRD_PARTY_LICENSES` already credits
+  Open Island (the earlier "omits" note was stale). **Remaining is structural** (not user-visible app
+  identity): the SPM module/products (`OpenIslandCore`/`OpenIslandHooks`), the embedded hook-binary name
+  + socket/statusline paths (folds into the namespacing item above), the `BoringNotchXPCHelper` display
+  name, the DMG volume name, and the dead boring.notch `updater/appcast.xml` + `.github/FUNDING.yml`
+  (routes to upstream — **fix before going public**) + inherited issue/PR templates + `crowdin.yml`. The
+  vendor-merge audit recommends **keeping the SPM boundary** (load-bearing: the separate hook-CLI Mach-O
+  must share Core, and the Swift-6/Swift-5 language-mode split must stay isolated) while rebranding its
+  identity in tiers (rename products via a `path:` override that preserves the re-pull dir; namespace
+  runtime paths). Also: reconcile `THIRD_PARTY_LICENSES` with the actual linked SPM deps (it lists some
+  unused deps + omits Lottie/Sparkle/etc.) before a public binary release.
 
 ### More terminals (remainder of OI review item #5)
 
@@ -742,8 +795,11 @@ fix is pre-emptive hardening; if it can, it's load-bearing.
 
 ### §2 — Phase 6: http hook transport + a real-time "Claude is working" signal
 
-**Status:** transport is the unbuilt Phase-6 spike (decision #5). The "working" signal below is a
-*current heuristic* that http transport would make exact.
+**Status (updated):** the "working" signal is now event-driven, **not** a heuristic — `workingCount`
+was changed to `phase == .running && isProcessAlive` (the 60s recency window + the reason for the
+liveness-tick republish are gone), reliable because the TTY-based liveness rework ends dead/superseded
+sessions. So this §2 below is **historical**: http transport is **verified viable but not needed for
+the signal** and remains a deferred optional transport cleanup, not a correctness fix.
 
 **The transport.** Replace/augment the embedded Unix-socket + `OpenIslandHooks` CLI with the modern
 **`http` hook → in-app `127.0.0.1` listener** (no binary to ship/sign). Gate adoption behind a spike

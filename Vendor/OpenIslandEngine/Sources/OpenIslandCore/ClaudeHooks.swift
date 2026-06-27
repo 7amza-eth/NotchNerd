@@ -842,7 +842,9 @@ public extension ClaudeHookPayload {
 
                 return QuestionOption(
                     label: label,
-                    description: optionObject["description"]?.stringValue ?? ""
+                    description: optionObject["description"]?.stringValue ?? "",
+                    // NotchNerd patch: capture the option's preview (ASCII/code) so the UI can show it.
+                    preview: optionObject["preview"]?.stringValue
                 )
             }
 
