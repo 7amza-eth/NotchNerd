@@ -115,6 +115,8 @@ extension Defaults.Keys {
     static let playerColorTinting = Key<Bool>("playerColorTinting", default: true)
     static let useMusicVisualizer = Key<Bool>("useMusicVisualizer", default: true)
     static let customVisualizers = Key<[CustomVisualizer]>("customVisualizers", default: [])
+    /// One-time guard so the bundled visualizer presets are seeded into `customVisualizers` once.
+    static let visualizersSeeded = Key<Bool>("visualizersSeeded", default: false)
     static let selectedVisualizer = Key<CustomVisualizer?>("selectedVisualizer", default: nil)
     
     // MARK: Gestures

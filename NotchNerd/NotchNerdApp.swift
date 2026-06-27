@@ -446,6 +446,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Start the usage HUD bridge (no-op unless Defaults[.agentUsageEnabled]).
         AgentUsageManager.shared.start()
 
+        // Seed the bundled music-visualizer presets once (idempotent).
+        CustomVisualizer.seedBuiltInsIfNeeded()
+
         // Restore the always-open notepad if it was visible last session.
         NotepadWindowController.shared.restoreIfNeeded()
 
