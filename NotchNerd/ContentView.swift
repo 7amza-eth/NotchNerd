@@ -48,8 +48,15 @@ struct ContentView: View {
     /// the pill stays tight; the chin widens to match (see `computedChinWidth`). The pill is centered
     /// over the notch, so both flanks share this width — making it small is what removes the dead space.
     private let agentStatusFlankWidth: CGFloat = 20
-    /// Wider per-side width for the "N need you" attention pill, which carries a text label.
-    private let agentAttentionFlankWidth: CGFloat = 78
+    /// The "N need you" attention pill is asymmetric: a small sparkle wing (left) + a wider text wing
+    /// (right). The closed notch is shifted by `closedNotchHOffset` so the cutout stays bridged while the
+    /// shape grows only on the text side.
+    private let agentAttentionSparkleSlot: CGFloat = 22
+    private let agentAttentionFlankWidth: CGFloat = 64
+    /// Width of the agent slot in the music notch when a session needs you = the Claude-only text wing
+    /// plus the leading sparkle + spacing (~18). Derived so the right padding after "needs you" MATCHES
+    /// the Claude-only notch — the two read as the same size. The notch expands only on this side.
+    private var musicAttentionSlotWidth: CGFloat { agentAttentionFlankWidth + 18 }
 
     private var topCornerRadius: CGFloat {
        ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
@@ -107,6 +114,21 @@ struct ContentView: View {
         return chinWidth
     }
 
+    /// Horizontal shift for the closed notch when an asymmetric agent pill is showing, so the
+    /// notch-width black bridge stays centered on the hardware cutout while the shape expands only on
+    /// the wider (text) side. Zero in every other state.
+    private var closedNotchHOffset: CGFloat {
+        guard vm.notchState == .closed, !vm.hideOnClosed, agent.attentionCount > 0 else { return 0 }
+        // "Needs you" expands only on the text side; shift the notch so the cutout stays bridged.
+        if musicIsShowing {
+            // Music combo: album art (left) stays slot-sized, the agent slot (right) grows to fit text.
+            let albumSlot = max(0, vm.effectiveClosedNotchHeight - 12)
+            return (musicAttentionSlotWidth - albumSlot) / 2
+        }
+        // Standalone: small sparkle wing left, wide text wing right.
+        return (agentAttentionFlankWidth - agentAttentionSparkleSlot) / 2
+    }
+
     var body: some View {
         // Calculate scale based on gesture progress only
         let gestureScale: CGFloat = {
@@ -143,7 +165,8 @@ struct ContentView: View {
                         .bottom,
                         vm.effectiveClosedNotchHeight == 0 ? 10 : 0
                     )
-                
+                    .offset(x: closedNotchHOffset)
+
                 mainLayout
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
@@ -315,7 +338,8 @@ struct ContentView: View {
                         AgentClosedIndicator(
                             count: agent.attentionCount,
                             notchWidth: vm.closedNotchSize.width,
-                            side: agentAttentionFlankWidth
+                            sparkleSlot: agentAttentionSparkleSlot,
+                            textFlank: agentAttentionFlankWidth
                         )
                         .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                     } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
@@ -527,16 +551,20 @@ struct ContentView: View {
 
             HStack {
                 if agent.attentionCount > 0 {
-                    // Claude needs you — surface it in the visualizer slot so music keeps playing
-                    // (album art + title stay). Orange distinguishes it from the purple "working" sparkle.
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.orange)
-                        .symbolEffect(.pulse, options: .repeating)
-                        .frame(
-                            width: max(0, vm.effectiveClosedNotchHeight - 12),
-                            height: max(0, vm.effectiveClosedNotchHeight - 12)
-                        )
+                    // Claude needs you — show it WITH text in the visualizer slot so music keeps playing
+                    // (album art + title stay). The notch expands only on this side (closedNotchHOffset).
+                    // Orange distinguishes it from the purple "working" sparkle.
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.orange)
+                            .symbolEffect(.pulse, options: .repeating)
+                        Text("\(agent.attentionCount)").font(.caption).bold().foregroundStyle(.white)
+                        Text(agent.attentionCount == 1 ? "needs you" : "need you")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } else if agent.workingCount > 0 {
                     // A working Claude session takes over just the visualizer slot — the album art
                     // and track still show, so the music notch never disappears.
@@ -573,16 +601,14 @@ struct ContentView: View {
                 }
             }
             .frame(
-                width: max(
-                    0,
-                    vm.effectiveClosedNotchHeight - 12
-                        + gestureProgress / 2
-                ),
+                width: agent.attentionCount > 0
+                    ? musicAttentionSlotWidth
+                    : max(0, vm.effectiveClosedNotchHeight - 12 + gestureProgress / 2),
                 height: max(
                     0,
                     vm.effectiveClosedNotchHeight - 12
                 ),
-                alignment: .center
+                alignment: agent.attentionCount > 0 ? .leading : .center
             )
         }
         .frame(

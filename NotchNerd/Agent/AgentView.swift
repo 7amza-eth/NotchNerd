@@ -533,14 +533,17 @@ struct AgentClosedIndicator: View {
     let count: Int
     /// Width of the physical notch cutout (`vm.closedNotchSize.width`).
     let notchWidth: CGFloat
-    /// Per-side flank width (`ContentView.agentStatusFlankWidth`).
-    let side: CGFloat
+    /// Small left wing for the sparkle (`ContentView.agentAttentionSparkleSlot`).
+    let sparkleSlot: CGFloat
+    /// Wider right wing for the "N need you" text (`ContentView.agentAttentionFlankWidth`). The notch is
+    /// shifted by `closedNotchHOffset` so only this side expands past the cutout.
+    let textFlank: CGFloat
     var body: some View {
         HStack(spacing: 0) {
             Image(systemName: "sparkles")
                 .foregroundStyle(.purple)
                 .symbolEffect(.pulse, options: .repeating)
-                .frame(width: side, alignment: .trailing)
+                .frame(width: sparkleSlot, alignment: .trailing)
                 .padding(.trailing, 6)
 
             Rectangle().fill(.black).frame(width: notchWidth)
@@ -551,7 +554,7 @@ struct AgentClosedIndicator: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
             .fixedSize()
-            .frame(width: side, alignment: .leading)
+            .frame(width: textFlank, alignment: .leading)
             .padding(.leading, 6)
         }
     }
@@ -578,7 +581,7 @@ struct AgentActiveIndicator: View {
                 .font(.system(size: 12))
                 .foregroundStyle(isWorking ? .purple : .green)
                 .symbolEffect(.pulse, options: .repeating, isActive: isWorking)
-                .frame(width: side, alignment: .trailing)
+                .frame(width: side, alignment: .center)
                 .padding(.trailing, 3)
 
             Rectangle().fill(.black).frame(width: notchWidth)
@@ -595,7 +598,7 @@ struct AgentActiveIndicator: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: side, alignment: .leading)
+            .frame(width: side, alignment: .center)
             .padding(.leading, 3)
         }
     }

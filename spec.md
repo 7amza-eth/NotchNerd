@@ -647,6 +647,13 @@ each phase; git history holds the dated detail.)
     "TheBoringTeam" wordmark; About tagline, "Enable webcam mirror", hook-error string, and release
     codename de-branded; README refreshed (features + first-run/permissions + tester `xattr` note). Dead
     `runningCount` removed. Remaining rebrand is structural (module/socket/binary naming) — see Phase 6.
+  - **Asymmetric closed-notch + pre-public prep** — the "needs you" pill expands only on the text side
+    (the notch shifts by `closedNotchHOffset` so the cutout stays bridged; the sparkle wing stays small),
+    and the music+Claude combo surfaces "N needs you" the same way with matched padding
+    (`musicAttentionSlotWidth` derives from `agentAttentionFlankWidth`). Pre-public cleanup: removed the
+    inherited `FUNDING.yml` (routed to upstream), the dead boring.notch `appcast.xml` / issue & PR
+    templates / `crowdin.yml`, and de-branded the DMG packaging defaults; `THIRD_PARTY_LICENSES` now
+    lists the linked SPM deps.
 
 ## Roadmap & TODO
 
