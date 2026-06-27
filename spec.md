@@ -689,6 +689,25 @@ interrupt/stop button, a transcript viewer, copy-summary, IDE terminal-focus ext
 (`~/.claude/ide/*.lock` → jump to an IDE's embedded terminal), and the Watch/iPhone relay (engine is
 in Core, UI is not).
 
+### Dev workflow & on-device QA
+
+- **On-device QA of the recent agent/notch UI** *(ongoing — the gap a build can't close).* Everything
+  in the changelog is **build-verified only** unless noted; the assistant shell can't render the notch
+  or run live Claude Code. Specifically wants a real-machine pass: the in-notch **notification pop +
+  sound** on a live permission/question; the **usage HUD** chips (needs a Pro/Max plan, post-first-
+  response); the **closed-notch "N working" / "N active"** status (incl. that an active session swaps
+  the music visualizer for the ✦ without the music notch vanishing); the **taller Agent tab**
+  (640×320) and that the **music notch is unchanged**; the **music-visualizer presets** looking right
+  in the tiny slot; approve/deny round-trip; TCC consent (Accessibility in-app, Automation for the
+  Ghostty/Terminal jump). The `workingCount` indicator is a **60s-recency heuristic** — see *Roadmap →
+  real-time signal*.
+- **Build-output location cleanup** *(trivial, deferred).* CLI builds use `-derivedDataPath build`
+  (project-local `build/Build/Products/Debug/NotchNerd.app`), which is a **different** binary from
+  Xcode's default DerivedData output — so launching the wrong one runs stale code, and TCC grants are
+  per-binary. Decide whether to keep `-derivedDataPath build` (project-local, gitignored — current
+  CLAUDE.md/spec.md form) or drop it so CLI + Xcode builds share one location. CLI builds are ad-hoc
+  signed regardless (cdhash churn resets TCC each build unless the "NotchNerd Dev" identity is used).
+
 ## Reference: deferred-work implementation notes
 
 > Implementation-load-bearing detail for work that is **planned but not yet built** (folded in from
