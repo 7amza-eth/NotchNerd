@@ -152,7 +152,7 @@ struct AgentSessionRow: View {
                         Image(systemName: "arrow.uturn.forward.square")
                     }
                     .buttonStyle(.plain)
-                    .help("Jump to the Ghostty terminal")
+                    .help("Jump to the terminal")
                 }
                 Text(session.phase.displayName).font(.caption2).foregroundStyle(.secondary)
             }

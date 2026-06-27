@@ -141,7 +141,10 @@ struct ContentView: View {
                                 handleDownGesture(translation: translation, phase: phase)
                             }
                     }
-                    .conditionalModifier(Defaults[.closeGestureEnabled] && Defaults[.enableGestures]) { view in
+                    .conditionalModifier(Defaults[.closeGestureEnabled] && Defaults[.enableGestures] && coordinator.currentView != .agent) { view in
+                        // The Agent tab scrolls; its swipe-up-to-close gesture installs a window-level
+                        // scroll-wheel monitor that would otherwise hijack the list scroll and close the
+                        // notch. Disable the close gesture there (hover-out still closes it).
                         view
                             .panGesture(direction: .up) { translation, phase in
                                 handleUpGesture(translation: translation, phase: phase)

@@ -303,22 +303,23 @@ final class AgentBridgeManager: ObservableObject {
         notificationDismissPublisher.send(sessionID)
     }
 
-    /// Bring the session's Ghostty terminal to the foreground (Phase 4, Ghostty-only).
-    /// Uses jumpResolving: no-op if already focused, else re-resolves a stale surface id.
+    /// Bring the session's terminal to the foreground (Ghostty or macOS Terminal.app).
+    /// Ghostty uses jumpResolving (no-op if already focused, else re-resolves a stale surface id).
     func jump(sessionID: String) {
         guard let session = state.session(id: sessionID), let target = session.jumpTarget else { return }
+        let appName = AgentTerminalJump.appName(for: target)
         Task.detached(priority: .userInitiated) { [weak self] in
-            let ok = GhosttyJumpService.jumpResolving(to: target)
+            let ok = AgentTerminalJump.jump(to: target)
             await MainActor.run {
                 self?.lastStatusMessage = ok
-                    ? "Focused the Ghostty terminal."
-                    : "Couldn’t find the Ghostty terminal — it may have closed."
+                    ? "Focused the \(appName) terminal."
+                    : "Couldn’t find the \(appName) terminal — it may have closed."
             }
         }
     }
 
     func canJump(_ session: AgentSession) -> Bool {
-        GhosttyJumpService.canJump(to: session.jumpTarget)
+        AgentTerminalJump.canJump(to: session.jumpTarget)
     }
 
     private func send(_ command: BridgeCommand) {
