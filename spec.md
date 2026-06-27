@@ -114,17 +114,13 @@ NotchNerd/                          repo root
 │  ├─ _map_digest.md                160KB dual-codebase map (boringNotch + OVI)
 │  └─ _hooks_research.md            Claude Code hooks brief (vs Claude Code v2.1.186)
 ├─ tooling/
-│  ├─ docs/PHASE0-CHECKLIST.md      Phase-0 sandbox-off QA checklist (stale paths)
-│  ├─ research/desktop-surfaces-feasibility.md  Cowork / Phase-7 scope rationale
-│  └─ scripts/setup-dev-signing.sh  stable self-signed dev identity (TCC grants survive rebuilds)
-├─ spikes/                          design spikes (near-duplicates of shipped code; NOT wired)
-│  ├─ phase2-driver/                AgentBridgeManager prototype + DESIGN.md + OPEN-QUESTIONS.md
-│  └─ notepad-focus/                NotepadPanel/View/Controller/Store prototype + harness/ + DESIGN.md
+│  ├─ docs/deferred-work-notes.md   Phase-6/7 impl reference (inherited-bug fix recipe, Cowork formats)
+│  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
 ├─ updater/                         appcast.xml + Sparkle (feed currently disabled)
 ├─ NotchNerd-PLAN.md                authoritative phased build plan / decision log
-├─ README.md  CONTRIBUTING.md  SECURITY.md  crowdin.yml
+├─ README.md  SECURITY.md  crowdin.yml
 ├─ LICENSE (GPL v3)  THIRD_PARTY_LICENSES
 └─ .github/  .devcontainer/  build/ (ignored Xcode output incl. boringNotch.build)
 ```
@@ -386,7 +382,7 @@ shipped and the comprehensive rename to NotchNerd is done.
     (Codex/Gemini/Kimi/OpenCode/Cursor/Claude-forks). Engine support is already vendored — these are
     wiring jobs.
   - **Phase 7** — optional beta: a read-only live-status watcher for Cowork / local-agent-mode
-    desktop surfaces (per `tooling/research/desktop-surfaces-feasibility.md`). Hard limit:
+    desktop surfaces (file formats + scope in `tooling/docs/deferred-work-notes.md §2`). Hard limit:
     approve/deny remains CLI-only.
 
 ## Conventions / gotchas
@@ -405,15 +401,13 @@ shipped and the comprehensive rename to NotchNerd is done.
   in the SwiftUI scene.
 - **Two notch window classes; only `NotchNerdSkyLightWindow` is live.** Editing `NotchNerdWindow.swift`
   has no runtime effect.
-- **`spikes/` are near-duplicate prototypes, not wired.** Real code is `NotchNerd/Agent/` and
-  `NotchNerd/Notepad/`. Editing spikes does nothing.
 - **Notepad focus is a fragile AppKit trick** — `.nonactivatingPanel` + `canBecomeKey`, plus the
   `NotepadNotchFocus.allowsNotchKey` gate for the in-notch tab. Never call
   `setActivationPolicy(.regular)` / `NSApp.activate` for the notepad or it steals the frontmost app.
 - **Notch close paths all check `preventNotchClose`** (hover-out, sharingDidFinish, battery popover,
   drop debounce, swipe-up). Swipe-up is the explicit override that also clears the pin.
-- **Pre-rename paths in docs:** PLAN §3–9, both spike `DESIGN.md` files, and `sources/_map_digest.md`
-  still cite `boringNotch/*` paths — map them 1:1 onto `NotchNerd/*`.
+- **Pre-rename paths in docs:** PLAN §3–9 and `sources/_map_digest.md` still cite `boringNotch/*`
+  paths — map them 1:1 onto `NotchNerd/*`.
 - **`sources/boring.notch` is NOT on disk** — `_map_digest.md` references it, but only
   `sources/open-vibe-island/` exists.
 - **Attribution gap (open):** `THIRD_PARTY_LICENSES` omits Open Island / open-vibe-island despite
@@ -427,10 +421,7 @@ shipped and the comprehensive rename to NotchNerd is done.
 |---|---|
 | [`NotchNerd-PLAN.md`](./NotchNerd-PLAN.md) | The authoritative roadmap + decision log — Direction-A decision, the 4 engineering decisions, phased roadmap (0–7), locked decisions (incl. #8 socket namespacing), spike outcomes, rebrand identity. The single most important source. |
 | [`Vendor/OpenIslandEngine/VENDORED-FROM.md`](./Vendor/OpenIslandEngine/VENDORED-FROM.md) | GPL provenance for the vendored engine — upstream commit `1e26dfc`, copied 2026-06-26, "kept pristine," and the rsync re-pull procedure. |
-| [`tooling/docs/PHASE0-CHECKLIST.md`](./tooling/docs/PHASE0-CHECKLIST.md) | Phase-0 sandbox-off regression checklist (concept current; paths are pre-rename `boringNotch/*`). |
-| [`tooling/research/desktop-surfaces-feasibility.md`](./tooling/research/desktop-surfaces-feasibility.md) | Scope rationale for Phase 7 — Cowork/local-agent-mode = read-only watcher; chat-app = skip; MCP-as-monitor = drop; approve/deny is CLI-only. |
-| [`spikes/phase2-driver/DESIGN.md`](./spikes/phase2-driver/DESIGN.md) (+ `OPEN-QUESTIONS.md`) | Design-of-record for the agent driver, with the exact `OpenIslandCore` public surface and the "bugs to fix not inherit" list (key pending interactions by sessionID+toolUseID; reconnect storms). |
-| [`spikes/notepad-focus/DESIGN.md`](./spikes/notepad-focus/DESIGN.md) | Design-of-record for the notepad focus model + on-disk note format; verdict GO, validated on-device. |
+| [`tooling/docs/deferred-work-notes.md`](./tooling/docs/deferred-work-notes.md) | Implementation reference for not-yet-built work — the Phase-6 pending-interaction fix recipe and the Phase-7 Cowork watcher file formats (consolidated from the now-removed Phase-2/notepad spikes + desktop-surfaces research). |
 | [`sources/_map_digest.md`](./sources/_map_digest.md) | Dual-codebase architecture map (boring.notch host + Open Island engine) — notch window/CGS-space system, the "add an Agent tab" recipe, Defaults persistence, music subsystem boundary. Pre-rename paths. |
 | [`sources/_hooks_research.md`](./sources/_hooks_research.md) | Claude Code hook-integration contract — event schema (9 classic → ~30 current), `PermissionRequest` vs `PreToolUse` vs `Notification`, the `defaultMode:"auto"` self-approve gotcha, transcript `.jsonl` structure. Pinned to Claude Code v2.1.186. |
 | [`LICENSE`](./LICENSE) | GNU GPL v3 full text — preserve verbatim. |

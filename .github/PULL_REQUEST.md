@@ -18,6 +18,4 @@ Please, go through these steps before you submit a PR.
 
     d. Put `closes #XXXX` in your description to link your PR to the issue(s) that it fixes (if such).
 
-IMPORTANT: Please review the [CONTRIBUTING.md](../CONTRIBUTING.md) file for detailed contributing guidelines.
-
 **PLEASE REMOVE THIS TEMPLATE BEFORE SUBMITTING**

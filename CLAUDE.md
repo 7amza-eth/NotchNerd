@@ -29,10 +29,10 @@ xcodebuild -project NotchNerd.xcodeproj -scheme NotchNerd -configuration Debug b
 - **Two notch window classes; only `NotchNerdSkyLightWindow` is instantiated** at runtime. `NotchNerdWindow.swift` is dead. Notch panels are non-key (click-through) **except** while the Notes tab is active (`NotepadNotchFocus.allowsNotchKey`).
 - **Privileged ops must target the process that performs them.** The app is unsandboxed, so do Accessibility/AX checks **in-app** (the CGEventTap runs in the app), not via the XPC helper. (This was a real bug — see commit `c53ccfe`.)
 - **`Defaults.Keys` are split** across `NotchNerd/models/Constants.swift` and `NotchNerd/Notepad/NotepadWindowController.swift`.
-- **`spikes/` are unwired prototypes** — real code is `NotchNerd/Agent/` and `NotchNerd/Notepad/`. Editing spikes does nothing.
+- **Deferred-work reference** (Phase 6 inherited-bug fix recipe, Phase 7 Cowork file formats) lives in `tooling/docs/deferred-work-notes.md`. The old `spikes/` prototypes + their design docs were removed once validated/shipped (recoverable in git history; durable facts are in `spec.md`).
 - **The agent monitor is OFF by default** (`Defaults[.agentEnabled]`), behind Settings → Agent. It only OBSERVES Claude Code via hooks — it never calls the Anthropic API and stores no credentials. Its UI surfaces are each independently gated: notification auto-pop (`agentNotificationsEnabled`), sounds (`agentSoundEnabled`), the usage HUD (`agentUsageEnabled`, which gets 5h/7d quotas from Claude Code's **statusline** payload, still no API/credentials). The in-notch notification pop **must never hijack an already-open notch** (opens only from `notchState == .closed`) — see PLAN §13 + `NotchNerdViewCoordinator.presentAgentNotification`.
 - **Preserve GPL attribution** (boring.notch / TheBoredTeam, Open Island / Octane0411) in `LICENSE`, `THIRD_PARTY_LICENSES`, source headers.
-- Some docs (`NotchNerd-PLAN.md` §3–9, the spike `DESIGN.md`s, `sources/_map_digest.md`) cite **pre-rename `boringNotch/*` paths** — map them 1:1 onto `NotchNerd/*`.
+- Some docs (`NotchNerd-PLAN.md` §3–9, `sources/_map_digest.md`) cite **pre-rename `boringNotch/*` paths** — map them 1:1 onto `NotchNerd/*`.
 
 ## Commit conventions
 

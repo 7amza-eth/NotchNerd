@@ -106,6 +106,12 @@ A formal review pitted three directions against each other (independent advocate
 
 ## 7. Spike outcomes (2026-06-25)
 
+> **Note (2026-06-27):** the `spikes/` prototype directories referenced below were **removed** once
+> both spikes were validated and shipped (Phase 2 / Phase 5). They're recoverable in git history;
+> the only still-relevant deferred detail (the Phase-6 pending-interaction fix recipe) was preserved
+> in [`tooling/docs/deferred-work-notes.md`](./tooling/docs/deferred-work-notes.md). The `spikes/…`
+> paths in this dated section are kept as a historical record.
+
 ### Phase-2 driver design — ✅ done (`spikes/phase2-driver/`)
 - `DESIGN.md` — full `AgentBridgeManager` design (boring.notch-native `@MainActor ObservableObject` singleton), with the **exact** OpenIslandCore public surface it consumes verified `file:line`, the event→UI / hook-install / approve-deny flows, startup discovery + liveness, fail-open, instantiation points, and the Agent-tab/closed-notch binding.
 - `AgentBridgeManager.swift` — compile-intent-correct skeleton.
