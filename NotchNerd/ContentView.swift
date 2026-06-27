@@ -318,14 +318,15 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
-                      } else if agent.runningCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
-                          // A Claude session is actively working — show it in the closed notch
-                          // (takes the place of the music live activity while Claude runs).
-                          AgentActiveIndicator(count: agent.runningCount)
-                              .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
+                          // Music takes priority so it can never be hidden by agent state; an active
+                          // session shows inside its visualizer slot instead (see MusicLiveActivity).
                           MusicLiveActivity()
                               .frame(alignment: .center)
+                      } else if agent.runningCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
+                          // No music is showing, but a Claude session is working — surface it here.
+                          AgentActiveIndicator(count: agent.runningCount)
+                              .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           NotchNerdFaceAnimation()
                        } else if vm.notchState == .open {
@@ -489,7 +490,18 @@ struct ContentView: View {
                 )
 
             HStack {
-                if useMusicVisualizer {
+                if agent.runningCount > 0 {
+                    // An active Claude session takes over just the visualizer slot — the album art
+                    // and track still show, so the music notch never disappears.
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.purple)
+                        .symbolEffect(.pulse, options: .repeating)
+                        .frame(
+                            width: max(0, vm.effectiveClosedNotchHeight - 12),
+                            height: max(0, vm.effectiveClosedNotchHeight - 12)
+                        )
+                } else if useMusicVisualizer {
                     Rectangle()
                         .fill(
                             Defaults[.coloredSpectrogram]
@@ -503,8 +515,14 @@ struct ContentView: View {
                                 .frame(width: 16, height: 12)
                         }
                 } else {
+                    // Constrain to the small slot (the Lottie NSView reports a large intrinsic size,
+                    // so an unbounded frame would overflow the whole notch) + scaleAspectFit so it fits.
                     LottieAnimationContainer()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(
+                            width: max(0, vm.effectiveClosedNotchHeight - 12),
+                            height: max(0, vm.effectiveClosedNotchHeight - 12)
+                        )
+                        .clipped()
                 }
             }
             .frame(
