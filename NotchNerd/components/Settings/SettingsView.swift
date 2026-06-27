@@ -377,11 +377,6 @@ struct Charge: View {
                 Text("Battery Information")
             }
         }
-        .onAppear {
-            Task { @MainActor in
-                await XPCHelperClient.shared.isAccessibilityAuthorized()
-            }
-        }
         .accentColor(.effectiveAccent)
         .navigationTitle("Battery")
     }
@@ -580,13 +575,16 @@ struct HUD: View {
         .accentColor(.effectiveAccent)
         .navigationTitle("HUDs")
         .task {
-            accessibilityAuthorized = await XPCHelperClient.shared.isAccessibilityAuthorized()
+            // Read the APP's own AX trust — the event tap runs in-app, so the app (not the helper)
+            // holds the grant. The XPC path checked the wrong process, leaving this toggle stuck
+            // disabled even after the user granted the app (Phase 5.5 / c53ccfe).
+            accessibilityAuthorized = MediaKeyInterceptor.shared.isAccessibilityTrusted(prompt: false)
         }
         .onAppear {
-            XPCHelperClient.shared.startMonitoringAccessibilityAuthorization()
+            MediaKeyInterceptor.shared.startAccessibilityMonitoring()
         }
         .onDisappear {
-            XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()
+            MediaKeyInterceptor.shared.stopAccessibilityMonitoring()
         }
         .onReceive(NotificationCenter.default.publisher(for: .accessibilityAuthorizationChanged)) { notification in
             if let granted = notification.userInfo?["granted"] as? Bool {
@@ -875,7 +873,7 @@ struct About: View {
                 HStack(spacing: 30) {
                     Spacer(minLength: 0)
                     Button {
-                        if let url = URL(string: "https://github.com/TheBoredTeam/boring.notch") {
+                        if let url = URL(string: "https://github.com/7amza-eth/NotchNerd") {
                             NSWorkspace.shared.open(url)
                         }
                     } label: {

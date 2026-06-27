@@ -52,7 +52,43 @@ final class MediaKeyInterceptor {
     func ensureAccessibilityAuthorization(promptIfNeeded: Bool = false) async -> Bool {
         isAccessibilityTrusted(prompt: promptIfNeeded)
     }
-    
+
+    // MARK: - Accessibility trust monitoring (IN-APP)
+    //
+    // Polls THIS process's AX trust and posts `.accessibilityAuthorizationChanged` on change, so the
+    // HUD settings toggle re-enables and the coordinator's event-tap auto-start fire when the user
+    // grants Accessibility while the app is running. This replaces XPCHelperClient's monitor, which
+    // polled the *helper* process's trust (the wrong process — see Phase 5.5 audit / commit c53ccfe).
+
+    private var trustMonitorTimer: DispatchSourceTimer?
+    private var lastKnownTrust: Bool?
+
+    /// Start in-app AX-trust polling. Main-queue only; idempotent.
+    func startAccessibilityMonitoring(every interval: TimeInterval = 2.0) {
+        stopAccessibilityMonitoring()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: interval)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let trusted = self.isAccessibilityTrusted(prompt: false)
+            guard self.lastKnownTrust != trusted else { return }
+            self.lastKnownTrust = trusted
+            NotificationCenter.default.post(
+                name: .accessibilityAuthorizationChanged,
+                object: nil,
+                userInfo: ["granted": trusted]
+            )
+        }
+        timer.resume()
+        trustMonitorTimer = timer
+    }
+
+    func stopAccessibilityMonitoring() {
+        trustMonitorTimer?.cancel()
+        trustMonitorTimer = nil
+        lastKnownTrust = nil
+    }
+
     // MARK: - Event Tap
     
     func start(promptIfNeeded: Bool = false) async {

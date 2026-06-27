@@ -43,7 +43,7 @@ struct NotchNerdExtrasMenu : View {
     var github: some View {
         NotchNerdLargeButtons(
             action: {
-                if let url = URL(string: "https://github.com/TheBoredTeam/boring.notch") {
+                if let url = URL(string: "https://github.com/7amza-eth/NotchNerd") {
                     NSWorkspace.shared.open(url)
                 }
             },

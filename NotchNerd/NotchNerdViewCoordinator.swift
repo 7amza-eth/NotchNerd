@@ -165,7 +165,10 @@ class NotchNerdViewCoordinator: ObservableObject {
             helloAnimationRunning = firstLaunch
 
             if Defaults[.hudReplacement] {
-                let authorized = await XPCHelperClient.shared.isAccessibilityAuthorized()
+                // Check the APP's own AX trust — the event tap runs in-app, so the app (not the
+                // helper) must hold the grant. Routing this through the XPC helper checked the
+                // wrong process and force-disabled the HUD every launch (Phase 5.5 / c53ccfe).
+                let authorized = MediaKeyInterceptor.shared.isAccessibilityTrusted(prompt: false)
                 if !authorized {
                     Defaults[.hudReplacement] = false
                 } else {

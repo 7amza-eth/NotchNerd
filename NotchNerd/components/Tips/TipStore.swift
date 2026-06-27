@@ -20,7 +20,7 @@ struct HUDsTip: Tip {
     
     
     var image: Image? {
-        AppIcon(for: "theboringteam.NotchNerd")
+        AppIcon(for: bundleIdentifier)
     }
     
     var actions: [Action] {
@@ -42,7 +42,7 @@ struct CBTip: Tip {
     
     
     var image: Image? {
-        AppIcon(for: "theboringteam.NotchNerd")
+        AppIcon(for: bundleIdentifier)
     }
     
     var actions: [Action] {

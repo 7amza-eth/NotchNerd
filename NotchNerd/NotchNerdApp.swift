@@ -90,7 +90,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AgentBridgeManager.shared.stop()
         NotesStore.shared.flush()
         cleanupWindows()
-        XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()
+        MediaKeyInterceptor.shared.stopAccessibilityMonitoring()
     }
 
     @MainActor

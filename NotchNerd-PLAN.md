@@ -169,3 +169,19 @@ All phases implemented, build-verified (`xcodebuild ... BUILD SUCCEEDED`, 0 erro
 **The agent feature ships OFF by default** — enable in Settings → Agent, then Install hooks.
 
 **Remaining (not blockers):** runtime/visual QA on a real machine (notch draws, now-playing renders, agent approve/deny end-to-end against live Claude Code, notepad focus in daily use, TCC consent flows); the optional Phase 6 (http-hook spike, usage-HUD wrapper statusline) and Phase 7 (Cowork beta watcher).
+
+## 12. Phase 5.5 — Loose-thread audit & fixes (2026-06-27) ✅
+
+Method as planned: 6 parallel finders (one per §5 sweep dimension) → adversarial verification of every finding → fix the confirmed ones, build-verified. 13 raw findings → **8 confirmed (6 distinct bugs after dedup), 5 rejected** as false positives (GPL-attribution GitHub links; the already-correct reconnect-storm guard; intentional optimistic-UI behavior).
+
+**Fixed (all fork-introduced regressions; `BUILD SUCCEEDED`, 0 errors/warnings):**
+1. **Wrong-process Accessibility checks — the c53ccfe class, three more sites.** c53ccfe fixed only the HUD toggle's publisher path + Request button; the audit found the launch gate, the Settings HUD read/monitor, and onboarding still routed AX through the XPC helper (a different bundle id that is never granted), so the HUD silently self-disabled each launch / the toggle stayed stuck-disabled / onboarding authorized the wrong binary. Now all in-app:
+   - `NotchNerdViewCoordinator.swift` launch gate → `MediaKeyInterceptor.isAccessibilityTrusted`.
+   - `OnboardingView.swift` → `MediaKeyInterceptor.ensureAccessibilityAuthorization`.
+   - `SettingsView.swift` HUD page read + monitor → new in-app `MediaKeyInterceptor.start/stopAccessibilityMonitoring` (polls the app's own trust, posts the same `.accessibilityAuthorizationChanged`); terminate-time stop in `AppDelegate` repointed. Removed a dead wrong-process AX call in the Battery view. **All XPC Accessibility calls are now gone from app code** (the helper still vends brightness — intentional, decision #7).
+2. **Residual brand leak.** The vendored reducer hardcodes `"Permission denied in Open Island."` (ignores our directive message). Kept `Vendor/` pristine; rewrote the brand at the projection boundary (`AgentBridgeManager.republish` → `debranded`).
+3. **Half-renamed icon id.** `TipStore` looked up `AppIcon(for: "theboringteam.NotchNerd")` (not the real id `eth.7amza.notchnerd`) → generic blank icon; now `AppIcon(for: bundleIdentifier)`. (Latent — TipsView is currently unwired.)
+
+**Verified-and-deferred (not a fork regression):**
+- **Inherited bug (a) — pending-interaction overwrite.** Confirmed still present: `BridgeServer.pendingClaudeInteractions` is keyed by `sessionID` only (the `PendingClaudeInteraction.toolUseID` field exists but is unused as a key), and `BridgeCommand.resolvePermission` carries only `sessionID` — so parallel same-session permission prompts overwrite, and the bug is **structurally unfixable from the driver** without patching the frozen `Vendor/` engine + command protocol. Stays in **Phase 6** ("fix inherited Open Island bugs"), as already planned.
+- **Inherited bug (b) — reconnect storms:** verified **correctly fixed** in the driver (single `reconnectTask` guard + `connectionGeneration`).

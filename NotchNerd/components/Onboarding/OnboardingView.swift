@@ -157,6 +157,8 @@ struct OnboardingView: View {
     }
     
     func requestAccessibilityPermission() async {
-        await XPCHelperClient.shared.ensureAccessibilityAuthorization(promptIfNeeded: true)
+        // Prompt the APP for Accessibility — the HUD event tap runs in-app, so the grant must
+        // target the app, not the XPC helper (Phase 5.5 / c53ccfe).
+        _ = await MediaKeyInterceptor.shared.ensureAccessibilityAuthorization(promptIfNeeded: true)
     }
 }

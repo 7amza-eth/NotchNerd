@@ -207,11 +207,22 @@ final class AgentBridgeManager: ObservableObject {
 
     /// Recompute the @Published projection from the private reducer.
     private func republish() {
-        sessions = state.sessions
-        actionableSession = state.activeActionableSession
+        sessions = state.sessions.map(Self.debranded)
+        actionableSession = state.activeActionableSession.map(Self.debranded)
         attentionCount = state.attentionCount
         runningCount = state.runningCount
         liveSessionCount = state.liveSessionCount
+    }
+
+    /// The vendored engine emits some user-visible summaries still branded "Open Island" (e.g. the
+    /// permission-denied line in SessionState.resolvePermission, which ignores our directive's
+    /// message). We keep Vendor/ pristine, so rewrite the brand here at the projection boundary
+    /// instead of patching the engine (Phase 5.5 audit).
+    private static func debranded(_ session: AgentSession) -> AgentSession {
+        guard session.summary.contains("Open Island") else { return session }
+        var session = session
+        session.summary = session.summary.replacingOccurrences(of: "Open Island", with: "NotchNerd")
+        return session
     }
 
     // MARK: - UI callbacks (Agent tab cards)
