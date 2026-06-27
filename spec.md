@@ -382,7 +382,7 @@ shipped and the comprehensive rename to NotchNerd is done.
     (Codex/Gemini/Kimi/OpenCode/Cursor/Claude-forks). Engine support is already vendored — these are
     wiring jobs.
   - **Phase 7** — optional beta: a read-only live-status watcher for Cowork / local-agent-mode
-    desktop surfaces (file formats + scope in `tooling/docs/deferred-work-notes.md §2`). Hard limit:
+    desktop surfaces (file formats + scope in `tooling/docs/deferred-work-notes.md §3`). Hard limit:
     approve/deny remains CLI-only.
 
 ## Conventions / gotchas

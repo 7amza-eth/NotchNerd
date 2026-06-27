@@ -20,6 +20,12 @@ struct LottieView: NSViewRepresentable {
         let animationView = LottieAnimationView()
         animationView.contentMode = .scaleAspectFit   // fit the whole animation; don't zoom/crop
         animationView.translatesAutoresizingMaskIntoConstraints = false
+        // Don't let the animation's native (often huge) intrinsic size drive layout — fit it to
+        // whatever size we're given instead, so it scales DOWN to the slot rather than overflowing.
+        animationView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        animationView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        animationView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        animationView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         let container = NSView()
         container.addSubview(animationView)
         NSLayoutConstraint.activate([
@@ -31,12 +37,20 @@ struct LottieView: NSViewRepresentable {
         return container
     }
 
+    /// Size to the SwiftUI-proposed frame, never the animation's native size — otherwise the large
+    /// intrinsic size leaks out and the parent `.clipped()` shows a zoomed-in center.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSView, context: Context) -> CGSize? {
+        proposal.replacingUnspecifiedDimensions(by: CGSize(width: 24, height: 24))
+    }
+
     func updateNSView(_ nsView: NSView, context: Context) {
         guard let animationView = nsView.subviews.first as? LottieAnimationView else { return }
+        animationView.contentMode = .scaleAspectFit   // re-assert in case loading reset it
         let lastURL = objc_getAssociatedObject(animationView, &Self.associatedURLKey) as? URL
         if lastURL != url {
             LottieAnimation.loadedFrom(url: url) { animation in
                 animationView.animation = animation
+                animationView.contentMode = .scaleAspectFit
                 animationView.loopMode = loopMode
                 animationView.animationSpeed = CGFloat(speed)
                 animationView.play()

@@ -38,7 +38,40 @@ the current CLI, the fix is pre-emptive hardening; if it can, it's load-bearing.
 
 ---
 
-## 2. Phase 7 — Cowork ("local agent mode") read-only watcher
+## 2. Phase 6 — http hook transport + a real-time "Claude is working" signal
+
+**Status:** transport is the unbuilt Phase-6 spike (locked decision #5: ship socket+CLI first, spike
+http later). The "working" signal below is a *current heuristic* that the http transport would make exact.
+
+**The transport (decision #5 / PLAN §4 Phase 6):** replace (or augment) the embedded Unix-socket +
+`OpenIslandHooks` CLI with the modern **`http` hook → in-app `127.0.0.1` listener** (no binary to
+ship/sign). Gate adoption behind a spike that confirms Claude Code holds a *blocking* HTTP response
+for the full interactive `PermissionRequest` timeout, and the `allowedHttpHookUrls` allowlist
+behavior. Keep socket+CLI as the default until that validates.
+
+**The real-time activity signal (concrete use case — the closed-notch "Claude working" indicator):**
+- **Why it's only a heuristic today.** The classic hooks fire at **turn boundaries** only
+  (`UserPromptSubmit`/`PreToolUse` → a session is `.running`; `Stop` → `.completed`). There is no
+  "Claude is generating *right now*" event, and if a `Stop` hook doesn't fire the session lingers in
+  `.running`. So NotchNerd infers "working" with `AgentBridgeManager.workingCount` =
+  `phase == .running && isProcessAlive && now − updatedAt < 60s` (the recency guard filters
+  stuck/idle sessions). The 3s liveness backstop republishes while any session is `.running` so the
+  time-based count updates. Consumed by the closed-notch visualizer-slot ✦ and the standalone
+  "N working" pill (`ContentView.MusicLiveActivity` + the closed-notch branch).
+- **Its failure modes** (what the heuristic can't fix): a stuck `.running` session still reads as
+  working for up to ~60s; a long *silent* operation (>60s with no tool events — a slow single tool or
+  long text-only generation) falsely reads as not-working.
+- **What the http transport / newer hooks would give.** A persistent in-app connection (or the newer
+  Claude Code hook events — the set grew ~9 → ~30, e.g. `Notification`, `SubagentStart/Stop`, the
+  `Stop`/`StopFailure` split) can deliver a precise start/stop-generating signal, so the indicator
+  becomes exact: no recency window, no stuck-session false positives, instant off on turn end.
+  **When building this, replace `workingCount`'s recency heuristic with the real signal and drop the
+  liveness-tick republish hack.** Audit the current Claude Code hook schema for a finer-grained
+  activity/heartbeat event before assuming http is required — a newer classic hook may suffice.
+
+---
+
+## 3. Phase 7 — Cowork ("local agent mode") read-only watcher
 
 **Status (PLAN §11 / Phase 7):** optional beta, unbuilt. Read-only **live status + activate-app jump
 only** — no approve/deny (the gate runs in the desktop app's host loop; there is no host-side hook
