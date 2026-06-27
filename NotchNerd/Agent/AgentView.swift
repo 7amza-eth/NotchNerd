@@ -1,9 +1,11 @@
 //
 //  AgentView.swift
-//  NotchNerd — Phase 3 Agent panel UI
+//  NotchNerd — Agent panel UI
 //
-//  The expanded-notch "Agent" tab: live Claude Code sessions, with Allow/Deny on permission
-//  prompts and answer buttons on questions. Binds to AgentBridgeManager.shared.
+//  The expanded-notch "Agent" tab: live Claude Code sessions with an overview
+//  row, expandable subagent/task detail, Allow/Deny on permission prompts,
+//  answer buttons on questions, usage chips, and a Ghostty jump button.
+//  Binds to AgentBridgeManager.shared + AgentUsageManager.shared.
 //
 
 import Defaults
@@ -12,6 +14,7 @@ import OpenIslandCore
 
 struct AgentView: View {
     @ObservedObject private var agent = AgentBridgeManager.shared
+    @ObservedObject private var usage = AgentUsageManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -19,6 +22,7 @@ struct AgentView: View {
             if agent.sessions.isEmpty {
                 emptyState
             } else {
+                overviewRow
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 6) {
                         ForEach(agent.sessions) { session in
@@ -38,7 +42,36 @@ struct AgentView: View {
             Image(systemName: "sparkles").foregroundStyle(.purple)
             Text("Claude Code").font(.headline)
             Spacer()
+            if Defaults[.agentUsageEnabled], let snap = usage.snapshot {
+                if let fiveHour = snap.fiveHour { UsageChip(label: "5h", window: fiveHour) }
+                if let sevenDay = snap.sevenDay { UsageChip(label: "7d", window: sevenDay) }
+            }
             statusChip
+        }
+    }
+
+    /// Total / waiting / running / done / idle, recomputed every 30s so the
+    /// time-relative done/idle split stays current.
+    private var overviewRow: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { ctx in
+            let counts = AgentSessionOverview(sessions: agent.sessions, at: ctx.date)
+            HStack(spacing: 10) {
+                overviewMetric(counts.total, "total", .white.opacity(0.55))
+                if counts.waiting > 0 { overviewMetric(counts.waiting, "waiting", AgentStatusPalette.waiting) }
+                if counts.running > 0 { overviewMetric(counts.running, "running", AgentStatusPalette.running) }
+                if counts.done > 0 { overviewMetric(counts.done, "done", AgentStatusPalette.completed) }
+                if counts.idle > 0 { overviewMetric(counts.idle, "idle", AgentStatusPalette.idle) }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func overviewMetric(_ count: Int, _ label: String, _ tint: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(tint).frame(width: 5.5, height: 5.5)
+            Text("\(count) \(label)")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -76,14 +109,44 @@ struct AgentView: View {
 struct AgentSessionRow: View {
     let session: AgentSession
     @ObservedObject private var agent = AgentBridgeManager.shared
+    @State private var isExpanded = false
+
+    private var hasDetail: Bool {
+        !(session.claudeMetadata?.activeSubagents.isEmpty ?? true)
+            || !(session.claudeMetadata?.activeTasks.isEmpty ?? true)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Circle().fill(phaseColor).frame(width: 7, height: 7)
+                AnimatedStatusDot(
+                    color: AgentStatusPalette.tint(for: session.phase),
+                    pulsing: session.phase == .running || session.phase.requiresAttention
+                )
                 Text(session.title.isEmpty ? "Claude Code" : session.title)
                     .font(.subheadline).lineLimit(1)
                 Spacer(minLength: 4)
+                Text(session.spotlightAgeBadge)
+                    .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
+                if hasDetail {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isExpanded.toggle()
+                            if isExpanded {
+                                AgentRowExpansion.userCollapsed.remove(session.id)
+                            } else {
+                                AgentRowExpansion.userCollapsed.insert(session.id)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isExpanded ? "Hide subagents and tasks" : "Show subagents and tasks")
+                }
                 if agent.canJump(session) {
                     Button { agent.jump(sessionID: session.id) } label: {
                         Image(systemName: "arrow.uturn.forward.square")
@@ -93,8 +156,16 @@ struct AgentSessionRow: View {
                 }
                 Text(session.phase.displayName).font(.caption2).foregroundStyle(.secondary)
             }
-            if !session.summary.isEmpty {
+            if let activity = session.spotlightActivityLineText, !activity.isEmpty {
+                Text(activity).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            } else if !session.summary.isEmpty {
                 Text(session.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            }
+            if let promptLine = session.spotlightPromptLineText {
+                Text(promptLine).font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1)
+            }
+            if isExpanded && hasDetail {
+                AgentSessionDetailView(session: session)
             }
             if let request = session.permissionRequest, session.phase == .waitingForApproval {
                 permissionCard(request)
@@ -104,14 +175,9 @@ struct AgentSessionRow: View {
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
-    }
-
-    private var phaseColor: Color {
-        switch session.phase {
-        case .running: return .blue
-        case .waitingForApproval: return .orange
-        case .waitingForAnswer: return .yellow
-        case .completed: return .gray
+        .onAppear {
+            isExpanded = hasDetail && session.phase.requiresAttention
+                && !AgentRowExpansion.userCollapsed.contains(session.id)
         }
     }
 
@@ -177,7 +243,12 @@ struct AgentClosedIndicator: View {
 
 struct AgentSettings: View {
     @ObservedObject private var agent = AgentBridgeManager.shared
+    @ObservedObject private var usage = AgentUsageManager.shared
     @Default(.agentEnabled) var agentEnabled
+    @Default(.agentSoundEnabled) var agentSoundEnabled
+    @Default(.agentSoundName) var agentSoundName
+    @Default(.agentUsageEnabled) var agentUsageEnabled
+    @Default(.agentNotificationsEnabled) var agentNotificationsEnabled
 
     var body: some View {
         Form {
@@ -208,17 +279,86 @@ struct AgentSettings: View {
             } footer: {
                 Text("Adds managed entries to ~/.claude/settings.json so NotchNerd can show live session status and let you approve/deny permission prompts from the notch. Your settings are backed up first; fully reversible.")
             }
+
+            Section {
+                Defaults.Toggle(key: .agentNotificationsEnabled) { Text("Pop the notch on agent events") }
+                Defaults.Toggle(key: .agentAutoOpenNotch) { Text("Auto-open the notch (off = sound + indicator only)") }
+                Defaults.Toggle(key: .agentNotifyOnCompletion) { Text("Notify when a session finishes") }
+                Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal is already focused") }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text("Permission and question prompts stay until you answer them; completion notices auto-dismiss after 10 seconds.")
+            }
+            .disabled(!agentNotificationsEnabled)
+
+            Section {
+                Defaults.Toggle(key: .agentSoundEnabled) { Text("Play a sound when a session needs you") }
+                Defaults.Toggle(key: .agentSoundMuted) { Text("Mute") }
+                Picker("Sound", selection: $agentSoundName) {
+                    ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .onChange(of: agentSoundName) { _, name in AgentNotificationSound.play(name) }
+                Button("Preview") { AgentNotificationSound.play(agentSoundName) }
+            } header: {
+                Text("Sound")
+            } footer: {
+                Text("Uses a macOS system sound from /System/Library/Sounds.")
+            }
+            .disabled(!agentSoundEnabled)
+
+            Section {
+                Defaults.Toggle(key: .agentUsageEnabled) { Text("Show Claude usage (5h / 7d quotas)") }
+                HStack {
+                    Text("Statusline")
+                    Spacer()
+                    usageStatusLabel
+                }
+                HStack {
+                    Button("Install") { usage.installIfNeeded() }
+                    Button("Remove") { usage.uninstall() }
+                    Spacer()
+                    Button("Refresh") { usage.refreshStatus() }
+                }
+            } header: {
+                Text("Usage")
+            } footer: {
+                Text("Adds a managed statusLine entry to Claude Code's settings.json that records your remaining quota. If you already have a custom statusline, NotchNerd wraps it so it keeps working. Reversible.")
+            }
+            .disabled(!agentUsageEnabled)
         }
         .formStyle(.grouped)
         .navigationTitle("Agent")
         .onChange(of: agentEnabled) { _, enabled in
             if enabled { agent.start() } else { agent.stop() }
         }
-        .onAppear { agent.refreshHookStatus() }
+        .onChange(of: agentUsageEnabled) { _, enabled in
+            if enabled { usage.start() } else { usage.uninstall(); usage.stop() }
+        }
+        .onAppear {
+            agent.refreshHookStatus()
+            usage.refreshStatus()
+        }
     }
 
     @ViewBuilder private var hookStatusLabel: some View {
         switch agent.hookInstallState {
+        case .installed:
+            Label("Installed", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+        case .notInstalled:
+            Label("Not installed", systemImage: "circle").foregroundStyle(.secondary)
+        case .unknown:
+            Text("—").foregroundStyle(.secondary)
+        case let .failed(message):
+            Label("Error", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).help(message)
+        }
+    }
+
+    @ViewBuilder private var usageStatusLabel: some View {
+        switch usage.installState {
         case .installed:
             Label("Installed", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
         case .notInstalled:

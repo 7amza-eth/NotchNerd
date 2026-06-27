@@ -35,6 +35,16 @@ enum HookInstallState: Equatable {
     case failed(String)
 }
 
+/// A discrete "this session wants your attention" signal — the notification auto-pop trigger.
+/// Mirrors Open Island's `IslandSurface.notificationSurface(for:)`.
+struct AgentNotification: Equatable {
+    enum Kind { case permission, question, completion }
+    let sessionID: String
+    let kind: Kind
+    /// Completion notices auto-collapse; permission/question persist until resolved.
+    var autoDismisses: Bool { kind == .completion }
+}
+
 @MainActor
 final class AgentBridgeManager: ObservableObject {
     static let shared = AgentBridgeManager()
@@ -53,6 +63,14 @@ final class AgentBridgeManager: ObservableObject {
     @Published private(set) var isBridgeReady: Bool = false
     @Published private(set) var hookInstallState: HookInstallState = .unknown
     @Published private(set) var lastStatusMessage: String = ""
+
+    // MARK: Notification signals (drive the in-notch auto-pop; observed by the coordinator)
+
+    /// Fires when a session newly needs attention. A discrete event (NOT @Published state) so a
+    /// dismissed card can't be re-popped by an unrelated republish.
+    let notificationPublisher = PassthroughSubject<AgentNotification, Never>()
+    /// Fires (sessionID) when a popped card should self-close (resolved / answered / dismissed).
+    let notificationDismissPublisher = PassthroughSubject<String, Never>()
 
     // MARK: Engine objects (vendored OpenIslandCore)
 
@@ -203,6 +221,24 @@ final class AgentBridgeManager: ObservableObject {
         state.apply(event)                       // single source of truth
         republish()
         schedulePersist()
+        emitNotification(for: event)
+    }
+
+    /// Map an engine event → a notification signal (mirrors IslandSurface.notificationSurface).
+    private func emitNotification(for event: AgentEvent) {
+        guard Defaults[.agentNotificationsEnabled] else { return }
+        switch event {
+        case let .permissionRequested(payload):
+            notificationPublisher.send(AgentNotification(sessionID: payload.sessionID, kind: .permission))
+        case let .questionAsked(payload):
+            notificationPublisher.send(AgentNotification(sessionID: payload.sessionID, kind: .question))
+        case let .sessionCompleted(payload) where payload.isInterrupt != true:
+            if Defaults[.agentNotifyOnCompletion] {
+                notificationPublisher.send(AgentNotification(sessionID: payload.sessionID, kind: .completion))
+            }
+        default:
+            break
+        }
     }
 
     /// Recompute the @Published projection from the private reducer.
@@ -250,6 +286,7 @@ final class AgentBridgeManager: ObservableObject {
 
         // Round-trip: BridgeServer routes the directive to the BLOCKED hook, not back to us.
         send(.resolvePermission(sessionID: session.id, resolution: resolution))
+        notificationDismissPublisher.send(session.id)
     }
 
     func answer(sessionID: String, response: QuestionPromptResponse) {
@@ -257,18 +294,26 @@ final class AgentBridgeManager: ObservableObject {
         state.answerQuestion(sessionID: session.id, response: response)
         republish()
         send(.answerQuestion(sessionID: session.id, response: response))
+        notificationDismissPublisher.send(session.id)
     }
 
     func dismiss(sessionID: String) {
         state.dismissSession(id: sessionID)
         republish()
+        notificationDismissPublisher.send(sessionID)
     }
 
     /// Bring the session's Ghostty terminal to the foreground (Phase 4, Ghostty-only).
+    /// Uses jumpResolving: no-op if already focused, else re-resolves a stale surface id.
     func jump(sessionID: String) {
         guard let session = state.session(id: sessionID), let target = session.jumpTarget else { return }
-        Task.detached(priority: .userInitiated) {
-            _ = GhosttyJumpService.jump(to: target)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let ok = GhosttyJumpService.jumpResolving(to: target)
+            await MainActor.run {
+                self?.lastStatusMessage = ok
+                    ? "Focused the Ghostty terminal."
+                    : "Couldn’t find the Ghostty terminal — it may have closed."
+            }
         }
     }
 

@@ -195,6 +195,20 @@ extension Defaults.Keys {
     static let agentAutoInstallHooks = Key<Bool>("agentAutoInstallHooks", default: false)
     static let agentClaudeConfigDir = Key<String>("agentClaudeConfigDir", default: "")
 
+    // Agent — notification sounds
+    static let agentSoundEnabled = Key<Bool>("agentSoundEnabled", default: true)
+    static let agentSoundName = Key<String>("agentSoundName", default: "Submarine")
+    static let agentSoundMuted = Key<Bool>("agentSoundMuted", default: false)
+
+    // Agent — usage HUD (5h / 7d Claude quotas via the statusline bridge)
+    static let agentUsageEnabled = Key<Bool>("agentUsageEnabled", default: false)
+
+    // Agent — in-app notifications (auto-pop the notch on agent events)
+    static let agentNotificationsEnabled = Key<Bool>("agentNotificationsEnabled", default: true)
+    static let agentAutoOpenNotch = Key<Bool>("agentAutoOpenNotch", default: true)
+    static let agentNotifyOnCompletion = Key<Bool>("agentNotifyOnCompletion", default: true)
+    static let agentSuppressWhenFrontmost = Key<Bool>("agentSuppressFrontmost", default: true)
+
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)
 

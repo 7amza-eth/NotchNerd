@@ -88,6 +88,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MusicManager.shared.destroy()
         cleanupDragDetectors()
         AgentBridgeManager.shared.stop()
+        AgentUsageManager.shared.stop()
         NotesStore.shared.flush()
         cleanupWindows()
         MediaKeyInterceptor.shared.stopAccessibilityMonitoring()
@@ -442,6 +443,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Start the Claude Code agent monitor (no-op unless Defaults[.agentEnabled]).
         AgentBridgeManager.shared.start()
+        // Start the usage HUD bridge (no-op unless Defaults[.agentUsageEnabled]).
+        AgentUsageManager.shared.start()
 
         // Restore the always-open notepad if it was visible last session.
         NotepadWindowController.shared.restoreIfNeeded()

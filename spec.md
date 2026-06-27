@@ -66,10 +66,15 @@ NotchNerd/                          repo root
 │  ├─ ContentView.swift             panel root SwiftUI view (28KB); open/close, gestures, view switch
 │  ├─ NotchNerdViewCoordinator.swift  @MainActor singleton: currentView, sneakPeek, selected screen
 │  ├─ Agent/                        Claude Code monitor (NEW)
-│  │  ├─ AgentBridgeManager.swift   headless OpenIslandCore driver (singleton)
+│  │  ├─ AgentBridgeManager.swift   headless OpenIslandCore driver (singleton) + notification signals
 │  │  ├─ AgentView.swift            in-notch Agent tab UI + AgentClosedIndicator + AgentSettings
+│  │  ├─ AgentSessionPresentation.swift  verbatim OI presentation extension (spotlight*/island* props)
+│  │  ├─ AgentSessionDetails.swift  status palette, subagent/task detail view, overview counts, status dot
+│  │  ├─ AgentNotificationSound.swift  NSSound system-sound alerts (Defaults-bound)
+│  │  ├─ AgentUsageManager.swift    statusline-wrapper install + ClaudeUsageLoader polling (5h/7d)
+│  │  ├─ UsageChip.swift            usage chip view for the Agent tab header
 │  │  ├─ ActiveAgentProcessDiscovery.swift  ps/lsof/tmux liveness probe
-│  │  └─ GhosttyJumpService.swift   osascript jump into a Ghostty terminal pane
+│  │  └─ GhosttyJumpService.swift   osascript jump into a Ghostty pane (focus short-circuit + re-resolution)
 │  ├─ Notepad/                      always-open notepad (NEW)
 │  │  ├─ NotepadWindowController.swift  floating panel singleton; CGS-space float strategy
 │  │  ├─ NotepadPanel.swift         nonactivating, canBecomeKey NSPanel
@@ -142,9 +147,14 @@ NotchNerd/                          repo root
 - **Live activities** — closed-notch expanding views (music, battery, download).
 
 **New in NotchNerd:**
-- **Claude Code agent monitor** — observe-only, in-notch. Agent tab with session rows (phase dot,
-  summary), Allow Once/Deny permission cards, question option buttons, and a Ghostty jump button.
-  Closed-notch `AgentClosedIndicator` when `attentionCount > 0`. **Off by default.**
+- **Claude Code agent monitor** — observe-only, in-notch. Agent tab with an overview-counts row,
+  pulsing per-phase status dots, **expandable session rows** (live subagents + task/todo checklists
+  from `ClaudeSessionMetadata`), Allow Once/Deny permission cards, question option buttons, and a
+  Ghostty jump button (already-focused short-circuit + live re-resolution). **In-notch notification
+  mode** auto-pops the notch on permission/question/completion events (never hijacks an open notch;
+  completion auto-collapses after 10s) with optional **system-sound** alerts. **Usage HUD** chips
+  (5h/7d Claude quotas) via a vendored statusline wrapper. Closed-notch `AgentClosedIndicator` when
+  `attentionCount > 0`. **Off by default** (each surface independently gated in Settings → Agent).
 - **Always-open Notepad** — floating key-capable panel + in-notch Notes tab over one shared
   multi-note store; toggled via menu-bar button and a global hotkey.
 
@@ -238,7 +248,27 @@ Install/Remove/Refresh hooks.
 **Scope:** the vendored Core is multi-agent (Codex/Cursor/Gemini/Kimi/OpenCode/Warp types + a hook
 CLI advertising ~10 tools), but NotchNerd wires **only the Claude Code path** — it filters/persists
 `tool == .claudeCode`, `AgentView` is Claude-only, `GhosttyJumpService` is Ghostty-only. The rest is
-dormant surface area.
+dormant surface area (broadening it is To-do — PLAN §13).
+
+**Notification mode + sounds (batch-1 port, PLAN §13).** Beyond the persistent `AgentClosedIndicator`,
+agent events drive a transient auto-pop: `AgentBridgeManager.ingest` maps each `AgentEvent` →
+`emitNotification` → `notificationPublisher` (a `PassthroughSubject`, *not* `@Published` state, so a
+dismissed card can't be re-popped). `NotchNerdViewCoordinator.presentAgentNotification` plays the
+optional sound (`AgentNotificationSound`), stores `agentNotification`, and posts
+`.agentNotificationOpenRequested`; the visible `ContentView` opens the notch **only from
+`notchState == .closed`** (never hijacks an open notch / the Notes editor). Permission/question pops
+persist until resolved (closed via `notificationDismissPublisher` on resolve/answer/dismiss + a
+`$actionableSession` reconcile); completion pops auto-collapse after 10s (deferred while
+`AgentNotchHover.isPointerInside`). `ContentView.onChange(notchState→.closed)` calls
+`coordinator.notchDidClose()` to clear finished pops. Frontmost-suppression skips the pop when the
+session's Ghostty terminal is already focused.
+
+**Usage HUD (batch-1 port).** `AgentUsageManager` (own AppDelegate-driven lifecycle, gated by
+`agentUsageEnabled`) installs the vendored `ClaudeStatusLineInstallationManager.installAsWrapper()`
+(wraps any existing statusline; tees Claude Code's `rate_limits` into `/tmp/open-island-rl.json`),
+polls `ClaudeUsageLoader` on a 5s timer, and publishes a `ClaudeUsageSnapshot` rendered as 5h/7d
+`UsageChip`s in the Agent tab header. **No credentials / no API** — the quota data rides the local
+statusline payload (Claude Code ≥ 2.1.132 for context fields; `rate_limits` is Pro/Max-only).
 
 ### Notepad
 
@@ -318,8 +348,11 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 | `NotchNerd/components/Notch/NotchNerdWindow.swift` | legacy notch panel (NOT on launch path) |
 | `NotchNerd/managers/NotchSpaceManager.swift` | max-level CGS space owner |
 | `NotchNerd/private/CGSSpace.swift` | private SkyLight Space wrapper |
-| `NotchNerd/Agent/AgentBridgeManager.swift` | headless OpenIslandCore driver (singleton) |
-| `NotchNerd/Agent/AgentView.swift` | in-notch Agent tab UI + AgentClosedIndicator + AgentSettings |
+| `NotchNerd/Agent/AgentBridgeManager.swift` | headless OpenIslandCore driver (singleton) + notification signals |
+| `NotchNerd/Agent/AgentView.swift` | in-notch Agent tab UI (overview/rows/cards/chips) + AgentClosedIndicator + AgentSettings |
+| `NotchNerd/Agent/AgentSessionPresentation.swift` | verbatim OI presentation extension (spotlight*/island* computed props) |
+| `NotchNerd/Agent/AgentUsageManager.swift` | usage-HUD: statusline-wrapper install + `ClaudeUsageLoader` polling |
+| `NotchNerd/NotchNerdViewCoordinator.swift` (agent notifications) | owns the in-notch notification auto-pop / auto-collapse |
 | `NotchNerd/Notepad/NotepadWindowController.swift` | floating notepad singleton |
 | `NotchNerd/Notepad/NotepadTabView.swift` | in-notch Notes tab + key-focus trick |
 | `NotchNerd/Notepad/NotesStore.swift` | shared multi-note store |
@@ -338,14 +371,20 @@ shipped and the comprehensive rename to NotchNerd is done.
 - **Done:** Phase 0 (sandbox-off regression baseline), Phase 1 (vendor engine as local SPM), Phase 2
   (agent driver `AgentBridgeManager` — bridge + observer + reducer + hook install + approve/deny
   round-trip), Phase 3 (Agent tab UI), Phase 4 (Ghostty jump), Phase 5 (notepad — both surfaces,
-  spike validated GO on-device), and the rebrand identity work (Phase 9: bundle id
-  `eth.7amza.notchnerd`, Sparkle disabled, violet icon).
+  spike validated GO on-device), the rebrand identity work (Phase 9: bundle id `eth.7amza.notchnerd`,
+  Sparkle disabled, violet icon), **Phase 5.5 (loose-thread audit & fixes — PLAN §12)**, and
+  **OI-feature-port batch 1 (PLAN §13: notification mode + sounds, expanded session panel, usage HUD,
+  Ghostty hardening)**.
 - **Remaining:**
   - **Phase 6** — finish socket/hook namespacing off bundle id `eth.7amza.notchnerd` (the bridge
     socket is still the shared `~/Library/Application Support/OpenIsland/bridge.sock` by deliberate
     interim design; locked decision #8 requires namespacing so NotchNerd can't clobber a running
     Open Island). Also complete the user-facing rebrand (README, attribution, residual "Open
     Island" strings).
+  - **More terminals / more agents** (remainder of the OI feature review — PLAN §13 To-do): the rest
+    of `TerminalJumpService` (Terminal.app/iTerm2/tmux/Warp/…) and the other vendored agents
+    (Codex/Gemini/Kimi/OpenCode/Cursor/Claude-forks). Engine support is already vendored — these are
+    wiring jobs.
   - **Phase 7** — optional beta: a read-only live-status watcher for Cowork / local-agent-mode
     desktop surfaces (per `tooling/research/desktop-surfaces-feasibility.md`). Hard limit:
     approve/deny remains CLI-only.

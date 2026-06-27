@@ -8,6 +8,7 @@
 import AppKit
 import Combine
 import Defaults
+import OpenIslandCore
 import SwiftUI
 
 enum SneakContentType {
@@ -122,6 +123,9 @@ class NotchNerdViewCoordinator: ObservableObject {
         }
         
         selectedScreenUUID = preferredScreenUUID ?? NSScreen.main?.displayUUID ?? ""
+
+        bindAgentNotifications()
+
         // Observe changes to accessibility authorization and react accordingly
         accessibilityObserver = NotificationCenter.default.addObserver(
             forName: Notification.Name.accessibilityAuthorizationChanged,
@@ -178,6 +182,103 @@ class NotchNerdViewCoordinator: ObservableObject {
         }
     }
     
+    // MARK: - Agent notifications (in-notch auto-pop)
+
+    /// The currently-popped agent notification, if the notch was opened *by* one.
+    @Published private(set) var agentNotification: AgentNotification?
+    private var agentNotificationCollapseTask: Task<Void, Never>?
+    private var agentNotificationCancellables: Set<AnyCancellable> = []
+    private static let agentNotificationCollapseDelay: TimeInterval = 10
+
+    /// Subscribe to AgentBridgeManager's notification signals. Called once from init.
+    private func bindAgentNotifications() {
+        let agent = AgentBridgeManager.shared
+        agent.notificationPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] note in self?.presentAgentNotification(note) }
+            .store(in: &agentNotificationCancellables)
+        agent.notificationDismissPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] sid in self?.dismissAgentNotification(for: sid) }
+            .store(in: &agentNotificationCancellables)
+        // A persistent (permission/question) pop self-closes once its session stops being actionable.
+        agent.$actionableSession
+            .receive(on: RunLoop.main)
+            .sink { [weak self] actionable in self?.reconcileAgentNotification(actionable: actionable) }
+            .store(in: &agentNotificationCancellables)
+    }
+
+    private func presentAgentNotification(_ note: AgentNotification) {
+        guard Defaults[.agentNotificationsEnabled] else { return }
+        // Suppress if the user is already looking at the session's terminal (best-effort, cheap).
+        if isSessionTerminalFrontmost(note.sessionID) { return }
+        // Preserve-on-hover: don't replace a different card the pointer is currently inside.
+        if let current = agentNotification, current.sessionID != note.sessionID,
+           AgentNotchHover.isPointerInside { return }
+
+        AgentNotificationSound.playNotification()   // self-gated on agentSoundEnabled / muted
+
+        agentNotification = note
+        // Do NOT switch currentView here — that would hijack an already-open notch's tab (e.g. yank
+        // the user out of the Notes editor). ContentView selects .agent only when it actually opens
+        // the notch from a closed state. The closed-notch indicator is driven by attentionCount.
+        if Defaults[.agentAutoOpenNotch] {
+            NotificationCenter.default.post(name: .agentNotificationOpenRequested, object: note)
+        }
+        armAgentCollapse(note)
+    }
+
+    /// Called by ContentView whenever the notch closes (any path) so a finished pop doesn't leave
+    /// stale notification state behind (which could suppress a later pop via the preserve-on-hover guard).
+    func notchDidClose() {
+        agentNotificationCollapseTask?.cancel()
+        agentNotificationCollapseTask = nil
+        agentNotification = nil
+    }
+
+    private func armAgentCollapse(_ note: AgentNotification) {
+        agentNotificationCollapseTask?.cancel()
+        agentNotificationCollapseTask = nil
+        guard note.autoDismisses else { return }   // only completion notices auto-collapse
+        agentNotificationCollapseTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.agentNotificationCollapseDelay))
+            guard let self, !Task.isCancelled else { return }
+            if AgentNotchHover.isPointerInside { return }   // defer while hovered
+            self.requestAgentNotificationClose()
+        }
+    }
+
+    func dismissAgentNotification(for sessionID: String) {
+        guard agentNotification?.sessionID == sessionID else { return }
+        requestAgentNotificationClose()
+    }
+
+    private func reconcileAgentNotification(actionable: AgentSession?) {
+        guard let note = agentNotification, !note.autoDismisses else { return }
+        if actionable?.id != note.sessionID { requestAgentNotificationClose() }
+    }
+
+    private func requestAgentNotificationClose() {
+        agentNotificationCollapseTask?.cancel()
+        agentNotificationCollapseTask = nil
+        agentNotification = nil
+        NotificationCenter.default.post(name: .agentNotificationCloseRequested, object: nil)
+    }
+
+    /// Best-effort: is the session's terminal already the frontmost app? (Ghostty-only, cheap —
+    /// no ps/AX.) Used to suppress a pop when the user is already looking at the session.
+    private func isSessionTerminalFrontmost(_ sessionID: String) -> Bool {
+        guard Defaults[.agentSuppressWhenFrontmost] else { return false }
+        guard let session = AgentBridgeManager.shared.sessions.first(where: { $0.id == sessionID }),
+              let target = session.jumpTarget,
+              let frontBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else {
+            return false
+        }
+        let app = target.terminalApp.lowercased()
+        let isGhostty = app.contains("ghostty") || app.contains("mitchellh")
+        return isGhostty && frontBundle == GhosttyJumpService.bundleIdentifier
+    }
+
     @objc func sneakPeekEvent(_ notification: Notification) {
         let decoder = JSONDecoder()
         if let decodedData = try? decoder.decode(
@@ -300,4 +401,15 @@ class NotchNerdViewCoordinator: ObservableObject {
     func showEmpty() {
         currentView = .home
     }
+}
+
+extension Notification.Name {
+    static let agentNotificationOpenRequested = Notification.Name("agentNotificationOpenRequested")
+    static let agentNotificationCloseRequested = Notification.Name("agentNotificationCloseRequested")
+}
+
+/// Set by ContentView.handleHover so the coordinator can defer auto-collapse / preserve on hover.
+/// Mirrors the NotepadNotchFocus pattern.
+enum AgentNotchHover {
+    static var isPointerInside = false
 }

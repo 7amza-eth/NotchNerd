@@ -161,10 +161,26 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .onReceive(NotificationCenter.default.publisher(for: .agentNotificationOpenRequested)) { _ in
+                        // Auto-pop the Agent tab only from a closed notch — never hijack a notch the
+                        // user opened for music/shelf/notepad. (When already open, the live AgentView
+                        // reflects the new state anyway.)
+                        guard Defaults[.agentAutoOpenNotch], vm.notchState == .closed else { return }
+                        guard !SharingStateManager.shared.preventNotchClose else { return }
+                        coordinator.currentView = .agent
+                        doOpen()
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: .agentNotificationCloseRequested)) { _ in
+                        guard !isHovering, !SharingStateManager.shared.preventNotchClose else { return }
+                        vm.close()
+                    }
                     .onChange(of: vm.notchState) { _, newState in
-                        if newState == .closed && isHovering {
-                            withAnimation {
-                                isHovering = false
+                        if newState == .closed {
+                            coordinator.notchDidClose()   // clear any finished agent pop
+                            if isHovering {
+                                withAnimation {
+                                    isHovering = false
+                                }
                             }
                         }
                     }
@@ -520,6 +536,7 @@ struct ContentView: View {
 
     private func handleHover(_ hovering: Bool) {
         if coordinator.firstLaunch { return }
+        AgentNotchHover.isPointerInside = hovering   // lets the coordinator preserve/defer the agent pop
         hoverTask?.cancel()
         
         if hovering {
