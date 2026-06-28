@@ -1,14 +1,15 @@
 name: Release
 
-# Builds NotchNerd (Release) and publishes a GitHub Release with downloadable artifacts.
+# Builds NotchNerd (Release), signs it with Sparkle (EdDSA), generates a signed appcast, and
+# publishes a GitHub Release with the zip + dmg + appcast.xml attached.
 #
-# Trigger it either by:
-#   • pushing a version tag:   git tag v2.7.3 && git push origin v2.7.3
-#   • running it manually:     Actions tab → Release → "Run workflow" (enter a tag)
+# Trigger:
+#   • push a version tag:  git tag v0.1.0 && git push origin v0.1.0
+#   • or run manually:     Actions → Release → "Run workflow" (enter a tag like v0.1.0)
 #
-# The app is ad-hoc signed (CODE_SIGN_IDENTITY = "-"), so this needs NO signing secrets —
-# but the published build is therefore NOT notarized, and users will need the one-time
-# `xattr -dr com.apple.quarantine` step on first launch (documented in the README).
+# The app is ad-hoc signed (no Apple Developer secrets needed), so users still do the one-time
+# `xattr -dr com.apple.quarantine` on first launch. Auto-updates are signed with SPARKLE_PRIVATE_KEY
+# (a repo secret); the app's SUFeedURL points at releases/latest/download/appcast.xml.
 
 on:
   push:
@@ -17,21 +18,35 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Version tag to release (e.g. v2.7.3). Created from the current commit if it does not exist.'
+        description: 'Version tag to release (e.g. v0.1.0)'
         required: true
 
 permissions:
-  contents: write   # required to create the release
+  contents: write
+
+env:
+  SPARKLE_VERSION: "2.9.1"
 
 jobs:
   release:
     runs-on: macos-15
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Toolchain info
         run: xcodebuild -version && swift --version
+
+      - name: Compute versions
+        id: ver
+        run: |
+          MARKETING="${TAG#v}"                  # v0.1.0 -> 0.1.0
+          BUILD="${{ github.run_number }}"      # monotonic build number for Sparkle comparisons
+          echo "marketing=$MARKETING" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG  (CFBundleShortVersionString=$MARKETING, CFBundleVersion=$BUILD)"
 
       - name: Build (Release, ad-hoc signed)
         run: |
@@ -41,32 +56,51 @@ jobs:
             -scheme NotchNerd \
             -configuration Release \
             -derivedDataPath build \
+            MARKETING_VERSION="${{ steps.ver.outputs.marketing }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.ver.outputs.build }}" \
             build | tail -n 40
           test -d "build/Build/Products/Release/NotchNerd.app"
 
-      - name: Package .zip
+      - name: Package .zip (for Sparkle) + .dmg (manual install)
         run: |
-          ditto -c -k --keepParent "build/Build/Products/Release/NotchNerd.app" "NotchNerd.zip"
-          ls -la NotchNerd.zip
-
-      - name: Package .dmg (best effort)
-        id: dmg
-        continue-on-error: true
-        run: |
+          APP="build/Build/Products/Release/NotchNerd.app"
+          mkdir -p dist
+          # The zip is what Sparkle updates from; generate_appcast scans the `dist` dir.
+          ditto -c -k --keepParent "$APP" "dist/NotchNerd.zip"
+          # DMG is a nicer manual download (best effort — kept OUT of dist so it isn't in the appcast).
           python3 -m venv .dmgvenv
-          ./.dmgvenv/bin/pip install --quiet --require-hashes -r Configuration/dmg/requirements.txt
-          export PATH="$PWD/.dmgvenv/bin:$PATH"
-          Configuration/dmg/create_dmg.sh \
-            "build/Build/Products/Release/NotchNerd.app" \
-            "NotchNerd.dmg" \
-            "NotchNerd"
-          ls -la NotchNerd.dmg
+          ./.dmgvenv/bin/pip install --quiet --require-hashes -r Configuration/dmg/requirements.txt || true
+          PATH="$PWD/.dmgvenv/bin:$PATH" \
+            Configuration/dmg/create_dmg.sh "$APP" "NotchNerd.dmg" "NotchNerd" || echo "DMG step skipped"
+          ls -la dist NotchNerd.dmg 2>/dev/null || true
+
+      - name: Sign + generate appcast (Sparkle)
+        id: appcast
+        continue-on-error: true
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "${SPARKLE_PRIVATE_KEY}" ]; then
+            echo "SPARKLE_PRIVATE_KEY secret is not set — skipping appcast (release will still publish the artifacts)."
+            exit 1
+          fi
+          curl -fsSL -o sparkle.tar.xz \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+          mkdir -p sparkle && tar xJf sparkle.tar.xz -C sparkle
+          printf '%s' "${SPARKLE_PRIVATE_KEY}" > sparkle_ed_key
+          sparkle/bin/generate_appcast \
+            --ed-key-file sparkle_ed_key \
+            --download-url-prefix "https://github.com/${{ github.repository }}/releases/download/${TAG}/" \
+            dist
+          rm -f sparkle_ed_key
+          echo "---- appcast.xml ----"
+          cat dist/appcast.xml
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: NotchNerd ${{ github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ env.TAG }}
+          name: NotchNerd ${{ env.TAG }}
           generate_release_notes: true
           fail_on_unmatched_files: false
           body: |
@@ -78,8 +112,8 @@ jobs:
 
             NotchNerd is a menu-bar app (no Dock icon) — look at your notch / the menu bar.
             The Claude Code agent monitor is **off by default** (Settings → Agent to enable).
-
-            See the README for details and the build-from-source option.
+            Once installed, future versions update automatically via Sparkle.
           files: |
-            NotchNerd.zip
+            dist/NotchNerd.zip
             NotchNerd.dmg
+            dist/appcast.xml

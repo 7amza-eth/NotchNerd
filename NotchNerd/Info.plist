@@ -8,7 +8,11 @@
 		<true/>
 	</dict>
 	<key>SUEnableAutomaticChecks</key>
-	<false/>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/7amza-eth/NotchNerd/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>76OY7vJFj5/r9hUxcDeg22Ntgunl45fMiCN4/7GcMGQ=</string>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict/>
