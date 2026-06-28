@@ -88,19 +88,29 @@ Notes:
   it is not distributable via the Mac App Store.
 - Signing is **ad-hoc** out of the box (no Developer ID / no notarization configured).
 
-## Running a prebuilt build (testers)
+## Install a prebuilt build (testers)
 
-If someone hands you a built `NotchNerd.app` (rather than building it yourself), it isn't notarized,
-so Gatekeeper will block it on first launch. Move it to `/Applications`, then clear the quarantine
-flag and launch it:
+Prebuilt downloads are attached to each [GitHub Release](https://github.com/7amza-eth/NotchNerd/releases).
+The build isn't notarized yet, so macOS Gatekeeper blocks it on first download — **the `.zip` is the
+smoothest path** (a downloaded `.dmg` silently does nothing on double-click until its quarantine is cleared):
+
+1. Download **`NotchNerd.zip`** from the latest release and double-click to unzip.
+2. Drag **`NotchNerd.app`** into `/Applications`.
+3. Clear the quarantine flag and launch:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/NotchNerd.app
+   open /Applications/NotchNerd.app
+   ```
+
+Prefer the `.dmg`? Clear *its* quarantine first, then it mounts:
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/NotchNerd.app
-open /Applications/NotchNerd.app
+xattr -dr com.apple.quarantine ~/Downloads/NotchNerd.dmg && open ~/Downloads/NotchNerd.dmg
 ```
 
-There is no auto-update — to get a newer build you re-download it and run the `xattr` step again.
-(Because the build is ad-hoc signed, a new build may also require re-granting the permissions below.)
+After the first install, **updates are automatic** (Sparkle, EdDSA-signed) — no re-downloading or
+re-`xattr`. (Auto-updates verify a signature rather than Gatekeeper, so the quarantine step is one-time.)
 
 ## First run & permissions
 
