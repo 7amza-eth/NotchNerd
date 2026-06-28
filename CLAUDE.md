@@ -21,6 +21,8 @@ xcodebuild -project NotchNerd.xcodeproj -scheme NotchNerd -configuration Debug b
 - **Full Xcode required** (not just Command Line Tools) — a run-script phase shells out to `swift build`.
 - No shared scheme is committed; `-scheme NotchNerd` relies on the auto-generated one (or use `-target NotchNerd`). Build with `-scheme` (not `-target`) so SPM packages resolve.
 - The app is **unsandboxed**, ad-hoc signed. **Ad-hoc signing changes the cdhash every build → macOS drops Accessibility/Automation TCC grants.** Run `zsh tooling/scripts/setup-dev-signing.sh` + set the target to Manual signing with "NotchNerd Dev" before iterating, or you'll re-grant permissions every build.
+- **Hardened runtime is OFF (`ENABLE_HARDENED_RUNTIME = NO`) — keep it off.** With ad-hoc signing, its Library Validation rejects the bundled `MediaRemoteAdapter.framework` ("different Team IDs"), so **every *downloaded* release crashes at launch** — local Debug builds had it off, so the bug only surfaces on releases. Re-enabling needs a real Developer ID + notarization (or `com.apple.security.cs.disable-library-validation`). **Always verify a downloaded release actually launches — never assume local Debug == the release build.**
+- **Cutting a release:** push a `v<x.y.z>` tag → `.github/workflows/release.yml` builds Release, EdDSA-signs, packages dmg/zip + appcast, and publishes a GitHub Release (version from the tag, `make_latest: true`). Bump local `MARKETING_VERSION` to match. **Write the release notes yourself** (the workflow's auto-notes are thin — commits go straight to `main`, no PRs). The user-facing changelog **is** GitHub Releases — there is no `CHANGELOG.md`.
 
 ## Conventions / load-bearing rules
 
@@ -34,6 +36,8 @@ xcodebuild -project NotchNerd.xcodeproj -scheme NotchNerd -configuration Debug b
 - **The agent monitor is OFF by default** (`Defaults[.agentEnabled]`), behind Settings → Agent. It only OBSERVES Claude Code via hooks — it never calls the Anthropic API and stores no credentials. Its UI surfaces are each independently gated: notification auto-pop (`agentNotificationsEnabled`), sounds (`agentSoundEnabled`), the usage HUD (`agentUsageEnabled`, which gets 5h/7d quotas from Claude Code's **statusline** payload, still no API/credentials). The in-notch notification pop **must never hijack an already-open notch** (opens only from `notchState == .closed`) — see `spec.md` Part II + `NotchNerdViewCoordinator.presentAgentNotification`.
 - **Preserve GPL attribution** (boring.notch / TheBoredTeam, Open Island / Octane0411) in `LICENSE`, `THIRD_PARTY_LICENSES`, source headers.
 - Some older notes (folded into `spec.md` Part II) and git history cite **pre-rename `boringNotch/*` paths** — map them 1:1 onto `NotchNerd/*`.
+- **`gh` defaults to `upstream` (boring.notch), not the fork.** Pass `--repo 7amza-eth/NotchNerd` (or run `gh repo set-default`) for any `gh release` / `gh run` — otherwise you see boring.notch's `v2.7.x` releases/Actions, not the fork's `0.x`.
+- **Ignore SourceKit "No such module 'Defaults'/'KeyboardShortcuts'/…" diagnostics** for SPM deps after edits — they're re-index artifacts, not real errors. Trust the `xcodebuild` result.
 
 ## Commit conventions
 
