@@ -1,15 +1,35 @@
 name: Release
 
-# Builds NotchNerd (Release), signs it with Sparkle (EdDSA), generates a signed appcast, and
-# publishes a GitHub Release with the zip + dmg + appcast.xml attached.
+# Builds NotchNerd (Release), signs it, generates a signed Sparkle appcast, and publishes a GitHub
+# Release with the zip + dmg + appcast.xml attached.
+#
+# The job picks one of two signing modes automatically, based on which secrets are configured:
+#
+#   • NOTARIZED (recommended) — when the Apple Developer ID secrets are present, the app and the DMG
+#     are signed with a "Developer ID Application" certificate, notarized by Apple, and stapled.
+#     Users then download, drag to /Applications, and double-click. No Terminal, no `xattr`, and
+#     Accessibility/Automation permissions survive Sparkle auto-updates (stable signing identity).
+#
+#   • AD-HOC (fallback) — when those secrets are absent, the build is ad-hoc signed exactly as before
+#     and testers must clear quarantine manually. The release notes are generated to match the mode
+#     that actually ran.
+#
+# Required repository secrets for the NOTARIZED path (Settings → Secrets and variables → Actions).
+# See RELEASING.md for step-by-step setup:
+#   MACOS_CERTIFICATE      base64 of your "Developer ID Application" cert exported as a .p12
+#                            (Keychain Access → export .p12, then: base64 -i cert.p12 | pbcopy)
+#   MACOS_CERTIFICATE_PWD  the password you set on that .p12
+#   KEYCHAIN_PASSWORD      any throwaway string (used only for the ephemeral CI keychain)
+#   APPLE_TEAM_ID          your 10-character Apple Developer Team ID
+#   NOTARY_APPLE_ID        the Apple ID email of your developer account
+#   NOTARY_PASSWORD        an app-specific password for that Apple ID
+#                            (appleid.apple.com → Sign-In and Security → App-Specific Passwords)
+# Auto-updates are signed with SPARKLE_PRIVATE_KEY (a repo secret); the app's SUFeedURL points at
+# releases/latest/download/appcast.xml.
 #
 # Trigger:
 #   • push a version tag:  git tag v0.1.0 && git push origin v0.1.0
 #   • or run manually:     Actions → Release → "Run workflow" (enter a tag like v0.1.0)
-#
-# The app is ad-hoc signed (no Apple Developer secrets needed), so users still do the one-time
-# `xattr -dr com.apple.quarantine` on first launch. Auto-updates are signed with SPARKLE_PRIVATE_KEY
-# (a repo secret); the app's SUFeedURL points at releases/latest/download/appcast.xml.
 
 on:
   push:
@@ -48,30 +68,145 @@ jobs:
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "Releasing $TAG  (CFBundleShortVersionString=$MARKETING, CFBundleVersion=$BUILD)"
 
-      - name: Build (Release, ad-hoc signed)
+      - name: Import Developer ID certificate (if configured)
+        id: signing
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          set -o pipefail
-          xcodebuild \
-            -project NotchNerd.xcodeproj \
-            -scheme NotchNerd \
-            -configuration Release \
-            -derivedDataPath build \
-            MARKETING_VERSION="${{ steps.ver.outputs.marketing }}" \
-            CURRENT_PROJECT_VERSION="${{ steps.ver.outputs.build }}" \
-            build | tail -n 40
+          set -euo pipefail
+          if [ -z "${MACOS_CERTIFICATE:-}" ]; then
+            echo "No MACOS_CERTIFICATE secret set — this release will be AD-HOC signed (un-notarized)."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "${KEYCHAIN_PASSWORD:-}" ] || [ -z "${MACOS_CERTIFICATE_PWD:-}" ]; then
+            echo "::error::MACOS_CERTIFICATE is set but KEYCHAIN_PASSWORD and/or MACOS_CERTIFICATE_PWD is missing."
+            exit 1
+          fi
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/cert.p12"
+          SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/{print $2; exit}')"
+          if [ -z "$SIGN_ID" ]; then
+            echo "::error::No 'Developer ID Application' identity found in the imported certificate."
+            echo "::error::Notarization requires a Developer ID Application cert (not Apple Development / Mac App Distribution)."
+            exit 1
+          fi
+          echo "Using signing identity: $SIGN_ID"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          echo "identity=$SIGN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Build (Release)
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          COMMON=(
+            -project NotchNerd.xcodeproj
+            -scheme NotchNerd
+            -configuration Release
+            -derivedDataPath build
+            MARKETING_VERSION="${{ steps.ver.outputs.marketing }}"
+            CURRENT_PROJECT_VERSION="${{ steps.ver.outputs.build }}"
+          )
+          if [ "${SIGNED:-false}" = "true" ]; then
+            if [ -z "${APPLE_TEAM_ID:-}" ]; then
+              echo "::error::APPLE_TEAM_ID secret is required when signing with a Developer ID certificate."
+              exit 1
+            fi
+            echo "Building with Developer ID signing + hardened runtime + secure timestamp."
+            # ENABLE_HARDENED_RUNTIME is forced on here so it also applies to the XPC helper target
+            # (the project only sets it on the main app). All three are required for notarization.
+            xcodebuild "${COMMON[@]}" \
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+              CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
+              ENABLE_HARDENED_RUNTIME=YES \
+              OTHER_CODE_SIGN_FLAGS="--timestamp" \
+              build | tail -n 40
+          else
+            echo "Building ad-hoc (no Developer ID secrets)."
+            xcodebuild "${COMMON[@]}" build | tail -n 40
+          fi
           test -d "build/Build/Products/Release/NotchNerd.app"
 
-      - name: Package .zip (for Sparkle) + .dmg (manual install)
+      - name: Package, notarize, and staple
+        id: pkg
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: |
+          set -euo pipefail
           APP="build/Build/Products/Release/NotchNerd.app"
           mkdir -p dist
-          # The zip is what Sparkle updates from; generate_appcast scans the `dist` dir.
+
+          notarize() {  # notarize <path-to-zip-or-dmg>
+            xcrun notarytool submit "$1" \
+              --apple-id "$NOTARY_APPLE_ID" \
+              --password "$NOTARY_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+          }
+
+          if [ "${SIGNED:-false}" = "true" ]; then
+            if [ -z "${NOTARY_APPLE_ID:-}" ] || [ -z "${NOTARY_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+              echo "::error::Signing succeeded but notarization secrets are missing"
+              echo "::error::(need NOTARY_APPLE_ID, NOTARY_PASSWORD, APPLE_TEAM_ID)."
+              exit 1
+            fi
+
+            echo "== Verifying Developer ID signature =="
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            # Guard: confirm the CODE_SIGN_IDENTITY override actually took and the app isn't still ad-hoc.
+            if codesign -dvv "$APP" 2>&1 | grep -q "Signature=adhoc"; then
+              echo "::error::App is ad-hoc signed even though a Developer ID cert was imported."
+              echo "::error::The CODE_SIGN_IDENTITY override did not apply — notarization cannot proceed."
+              exit 1
+            fi
+            # get-task-allow must NOT be present in a distribution build — notarization rejects it.
+            if codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "get-task-allow"; then
+              echo "::error::get-task-allow entitlement is present — notarization would reject this build."
+              exit 1
+            fi
+
+            echo "== Notarizing NotchNerd.app =="
+            ditto -c -k --keepParent "$APP" "notarize-app.zip"
+            notarize "notarize-app.zip"
+            xcrun stapler staple "$APP"
+            echo "Stapled app:"; xcrun stapler validate "$APP"
+          fi
+
+          echo "== Packaging .zip (Sparkle + manual download) from the final app =="
           ditto -c -k --keepParent "$APP" "dist/NotchNerd.zip"
-          # DMG is a nicer manual download (best effort — kept OUT of dist so it isn't in the appcast).
+
+          echo "== Packaging .dmg =="
           python3 -m venv .dmgvenv
           ./.dmgvenv/bin/pip install --quiet --require-hashes -r Configuration/dmg/requirements.txt || true
-          PATH="$PWD/.dmgvenv/bin:$PATH" \
-            Configuration/dmg/create_dmg.sh "$APP" "NotchNerd.dmg" "NotchNerd" || echo "DMG step skipped"
+          if PATH="$PWD/.dmgvenv/bin:$PATH" Configuration/dmg/create_dmg.sh "$APP" "NotchNerd.dmg" "NotchNerd"; then
+            if [ "${SIGNED:-false}" = "true" ]; then
+              echo "== Signing + notarizing the DMG =="
+              codesign --force --timestamp --sign "$SIGN_IDENTITY" "NotchNerd.dmg"
+              notarize "NotchNerd.dmg"
+              xcrun stapler staple "NotchNerd.dmg"
+              echo "Stapled dmg:"; xcrun stapler validate "NotchNerd.dmg"
+            fi
+          else
+            echo "DMG step skipped"
+          fi
+          echo "signed=${SIGNED:-false}" >> "$GITHUB_OUTPUT"
           ls -la dist NotchNerd.dmg 2>/dev/null || true
 
       - name: Sign + generate appcast (Sparkle)
@@ -96,35 +231,31 @@ jobs:
           echo "---- appcast.xml ----"
           cat dist/appcast.xml
 
+      - name: Compose release notes
+        env:
+          SIGNED: ${{ steps.pkg.outputs.signed }}
+        run: |
+          set -euo pipefail
+          if [ "${SIGNED:-false}" = "true" ]; then
+            cp Configuration/release-notes/notarized.md RELEASE_NOTES.md
+          else
+            cp Configuration/release-notes/adhoc.md RELEASE_NOTES.md
+          fi
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           name: NotchNerd ${{ env.TAG }}
           generate_release_notes: true
+          body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: false
-          body: |
-            ## Install (testers)
-
-            NotchNerd isn't notarized yet, so macOS Gatekeeper blocks it on first download. **The `.zip` is the smoothest path:**
-
-            1. Download **`NotchNerd.zip`** below and double-click to unzip.
-            2. Drag **`NotchNerd.app`** into your **/Applications** folder.
-            3. Open **Terminal** and run:
-               ```
-               xattr -dr com.apple.quarantine /Applications/NotchNerd.app
-               ```
-            4. Launch it. NotchNerd is a **menu-bar app — no Dock icon**; look at your menu bar / the notch.
-            5. Grant **Accessibility** + **Automation** when prompted (System Settings → Privacy & Security).
-
-            > Prefer the `.dmg`? A downloaded DMG double-clicks to **nothing** until you clear its quarantine. In Terminal:
-            > ```
-            > xattr -dr com.apple.quarantine ~/Downloads/NotchNerd.dmg && open ~/Downloads/NotchNerd.dmg
-            > ```
-            > …then drag the app to /Applications and run step 3.
-
-            The Claude Code agent monitor is **off by default** — enable it in **Settings → Agent**. Once installed, future versions update automatically.
           files: |
             dist/NotchNerd.zip
             NotchNerd.dmg
             dist/appcast.xml
+
+      - name: Clean up signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
