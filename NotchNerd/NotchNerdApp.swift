@@ -39,6 +39,9 @@ struct NotchNerdApp: App {
             Button("Notepad") {
                 NotepadWindowController.shared.toggle()
             }
+            Button("Feature Tour") {
+                NotificationCenter.default.post(name: .featureTourRequested, object: nil)
+            }
             CheckForUpdatesView(updater: updaterController.updater)
             Divider()
             Button("Restart NotchNerd") {
@@ -439,6 +442,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 self.showOnboardingWindow(step: .musicPermission)
             }
+        } else if !Defaults[.hasSeenFeatureTour] {
+            // Existing upgraders never saw the first-run wizard — show the feature tour once so they
+            // discover the agent monitor / notepad. One-shot: flip the flag immediately so it can't
+            // re-fire even if they close the window without finishing.
+            Defaults[.hasSeenFeatureTour] = true
+            DispatchQueue.main.async {
+                self.presentFeatureTour()
+            }
         }
 
         // Start the Claude Code agent monitor (no-op unless Defaults[.agentEnabled]).
@@ -451,6 +462,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Restore the always-open notepad if it was visible last session.
         NotepadWindowController.shared.restoreIfNeeded()
+
+        // Replay the feature tour on demand (menu-bar "Feature Tour" + Settings "Replay feature tour").
+        NotificationCenter.default.addObserver(
+            forName: .featureTourRequested, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.presentFeatureTour()
+        }
 
         previousScreens = NSScreen.screens
     }
@@ -587,17 +605,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.title = "Onboarding"
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
+            // Nil the controller on close so a later present rebuilds a FRESH window at the requested
+            // step instead of re-showing a closed window stuck at .welcome.
+            window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(
                 rootView: OnboardingView(
                     step: step,
-                    onFinish: {
-                        window.orderOut(nil)
+                    onFinish: { [weak self, weak window] in
+                        window?.orderOut(nil)
 //                        NSApp.setActivationPolicy(.accessory)
-                        window.close()
+                        window?.close()
+                        self?.onboardingWindowController = nil
                         NSApp.deactivate()
                     },
-                    onOpenSettings: {
-                        window.close()
+                    onOpenSettings: { [weak self, weak window] in
+                        window?.close()
+                        self?.onboardingWindowController = nil
                         SettingsWindowController.shared.showWindow()
                     }
                 ))
@@ -612,6 +635,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         onboardingWindowController?.window?.makeKeyAndOrderFront(nil)
         onboardingWindowController?.window?.orderFrontRegardless()
     }
+
+    /// Present the standalone, re-runnable feature tour. Always rebuilds fresh at `.featureTour`
+    /// (the onboarding window caches by step, so we tear down any existing one first).
+    private func presentFeatureTour() {
+        // Don't let a tour request (menu bar / Settings) tear down an IN-PROGRESS first-run wizard —
+        // that abandons onboarding without flipping firstLaunch, re-running the whole wizard from
+        // .welcome next launch. The tour stays reachable from the finish screen and after onboarding.
+        if coordinator.firstLaunch, onboardingWindowController != nil { return }
+        onboardingWindowController?.close()
+        onboardingWindowController = nil
+        showOnboardingWindow(step: .featureTour)
+    }
 }
 
 extension Notification.Name {
@@ -620,6 +655,7 @@ extension Notification.Name {
     static let showOnAllDisplaysChanged = Notification.Name("showOnAllDisplaysChanged")
     static let automaticallySwitchDisplayChanged = Notification.Name("automaticallySwitchDisplayChanged")
     static let expandedDragDetectionChanged = Notification.Name("expandedDragDetectionChanged")
+    static let featureTourRequested = Notification.Name("FeatureTourRequested")
 }
 
 extension CGRect: @retroactive Hashable {

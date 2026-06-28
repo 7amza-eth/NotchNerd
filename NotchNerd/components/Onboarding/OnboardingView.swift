@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import Defaults
 
 enum OnboardingStep {
     case welcome
@@ -15,7 +16,12 @@ enum OnboardingStep {
     case remindersPermission
     case accessibilityPermission
     case musicPermission
+    case automationInfo
+    case agentMonitor
     case finished
+    /// Standalone, re-runnable feature tour. NOT part of the linear first-run chain — entered only
+    /// from the finish screen's button, the menu-bar item, or Settings.
+    case featureTour
 }
 
 private let calendarService = CalendarService()
@@ -127,16 +133,53 @@ struct OnboardingView: View {
             case .musicPermission:
                 MusicControllerSelectionView(
                     onContinue: {
+                        // Read firstLaunch BEFORE it flips (it now flips on entering .finished).
+                        // Genuine first run continues into the new agent steps; the returning-user
+                        // music re-prompt (firstLaunch already false) goes straight to finish.
+                        let isFirstRun = NotchNerdViewCoordinator.shared.firstLaunch
                         withAnimation(.easeInOut(duration: 0.6)) {
-                            NotchNerdViewCoordinator.shared.firstLaunch = false
-                            step = .finished
+                            step = isFirstRun ? .automationInfo : .finished
                         }
                     }
                 )
                 .transition(.opacity)
 
+            case .automationInfo:
+                AutomationInfoView(
+                    onContinue: {
+                        withAnimation(.easeInOut(duration: 0.6)) { step = .agentMonitor }
+                    }
+                )
+                .transition(.opacity)
+
+            case .agentMonitor:
+                AgentMonitorOnboardingView(
+                    onContinue: {
+                        withAnimation(.easeInOut(duration: 0.6)) { step = .finished }
+                    }
+                )
+                .transition(.opacity)
+
             case .finished:
-                OnboardingFinishView(onFinish: onFinish, onOpenSettings: onOpenSettings)
+                OnboardingFinishView(
+                    onFinish: onFinish,
+                    onOpenSettings: onOpenSettings,
+                    onStartTour: {
+                        withAnimation(.easeInOut(duration: 0.6)) { step = .featureTour }
+                    }
+                )
+                .onAppear {
+                    // Flip on entering .finished (not in the music step) so a quit/crash before this
+                    // point re-surfaces onboarding. Covers every path that reaches finished; a no-op
+                    // on the music re-prompt path where firstLaunch is already false.
+                    NotchNerdViewCoordinator.shared.firstLaunch = false
+                    // First-run users were offered the tour here, so don't auto-present it next launch.
+                    Defaults[.hasSeenFeatureTour] = true
+                }
+
+            case .featureTour:
+                FeatureTourView(onFinish: onFinish)
+                    .transition(.opacity)
             }
         }
         .frame(width: 400, height: 600)

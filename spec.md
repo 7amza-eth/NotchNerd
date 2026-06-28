@@ -322,6 +322,39 @@ the last note auto-creates a new one (never empty). Assumes the app is unsandbox
 `NotchNerdXPCHelper.xpc` and embedded into the app. It vends accessibility-authorization checks +
 keyboard/screen brightness (CoreBrightness). App-side client is `XPCHelperClient/`.
 
+### Onboarding & first-run
+
+`AppDelegate` shows a 400×600 `OnboardingView` window (`showOnboardingWindow`) when
+`coordinator.firstLaunch` (`@AppStorage`). Step chain:
+`welcome → camera → calendar → reminders → accessibility → music → automationInfo → agentMonitor →
+finished`. `firstLaunch` flips false on entering `.finished` (so every path that completes is covered,
+and a quit before then re-surfaces the wizard). The returning-user now-playing re-prompt
+(`isNowPlayingDeprecated`) reuses `.musicPermission` and branches music→`.finished` directly — it reads
+`firstLaunch` *before* any flip, so it skips the new steps.
+
+- **`automationInfo`** (`AutomationInfoView`) — explains the just-in-time macOS Automation (Apple
+  Events) prompt (music control + terminal jump). There's no up-front grant API, so it's a heads-up
+  card + an in-app "Open Automation Settings" deep-link (runs in-app — the app sends the Apple Events).
+- **`agentMonitor`** (`AgentMonitorOnboardingView`) — the **single** opt-in consent surface for the
+  agent. "Not now" writes **nothing** (agent stays off). "Turn on monitoring" flips
+  `Defaults[.agentEnabled] = true` **only on a confirmed hook install** (roll-back-on-failure): it calls
+  `AgentBridgeManager.installHooks()` (now `@discardableResult -> Bool`; `false` = the synchronous
+  missing-helper failure), observes `hookInstallState` via `onChange` + a polling `.task` backstop, and
+  only then sets `agentEnabled = true` + `start()` (install-first/start-after dodges the
+  `refreshHookStatus()` clobber). `installHooks()` resets state to a transient `.unknown` first so a
+  repeat-identical result is still an observable change (no stuck spinner).
+- **Feature tour** (`FeatureTourView`, step `.featureTour`) — 7 educational cards with inline ✦ mock
+  visuals (no live-notch coachmarks — the notch is click-through). Re-runnable from the menu-bar
+  "Feature Tour" item and Settings → General → "Replay feature tour" (both post `.featureTourRequested`
+  → `presentFeatureTour()`, which rebuilds the window fresh and is guarded so it can't tear down an
+  in-progress wizard). Existing upgraders (who never see the wizard) get it auto-presented **once** via
+  `Defaults[.hasSeenFeatureTour]`.
+
+The onboarding `NSWindow` caches by step; `onFinish`/`onOpenSettings` nil `onboardingWindowController`
+on close (and capture `window` **weakly**) so a re-present rebuilds and the old window + SwiftUI tree
+deallocate. New `components/Onboarding/*.swift` are registered via
+`tooling/scripts/add_onboarding_files.rb` (normal PBXGroup — they won't compile otherwise).
+
 ## Build & run
 
 **Exact command:**
@@ -433,6 +466,10 @@ remaining work is **Part II → Roadmap & TODO**.
   `setActivationPolicy(.regular)` / `NSApp.activate` for the notepad or it steals the frontmost app.
 - **Notch close paths all check `preventNotchClose`** (hover-out, sharingDidFinish, battery popover,
   drop debounce, swipe-up). Swipe-up is the explicit override that also clears the pin.
+- **The notch is dormant during first-launch onboarding.** Both `handleHover` and `doOpen()`
+  early-return while `coordinator.firstLaunch`, so the notch can't open — or get stuck open showing the
+  blanked `NotchHomeView` — until onboarding completes. (The `doOpen()` guard is a NotchNerd fix; the
+  inherited code guarded only hover, so a stray tap opened the notch and it then couldn't close.)
 - **Agent-tab gesture fix:** the swipe-up-to-close gesture is gated **off** the Agent tab
   (`coordinator.currentView != .agent` in `ContentView`) so it doesn't hijack the Agent tab's own
   scrolling.
@@ -667,6 +704,20 @@ each phase; git history holds the dated detail.)
     enabled** with NotchNerd's own key (first release: `v0.1.0`). Distribution is still ad-hoc / **not
     notarized**, so testers clear quarantine once (README "Install a prebuilt build" has the steps);
     notarization is a possible future step (deliberately not documented here).
+- **Onboarding wizard + feature tour + README state-doc (2026-06-28).** Extended the inherited
+  first-run wizard and added a re-runnable feature tour (full reference in Part I → *Onboarding &
+  first-run*). Welcome screen got a real app description; new **Automation** explainer
+  (`AutomationInfoView`); new **Agent** consent step (`AgentMonitorOnboardingView`) — the single opt-in
+  enable surface, **roll-back-on-failure** (`agentEnabled` flips true only on a *confirmed* install;
+  "Not now" writes nothing), backed by a hardened `installHooks()` (`@discardableResult -> Bool` +
+  transient-state reset) and an `onChange`+poll state machine. New **7-card tour** (`FeatureTourView`)
+  with inline ✦ mocks, re-runnable from the menu bar + Settings, **auto-shown once** to upgraders via
+  `hasSeenFeatureTour`. Fixed the **stuck-open notch** during onboarding (`doOpen()` now shares the
+  `firstLaunch` guard hover already had — inherited bug). Adversarial review caught + fixed a
+  **retain cycle** in the onboarding-window closures (per-replay `NSWindow` leak) and a window-reuse
+  latent bug. README gained a **"What the notch shows you"** state-reading guide (ASCII diagrams + ✦
+  reference). New files registered via `tooling/scripts/add_onboarding_files.rb`. Build-verified;
+  live-walked on-device.
 
 ## Roadmap & TODO
 

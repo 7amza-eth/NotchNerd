@@ -11,6 +11,7 @@ import SwiftUI
 struct OnboardingFinishView: View {
     let onFinish: () -> Void
     let onOpenSettings: () -> Void
+    let onStartTour: () -> Void
 
     var body: some View {
         VStack(spacing: 20) {
@@ -21,20 +22,27 @@ struct OnboardingFinishView: View {
                 .foregroundColor(.effectiveAccent)
                 .padding()
 
-            Text("You're All Set!")
+            Text("You're all set")
                 .font(.largeTitle)
                 .fontWeight(.bold)
 
-            Text("You can now enjoy the app. If you want to tweak things further, you can always visit the settings.")
+            Text("NotchNerd is live in your notch. Hover the notch to open it — you'll find music, the shelf, calendar, your notepad, and (if you turned it on) your Claude Code sessions. Click the menu-bar icon anytime for settings.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 40)
-            
+
             Spacer()
             Spacer()
 
             VStack(spacing: 12) {
+                Button(action: onStartTour) {
+                    Label("See what NotchNerd can do", systemImage: "play.circle")
+                        .controlSize(.large)
+                }
+                .controlSize(.large)
+
                 Button(action: onOpenSettings) {
                     Label("Customize in Settings", systemImage: "gear")
                         .controlSize(.large)
@@ -57,5 +65,5 @@ struct OnboardingFinishView: View {
 }
 
 #Preview {
-    OnboardingFinishView(onFinish: { }, onOpenSettings: { })
+    OnboardingFinishView(onFinish: { }, onOpenSettings: { }, onStartTour: { })
 }

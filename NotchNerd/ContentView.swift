@@ -634,6 +634,12 @@ struct ContentView: View {
     }
 
     private func doOpen() {
+        // Keep the notch dormant during first-launch onboarding. handleHover already early-returns
+        // while firstLaunch (so hover can't open OR close it) — but tap/gesture/drop opens weren't
+        // guarded, so a stray click could open the notch and then get STUCK (hover-out can't close
+        // it), showing an empty tab bar (NotchHomeView is blanked while firstLaunch) until onboarding
+        // finishes. Completing the intended "inert during onboarding" behavior fixes that.
+        guard !coordinator.firstLaunch else { return }
         withAnimation(animationSpring) {
             vm.open()
         }

@@ -198,6 +198,14 @@ struct GeneralSettings: View {
             }
 
             Section {
+                Button("Replay feature tour…") {
+                    NotificationCenter.default.post(name: .featureTourRequested, object: nil)
+                }
+            } header: {
+                Text("Help")
+            }
+
+            Section {
                 Picker(
                     selection: $notchHeightMode,
                     label:

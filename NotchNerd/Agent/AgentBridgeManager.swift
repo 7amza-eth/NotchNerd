@@ -409,12 +409,21 @@ final class AgentBridgeManager: ObservableObject {
         return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
     }
 
-    func installHooks() {
+    /// Installs the Claude Code hooks. Returns `false` ONLY for the SYNCHRONOUS failure (the embedded
+    /// helper is missing); the async outcome is published later via `hookInstallState`. Callers that
+    /// need a per-attempt completion signal observe `hookInstallState` — it is reset to a transient
+    /// value here first, so a repeated identical result is still an observable Equatable change.
+    @discardableResult
+    func installHooks() -> Bool {
         guard let source = embeddedHooksBinaryURL() else {
             hookInstallState = .failed("Agent hook helper not found in the app bundle.")
             lastStatusMessage = hookInstallStateMessage
-            return
+            return false
         }
+
+        // Reset before the async work so an identical repeat result (.installed/.failed with the same
+        // value) is still an observable transition for SwiftUI `onChange` observers, not a deduped no-op.
+        hookInstallState = .unknown
 
         Task { [weak self] in
             guard let self else { return }
@@ -433,6 +442,7 @@ final class AgentBridgeManager: ObservableObject {
                 self.lastStatusMessage = "Hook install failed: \(error.localizedDescription)"
             }
         }
+        return true
     }
 
     func uninstallHooks() {

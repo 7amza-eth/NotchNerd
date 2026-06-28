@@ -192,6 +192,11 @@ extension Defaults.Keys {
     // Show or hide the title bar
     static let hideTitleBar = Key<Bool>("hideTitleBar", default: true)
 
+    // MARK: Onboarding
+    /// True once the user has seen (or been auto-shown) the feature tour. Default false so existing
+    /// upgraders — who never saw the first-run wizard — get the tour auto-presented once.
+    static let hasSeenFeatureTour = Key<Bool>("hasSeenFeatureTour", default: false)
+
     // MARK: Agent (Claude Code session monitor — NotchNerd)
     static let agentEnabled = Key<Bool>("agentEnabled", default: false)
     static let agentPanelEnabled = Key<Bool>("agentPanelEnabled", default: true)
