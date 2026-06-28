@@ -457,6 +457,13 @@ remaining work is **Part II → Roadmap & TODO**.
   steps are in `VENDORED-FROM.md`.
 - **`Defaults.Keys` are split across two files** — most in `models/Constants.swift`, but
   `notepadVisible` / `notepadFloatStrategy` live in `Notepad/NotepadWindowController.swift`.
+- **Settings tabs are enum-driven.** `SettingsTab` (in `SettingsView.swift`) is the single source for
+  both the sidebar list and the detail `switch` — add a tab there, not in two places. The selected tab
+  persists via `@AppStorage("settingsSelectedTab")`.
+- **Version: local vs release.** `project.pbxproj` `MARKETING_VERSION` (`0.1.0`) / `CURRENT_PROJECT_VERSION`
+  (`271`) govern **local dev builds only**; the release workflow overrides both from the git tag
+  (`v0.1.0` → marketing `0.1.0`, build = `github.run_number`). The high local build number keeps dev
+  builds correctly "up to date" against the low release run-numbers — it is **not** the release counter.
 - **`AppDelegate`, not the App body, owns lifecycle.** Don't look for window/agent/notepad wiring
   in the SwiftUI scene.
 - **Two notch window classes; only `NotchNerdSkyLightWindow` is live.** Editing `NotchNerdWindow.swift`
@@ -718,6 +725,22 @@ each phase; git history holds the dated detail.)
   latent bug. README gained a **"What the notch shows you"** state-reading guide (ASCII diagrams + ✦
   reference). New files registered via `tooling/scripts/add_onboarding_files.rb`. Build-verified;
   live-walked on-device.
+- **Settings IA redesign + version fix (2026-06-28).** Three-phase refactor of the Settings UI (driven
+  by a multi-agent review → adversarial critique). **P1:** dropped 4 zero-consumer Defaults keys + dead
+  decls; fixed the Agent Notifications/Sound/Usage sections that trapped their own masters inside
+  `.disabled(!master)` (Usage shipped permanently un-enableable). **P2:** replaced the flat 11-tab
+  sidebar with a single `SettingsTab` enum driving both sidebar + detail, grouped (General / Notch
+  features / Advanced / About) with `@AppStorage` tab persistence (an accent change no longer resets to
+  General); moved theming → Appearance and music visuals → Media; added **Notepad** + **Webcam** tabs;
+  slimmed Advanced + a Reset-to-defaults button; fixed the gesture-enable inversion, a force-unwrap
+  crash in the visualizer add-sheet, the `vizualizers`/`unkown` typos; applied disable-in-place child
+  gating + a sentence-case sweep; removed ~215 lines of commented Downloads/Extensions + dead helpers;
+  gave `toggleNotepad` a default (⌘⇧N) and dropped 4 handler-less shortcut names. **P3:** an "Include
+  reminders" master (`showReminders`) wired at the `CalendarView` display layer. Also fixed the
+  **local-build version** (`MARKETING_VERSION` 2.7.3 → 0.1.0 — boring.notch's leftover made *Check for
+  Updates* show the wrong version; releases set it from the git tag, so unaffected). Deferred as
+  low-value/risky: the calendar shared-store deselect-all snap-back, `musicControlSlotLimit` vs
+  `fixedSlotCount`, and the `sliderColor`/`agentSuppressFrontmost` symbol-vs-string mismatches.
 
 ## Roadmap & TODO
 
