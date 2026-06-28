@@ -30,6 +30,8 @@ DerivedData/
 build/
 *.app
 *.dSYM
+*.dmg
+*.zip
 
 # Temporary files
 *.swp
