@@ -43,7 +43,8 @@ It is **observe-only** — it never calls the Anthropic API and stores no creden
   **multiple questions, multi-select, freeform answers, and ASCII/code option previews**.
 - **Closed-notch status** — a compact indicator shows when Claude is **working** (mid-turn) vs
   **active** (open but idle) vs **needs you**, coexisting with the music notch (it rides the
-  visualizer slot when music is playing).
+  visualizer slot when music is playing). See [**What the notch shows you**](#what-the-notch-shows-you)
+  below for how to read the sparkle colors at a glance.
 - **Usage HUD** — optional 5h / 7d quota chips, read from Claude Code's local statusline (Pro/Max).
 - **Notification mode** — optionally pop the notch (with an optional sound) when a session needs a
   permission/answer or finishes.
@@ -56,6 +57,132 @@ It is **observe-only** — it never calls the Anthropic API and stores no creden
 - **Always-open Notepad** — a floating, multi-note scratchpad (and an in-notch Notes tab) that takes
   keyboard focus **without** activating the app, so it never interrupts what you're doing. Notes
   autosave to disk and survive restarts.
+
+## What the notch shows you
+
+The closed notch is a single strip with three zones: a **left slot** (album art), the **hardware
+notch** itself (the black cutout over the camera), and a **right slot** (visualizer / Claude status).
+What lands in each zone depends on what's happening — here's how to read it. (All the Claude bits
+below only ever appear once the monitor is on; it's off by default and observe-only.)
+
+The one rule that explains most of it: **Claude never pushes your music off the notch.** When a
+track is playing, Claude's status rides the right-hand visualizer slot instead of taking over —
+album art and title never disappear. Only when there's *no* music does Claude get the whole strip.
+(Transient system HUDs — battery, volume, brightness — are the one thing that can briefly take the
+notch from music; Claude never does.)
+
+### music only
+
+A track is playing (or paused-but-not-idle) and Claude is quiet:
+
+```
+   [ ♫ album ]  ▓▓▓▓▓▓  ≋≋≋
+        art      notch   spectrum
+```
+
+The right slot is your music-visualizer (spectrum bars, or your chosen preset).
+
+### Claude working — no music
+
+A session is mid-turn (Claude is "cooking"). The whole strip is Claude's:
+
+```
+   ✦  ▓▓▓▓▓▓  ●
+  purple        blue dot
+ (pulsing)
+```
+
+A **purple pulsing ✦** hugs the left edge of the notch; a **blue dot** sits on the right (with a
+count if more than one session is running). "Working" means *actively mid-turn* — and it is **not**
+time-gated, so a long, silent "thinking" stretch still counts as working (it won't flip off just
+because Claude went quiet for a minute).
+
+If sessions are live but idle between turns, the same indicator turns **green** instead — a calm
+"active" presence rather than a pulsing "working" one:
+
+```
+   ✦  ▓▓▓▓▓▓  ●
+  green         green dot
+```
+
+### Claude needs you — no music
+
+A session is blocked on a permission prompt or a question:
+
+```
+   ✦  ▓▓▓▓▓▓  2 need you
+ purple
+(pulsing)
+```
+
+A **pulsing ✦** on the left, and **"N need you"** spelled out on the right (a single waiting session
+reads "1 needs you"). This one is **persistent** — it never auto-expires; it stays until you answer
+(and that session is pinned to the top of the Agent tab). Needs-you outranks working/active, so
+you'll always see the words "need you" rather than a bare dot when something is waiting.
+
+### music *and* Claude working
+
+Music wins the notch; the working session rides the right slot, replacing the spectrum:
+
+```
+   [ ♫ album ]  ▓▓▓▓▓▓  ✦
+        art      notch   purple
+```
+
+Album art and track stay put — only the visualizer slot changes to a **purple ✦**.
+
+### music *and* Claude needs you
+
+Same idea, but now the right slot carries the alert — in **orange**, to stand out from the purple
+"working" sparkle, with the "need you" text inline:
+
+```
+   [ ♫ album ]  ▓▓▓▓▓▓  ✦ 2 need you
+        art      notch   orange
+```
+
+Music keeps playing; the notch just grows on the right to fit the label. Claude never shoves your
+music aside.
+
+### the needs-you notification (optional)
+
+If notifications are on, the moment a session needs a permission/answer the notch can **pop open
+straight to the Agent tab** (with an optional sound). The guard rails:
+
+- It pops **only from a closed notch** — it will *never* hijack a notch you already opened for music,
+  the shelf, or the notepad. If the notch is already open, the live Agent tab just updates in place.
+- It's **suppressed if the session's Ghostty window is already frontmost** (you're already looking
+  at it). This is best-effort and **Ghostty-only** — a frontmost Terminal.app session is not
+  suppressed — and it's a toggle (`agentSuppressWhenFrontmost`, on by default).
+- **Permission and question pops stay until you answer them.** A "finished" pop auto-collapses after
+  ~10 seconds.
+- Auto-open and sound are independent toggles — you can have a quiet indicator only, a sound only, or
+  the full pop.
+
+### quick reference
+
+| right slot / sparkle | meaning |
+| --- | --- |
+| spectrum bars (no ✦) | music playing, Claude quiet |
+| **purple ✦** + blue dot | Claude **working** (mid-turn) |
+| **green ✦** + green dot | session(s) live but **idle** ("active") |
+| **purple ✦** + "N need you" | a session **needs you** (no music) |
+| **purple ✦** in the music slot | Claude **working** while music plays |
+| **orange ✦** + "need you" in the music slot | a session **needs you** while music plays |
+
+Mnemonic: **pulsing = something's happening**, **green = calm/idle**, and the words **"need you"**
+(orange when riding music) always mean *you're being asked something*.
+
+### the open Agent tab
+
+Tap the notch and switch to **Agent** for the full picture. Each session is a recap row — its goal,
+a one-line recap of the latest outcome, and identity chips (**branch · terminal · model ·
+permission-mode**) so same-repo sessions stay distinct, plus a `k/n` task badge. Sessions that need
+you are **pinned to the top**. When Claude asks for something you answer it right there: a
+**permission** prompt shows an orange Allow/Deny card (plus Claude's structured one-tap options, like
+"always allow Bash here", when offered); a **question** shows a yellow card that handles multiple
+questions, multi-select, freeform answers, and ASCII/code previews. The arrow button **jumps to the
+session's terminal** (Ghostty / Terminal.app) — that one needs the Automation permission.
 
 ## Requirements
 
@@ -125,9 +252,10 @@ Both are requested only when needed, and the app runs unsandboxed.
 ## The agent monitor is off by default
 
 The Claude Code monitor does nothing until you turn it on. Open **Settings → Agent**, enable
-monitoring, and install the Claude Code hooks from there. Until then the bridge never starts, and no
-changes are made to your `~/.claude/settings.json`. The Agent tab is visible by default but simply
-shows "no active sessions" while monitoring is off.
+monitoring, and install the Claude Code hooks from there. Your existing `~/.claude/settings.json` is
+backed up first and the install is fully reversible — **Remove hooks** in the same pane restores it.
+Until then the bridge never starts, and no changes are made to your settings. The Agent tab is
+visible by default but simply shows "no active sessions" while monitoring is off.
 
 ## Documentation
 
