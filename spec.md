@@ -460,10 +460,18 @@ remaining work is **Part II → Roadmap & TODO**.
 - **Settings tabs are enum-driven.** `SettingsTab` (in `SettingsView.swift`) is the single source for
   both the sidebar list and the detail `switch` — add a tab there, not in two places. The selected tab
   persists via `@AppStorage("settingsSelectedTab")`.
-- **Version: local vs release.** `project.pbxproj` `MARKETING_VERSION` (`0.1.0`) / `CURRENT_PROJECT_VERSION`
-  (`271`) govern **local dev builds only**; the release workflow overrides both from the git tag
-  (`v0.1.0` → marketing `0.1.0`, build = `github.run_number`). The high local build number keeps dev
-  builds correctly "up to date" against the low release run-numbers — it is **not** the release counter.
+- **Version: local vs release.** `project.pbxproj` `MARKETING_VERSION` (currently `0.2.0`) /
+  `CURRENT_PROJECT_VERSION` (`271`) govern **local dev builds only**; the release workflow overrides both
+  from the git tag (`v0.2.0` → marketing `0.2.0`, build = `github.run_number`). The high local build
+  number keeps dev builds correctly "up to date" against the low release run-numbers — it is **not** the
+  release counter. The workflow forces `make_latest: true`.
+- **`gh` defaults to `upstream` (boring.notch), not the fork.** Remotes: `origin` = `7amza-eth/NotchNerd`,
+  `upstream` = `TheBoredTeam/boring.notch`. Without a default set, `gh release` / `gh run` resolve against
+  **upstream** and show boring.notch's `v2.7.x` releases + its Actions — *not* the fork's. Fix:
+  `gh repo set-default 7amza-eth/NotchNerd` (set) or always pass `--repo 7amza-eth/NotchNerd`. The fork's
+  only releases are NotchNerd's `0.x` (`v0.1.0`, `v0.2.0`, …); the `v2.x` tags/releases are upstream's and
+  unrelated. The fork's `.github/workflows/` is just `release.yml` (the inherited crowdin/pages/build
+  workflows were already removed; old failed runs are stale history).
 - **`AppDelegate`, not the App body, owns lifecycle.** Don't look for window/agent/notepad wiring
   in the SwiftUI scene.
 - **Two notch window classes; only `NotchNerdSkyLightWindow` is live.** Editing `NotchNerdWindow.swift`
