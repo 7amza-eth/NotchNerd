@@ -58,6 +58,15 @@ It is **observe-only** — it never calls the Anthropic API and stores no creden
   keyboard focus **without** activating the app, so it never interrupts what you're doing. Notes
   autosave to disk and survive restarts.
 
+**New in NotchNerd — getting set up**
+
+- **First-run onboarding wizard** — walks you through permissions and your music source, with an opt-in
+  step to enable the agent monitor (it installs the hooks for you), and ends with a short **feature
+  tour** you can replay anytime (menu-bar **✦** → *Feature Tour*, or Settings → General).
+- **A full Settings window** — menu-bar **✦** → *Settings* (or ⌘,): a grouped sidebar for every surface
+  (Media, Calendar, Shelf, Notepad, Webcam, HUDs, Battery, Agent, Appearance, Shortcuts), plus
+  reset-to-defaults.
+
 ## What the notch shows you
 
 The closed notch is a single strip with three zones: a **left slot** (album art), the **hardware
@@ -241,13 +250,37 @@ re-`xattr`. (Auto-updates verify a signature rather than Gatekeeper, so the quar
 
 ## First run & permissions
 
-NotchNerd is a menu-bar app — look for its icon in the menu bar, not the Dock. To use everything,
-grant these in **System Settings → Privacy & Security**:
+NotchNerd is a menu-bar app — look for its **✦ icon in the menu bar**, not the Dock. On first launch a
+short **onboarding wizard** walks you through setup: a welcome screen, one card per permission, a quick
+music-source pick, a heads-up about the **Automation** prompt, and an opt-in step to turn on the Claude
+Code agent monitor (which installs its hooks for you). Every step is skippable, and it ends by offering
+the feature tour.
 
-- **Accessibility** — for the media-key and gesture handling.
-- **Automation** — to control your music app and to jump into Ghostty / Terminal.app.
+The permissions, all requested only when needed (the app is unsandboxed):
 
-Both are requested only when needed, and the app runs unsandboxed.
+- **Accessibility** — to replace the system HUDs and for media-key / gesture handling.
+- **Automation** — to control your music app and jump into Ghostty / Terminal.app (asked the first time
+  it's needed, not up front).
+- **Camera / Calendar / Reminders** — for the webcam mirror and the calendar widget (optional).
+
+Re-grant or revoke any of these later in **System Settings → Privacy & Security**.
+
+## Settings & the menu-bar icon
+
+Click the menu-bar **✦** for the quick menu: open **Settings** (⌘,), pop out the **Notepad**, replay the
+**Feature Tour**, **Check for Updates**, or restart / quit.
+
+**Settings** is a normal window with a grouped sidebar:
+
+- **General / Appearance** — displays, notch sizing, gestures, the menu-bar icon, accent color, the
+  notch tab strip, and *Replay feature tour…*.
+- **Notch features** — Media, Calendar, Shelf, Notepad, Webcam, HUDs, Battery, and **Agent** (enable
+  monitoring, install / repair hooks, notifications, sounds, the usage HUD).
+- **Advanced + About** — Shortcuts (hotkeys), window behavior, and **Reset all settings to defaults**
+  (which leaves your notes and shelf files untouched).
+
+Hidden the menu-bar icon? Turn on **Appearance → "Show settings icon in notch"** to open Settings from a
+gear inside the open notch instead.
 
 ## The agent monitor is off by default
 
@@ -255,12 +288,16 @@ The Claude Code monitor does nothing until you turn it on. Open **Settings → A
 monitoring, and install the Claude Code hooks from there. Your existing `~/.claude/settings.json` is
 backed up first and the install is fully reversible — **Remove hooks** in the same pane restores it.
 Until then the bridge never starts, and no changes are made to your settings. The Agent tab is
-visible by default but simply shows "no active sessions" while monitoring is off.
+visible by default but simply shows "no active sessions" while monitoring is off. The onboarding wizard
+offers this same one-tap enable + hook install as an opt-in step, so if you turned it on there, it's
+already running.
 
 ## Documentation
 
 - [`spec.md`](./spec.md) — the single canonical doc: architecture, data flow, key files, and gotchas
   (Part I) + roadmap, decision log, TODO, and deferred-work reference (Part II).
+- **[Releases](https://github.com/7amza-eth/NotchNerd/releases)** — the changelog: what's new in each
+  version, with prebuilt builds attached.
 
 ## Credits & license
 

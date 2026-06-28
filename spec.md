@@ -40,7 +40,7 @@ On top of that base, NotchNerd adds two new surfaces:
 | UI | SwiftUI hosted in AppKit `NSPanel`s; `MenuBarExtra` scene; SwiftUIIntrospect. |
 | Min OS | **macOS 14.0 (Sonoma)** (`MACOSX_DEPLOYMENT_TARGET = 14.0`, `platforms: [.macOS(.v14)]`). |
 | Toolchain | **Full Xcode required** (not just Command Line Tools). `xcode-select -p` → `/Applications/Xcode.app/Contents/Developer`. A run-script build phase shells out to `swift build`. |
-| Version | `MARKETING_VERSION = 2.7.3`, `CURRENT_PROJECT_VERSION = 271`. |
+| Version | `MARKETING_VERSION = 0.2.1`, `CURRENT_PROJECT_VERSION = 271` — local dev-build values; the release workflow overrides both from the git tag (latest release: `v0.2.1`). |
 | License | **GNU GPL v3** (both boring.notch and Open Island are GPL v3 → merged work is GPL v3). |
 | Bundle IDs | App `eth.7amza.notchnerd`; XPC helper `eth.7amza.notchnerd.XPCHelper`. |
 
@@ -165,6 +165,12 @@ NotchNerd/                          repo root
   `agentSoundEnabled` / `agentUsageEnabled`).
 - **Always-open Notepad** — floating key-capable panel + in-notch Notes tab over one shared
   multi-note store; toggled via menu-bar button and a global hotkey.
+- **First-run onboarding + feature tour** — a guided wizard (welcome → camera/calendar/reminders/
+  accessibility/music → an Automation explainer → an opt-in **agent-monitor consent** that installs
+  hooks and enables monitoring only on a *confirmed* install) + a re-runnable 7-card feature tour
+  (menu-bar item + Settings → General; auto-shown once to upgraders via `hasSeenFeatureTour`).
+- **Redesigned Settings** — an enum-driven (`SettingsTab`) grouped sidebar (General/Appearance · Notch
+  features · Advanced · About), with **Notepad** + **Webcam** tabs and **Reset-to-defaults**.
 
 ## Architecture
 
@@ -431,23 +437,26 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 
 ## Project status
 
-The app is **feature-complete** — all core implementation phases are shipped and the comprehensive
-rename to NotchNerd is done. Full phase history is in **Part II → Changelog**; the canonical list of
-remaining work is **Part II → Roadmap & TODO**.
+The app is **feature-complete and publicly released** (latest **v0.2.1**) — all core implementation
+phases are shipped. The **user-visible** rebrand to NotchNerd is done; the **structural** rename (SPM
+module/products, the embedded hook-binary + socket/statusline paths, the XPC helper display name) is
+deliberately deferred to Phase 6. Full phase history is in **Part II → Changelog**; the canonical list
+of remaining work is **Part II → Roadmap & TODO**.
 
-- **Done:** Phase 0 (sandbox-off regression baseline), Phase 1 (vendor engine as local SPM), Phase 2
-  (agent driver `AgentBridgeManager` — bridge + observer + reducer + hook install + approve/deny
-  round-trip), Phase 3 (Agent tab UI), Phase 4 (Ghostty jump), Phase 5 (notepad — both surfaces,
-  spike validated GO on-device), the rebrand identity work (bundle id `eth.7amza.notchnerd`, Sparkle
-  disabled, violet icon), Phase 5.5 (loose-thread audit & fixes), OI-feature-port batch 1
-  (notification mode + sounds, expanded session panel, usage HUD, Ghostty hardening), and this
-  session's work (Terminal.app jump, taller Agent tab, closed-notch working/active status, music
-  visualizer presets).
+- **Done:** Phase 0 (sandbox-off baseline), Phase 1 (vendor engine as local SPM), Phase 2 (agent driver
+  `AgentBridgeManager` — bridge + observer + reducer + hook install + approve/deny), Phase 3 (Agent tab
+  UI), Phase 4 (Ghostty jump), Phase 5 (notepad — both surfaces), the rebrand identity work (bundle id
+  `eth.7amza.notchnerd`, **Sparkle auto-updates enabled**, violet icon), Phase 5.5 (loose-thread audit),
+  OI-feature-port batch 1 (notification mode + sounds, expanded panel, usage HUD, Ghostty hardening),
+  Terminal.app jump / taller Agent tab / closed-notch status / visualizer presets, **HookHealthCheck**,
+  and the **public-release line** — the GitHub Actions release workflow + Sparkle pipeline, the
+  **v0.2.0** onboarding wizard + feature tour + Settings redesign, and **v0.2.1** (the hardened-runtime
+  launch fix).
 - **Remaining (see Part II → Roadmap & TODO for the authoritative list):** Phase 6 (socket/hook +
   statusline-cache namespacing off `eth.7amza.notchnerd`; the inherited pending-interaction overwrite
-  patch; http-hook spike; HookHealthCheck; residual rebrand), more terminals / more agents (engine
-  already vendored — wiring jobs), and the optional Phase 7 Cowork read-only watcher (approve/deny
-  stays CLI-only).
+  patch; http-hook spike; residual structural rebrand), more terminals / more agents (engine already
+  vendored — wiring jobs), and the optional Phase 7 Cowork read-only watcher (approve/deny stays
+  CLI-only).
 
 ## Conventions / gotchas
 
@@ -465,9 +474,9 @@ remaining work is **Part II → Roadmap & TODO**.
 - **Settings tabs are enum-driven.** `SettingsTab` (in `SettingsView.swift`) is the single source for
   both the sidebar list and the detail `switch` — add a tab there, not in two places. The selected tab
   persists via `@AppStorage("settingsSelectedTab")`.
-- **Version: local vs release.** `project.pbxproj` `MARKETING_VERSION` (currently `0.2.0`) /
+- **Version: local vs release.** `project.pbxproj` `MARKETING_VERSION` (currently `0.2.1`) /
   `CURRENT_PROJECT_VERSION` (`271`) govern **local dev builds only**; the release workflow overrides both
-  from the git tag (`v0.2.0` → marketing `0.2.0`, build = `github.run_number`). The high local build
+  from the git tag (`v0.2.1` → marketing `0.2.1`, build = `github.run_number`). The high local build
   number keeps dev builds correctly "up to date" against the low release run-numbers — it is **not** the
   release counter. The workflow forces `make_latest: true`.
 - **`gh` defaults to `upstream` (boring.notch), not the fork.** Remotes: `origin` = `7amza-eth/NotchNerd`,
@@ -627,6 +636,9 @@ scope entirely: chat-app AX automation and any MCP-based monitor (MCP only ever 
 *own* tools, never the session or the permission prompt).
 
 ## Changelog
+
+> Dev-facing technical phase history (the load-bearing what + why per phase). The **user-facing**
+> changelog is **GitHub Releases** — curated per `v*` tag — *not* a `CHANGELOG.md` file.
 
 Condensed per-phase summary of what shipped. (Build-verified `BUILD SUCCEEDED`, committed, pushed at
 each phase; git history holds the dated detail.)
