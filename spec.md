@@ -119,10 +119,10 @@ NotchNerd/                          repo root
 │  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
-├─ updater/                         appcast.xml + Sparkle (feed currently disabled)
 ├─ spec.md                          this doc — reference + roadmap + decisions + TODO + deferred reference
-├─ README.md  SECURITY.md  crowdin.yml
+├─ README.md  SECURITY.md
 ├─ LICENSE (GPL v3)  THIRD_PARTY_LICENSES
+├─ .github/workflows/release.yml    CI release: build + Sparkle-sign + appcast + GitHub Release (on a v* tag)
 └─ .github/  .devcontainer/  build/ (ignored Xcode output incl. boringNotch.build)
 ```
 
@@ -351,8 +351,15 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 - **App is non-sandboxed** (`com.apple.security.app-sandbox = false`) with apple-events automation +
   temporary exceptions for `com.spotify.client` / `com.apple.Music` — required for media control,
   but blocks Mac App Store distribution.
-- **Sparkle 2.9.1 is linked but the update feed is disabled** (`SUEnableAutomaticChecks = false`,
-  no `SUFeedURL`/`SUPublicEDKey` anywhere). Updates won't fetch until a feed is configured.
+- **Sparkle 2.9.1 — auto-updates ENABLED.** NotchNerd ships its OWN EdDSA key (`SUPublicEDKey` in
+  `Info.plist`; the private half is the `SPARKLE_PRIVATE_KEY` GitHub Actions secret + a Keychain backup)
+  and `SUFeedURL` → `https://github.com/7amza-eth/NotchNerd/releases/latest/download/appcast.xml`. The
+  **release workflow** (`.github/workflows/release.yml`) builds, EdDSA-signs the build, generates +
+  signs the `appcast.xml`, and attaches it (with the zip + dmg) to a GitHub Release on each `v*` tag —
+  so installed copies auto-update. Builds are still **ad-hoc signed and NOT notarized**, so a first
+  download is Gatekeeper-blocked (testers clear quarantine once: `xattr -dr com.apple.quarantine …`);
+  Sparkle's own updates aren't re-quarantined, so it's a one-time step. ⚠️ **Never re-add boring.notch's
+  `SUPublicEDKey`** — only NotchNerd-signed updates verify against our key.
 
 ## Key files (entry points)
 
@@ -654,6 +661,12 @@ each phase; git history holds the dated detail.)
     inherited `FUNDING.yml` (routed to upstream), the dead boring.notch `appcast.xml` / issue & PR
     templates / `crowdin.yml`, and de-branded the DMG packaging defaults; `THIRD_PARTY_LICENSES` now
     lists the linked SPM deps.
+  - **Public release + auto-update pipeline.** Repo flipped **public**; added the GitHub Actions
+    **release workflow** (`.github/workflows/release.yml`) — on a `v*` tag it builds, packages zip + dmg,
+    EdDSA-signs + generates a Sparkle appcast, and publishes a GitHub Release. **Sparkle auto-updates
+    enabled** with NotchNerd's own key (first release: `v0.1.0`). Distribution is still ad-hoc / **not
+    notarized**, so testers clear quarantine once (README "Install a prebuilt build" has the steps);
+    notarization is a possible future step (deliberately not documented here).
 
 ## Roadmap & TODO
 
@@ -683,18 +696,16 @@ subsections below where an implementer needs the concrete recipe.
 - **HookHealthCheck — DONE.** Wired into Settings → Agent (diagnose on launch/refresh/install + a
   Repair-hooks action reusing the installer's `settings.json` backup). Remaining: exercise against more
   live hook-schema drift (`StopFailure` is already handled).
-- **Finish the rebrand.** **User-visible surfaces DONE** (welcome-screen icon/wordmark, About tagline,
-  "webcam mirror", hook-error string, release codename, README). `THIRD_PARTY_LICENSES` already credits
-  Open Island (the earlier "omits" note was stale). **Remaining is structural** (not user-visible app
-  identity): the SPM module/products (`OpenIslandCore`/`OpenIslandHooks`), the embedded hook-binary name
-  + socket/statusline paths (folds into the namespacing item above), the `BoringNotchXPCHelper` display
-  name, the DMG volume name, and the dead boring.notch `updater/appcast.xml` + `.github/FUNDING.yml`
-  (routes to upstream — **fix before going public**) + inherited issue/PR templates + `crowdin.yml`. The
-  vendor-merge audit recommends **keeping the SPM boundary** (load-bearing: the separate hook-CLI Mach-O
-  must share Core, and the Swift-6/Swift-5 language-mode split must stay isolated) while rebranding its
-  identity in tiers (rename products via a `path:` override that preserves the re-pull dir; namespace
-  runtime paths). Also: reconcile `THIRD_PARTY_LICENSES` with the actual linked SPM deps (it lists some
-  unused deps + omits Lottie/Sparkle/etc.) before a public binary release.
+- **Finish the rebrand.** **User-visible + pre-public surfaces DONE** (welcome-screen icon/wordmark,
+  About tagline, "webcam mirror", hook-error string, release codename, README; DMG volume name
+  de-branded; the dead boring.notch `updater/appcast.xml` + `.github/FUNDING.yml` + inherited issue/PR
+  templates + `crowdin.yml` removed; `THIRD_PARTY_LICENSES` credits Open Island and now lists the linked
+  SPM deps). **Remaining is structural** (not user-visible app identity): the SPM module/products
+  (`OpenIslandCore`/`OpenIslandHooks`), the embedded hook-binary name + socket/statusline paths (folds
+  into the namespacing item above), and the `BoringNotchXPCHelper` display name. The vendor-merge audit
+  recommends **keeping the SPM boundary** (load-bearing: the separate hook-CLI Mach-O must share Core,
+  and the Swift-6/Swift-5 language-mode split must stay isolated) while rebranding its identity in tiers
+  (rename products via a `path:` override that preserves the re-pull dir; namespace runtime paths).
 
 ### More terminals (remainder of OI review item #5)
 
