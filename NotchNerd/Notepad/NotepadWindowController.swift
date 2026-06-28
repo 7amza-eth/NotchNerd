@@ -46,7 +46,7 @@ enum NotepadFloatStrategy: String, Defaults.Serializable {
 // MARK: - Global hotkey name
 
 extension KeyboardShortcuts.Name {
-    static let toggleNotepad = Self("toggleNotepad")
+    static let toggleNotepad = Self("toggleNotepad", default: .init(.n, modifiers: [.command, .shift]))
 }
 
 // MARK: - Controller
