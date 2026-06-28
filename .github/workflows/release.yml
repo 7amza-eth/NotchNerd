@@ -1,0 +1,85 @@
+name: Release
+
+# Builds NotchNerd (Release) and publishes a GitHub Release with downloadable artifacts.
+#
+# Trigger it either by:
+#   • pushing a version tag:   git tag v2.7.3 && git push origin v2.7.3
+#   • running it manually:     Actions tab → Release → "Run workflow" (enter a tag)
+#
+# The app is ad-hoc signed (CODE_SIGN_IDENTITY = "-"), so this needs NO signing secrets —
+# but the published build is therefore NOT notarized, and users will need the one-time
+# `xattr -dr com.apple.quarantine` step on first launch (documented in the README).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to release (e.g. v2.7.3). Created from the current commit if it does not exist.'
+        required: true
+
+permissions:
+  contents: write   # required to create the release
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: xcodebuild -version && swift --version
+
+      - name: Build (Release, ad-hoc signed)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project NotchNerd.xcodeproj \
+            -scheme NotchNerd \
+            -configuration Release \
+            -derivedDataPath build \
+            build | tail -n 40
+          test -d "build/Build/Products/Release/NotchNerd.app"
+
+      - name: Package .zip
+        run: |
+          ditto -c -k --keepParent "build/Build/Products/Release/NotchNerd.app" "NotchNerd.zip"
+          ls -la NotchNerd.zip
+
+      - name: Package .dmg (best effort)
+        id: dmg
+        continue-on-error: true
+        run: |
+          python3 -m venv .dmgvenv
+          ./.dmgvenv/bin/pip install --quiet --require-hashes -r Configuration/dmg/requirements.txt
+          export PATH="$PWD/.dmgvenv/bin:$PATH"
+          Configuration/dmg/create_dmg.sh \
+            "build/Build/Products/Release/NotchNerd.app" \
+            "NotchNerd.dmg" \
+            "NotchNerd"
+          ls -la NotchNerd.dmg
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: NotchNerd ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          body: |
+            Prebuilt NotchNerd build. **Not notarized** (ad-hoc signed), so on first launch:
+
+            1. Move `NotchNerd.app` to `/Applications`.
+            2. Run: `xattr -dr com.apple.quarantine /Applications/NotchNerd.app`
+            3. Launch it and grant **Accessibility** + **Automation** when asked.
+
+            NotchNerd is a menu-bar app (no Dock icon) — look at your notch / the menu bar.
+            The Claude Code agent monitor is **off by default** (Settings → Agent to enable).
+
+            See the README for details and the build-from-source option.
+          files: |
+            NotchNerd.zip
+            NotchNerd.dmg
