@@ -140,8 +140,6 @@ struct GeneralSettings: View {
     @EnvironmentObject var vm: NotchNerdViewModel
     @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
 
-    @Default(.mirrorShape) var mirrorShape
-    @Default(.showEmojis) var showEmojis
     @Default(.gestureSensitivity) var gestureSensitivity
     @Default(.minimumHoverDuration) var minimumHoverDuration
     @Default(.nonNotchHeight) var nonNotchHeight
@@ -921,8 +919,7 @@ struct About: View {
 }
 
 struct Shelf: View {
-    
-    @Default(.shelfTapToOpen) var shelfTapToOpen: Bool
+
     @Default(.quickShareProvider) var quickShareProvider
     @Default(.expandedDragDetection) var expandedDragDetection: Bool
     @StateObject private var quickShareService = QuickShareService.shared

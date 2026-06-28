@@ -663,53 +663,59 @@ struct AgentSettings: View {
             }
 
             Section {
-                Defaults.Toggle(key: .agentNotificationsEnabled) { Text("Pop the notch on agent events") }
-                Defaults.Toggle(key: .agentAutoOpenNotch) { Text("Auto-open the notch (off = sound + indicator only)") }
-                Defaults.Toggle(key: .agentNotifyOnCompletion) { Text("Notify when a session finishes") }
-                Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal is already focused") }
+                Defaults.Toggle(key: .agentNotificationsEnabled) { Text("Open the notch on agent events") }
+                Group {
+                    Defaults.Toggle(key: .agentAutoOpenNotch) { Text("Auto-open the notch (off = sound + indicator only)") }
+                    Defaults.Toggle(key: .agentNotifyOnCompletion) { Text("Notify when a session finishes") }
+                    Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal is already focused") }
+                }
+                .disabled(!agentNotificationsEnabled)
             } header: {
                 Text("Notifications")
             } footer: {
                 Text("Permission and question prompts stay until you answer them; completion notices auto-dismiss after 10 seconds.")
             }
-            .disabled(!agentNotificationsEnabled)
 
             Section {
                 Defaults.Toggle(key: .agentSoundEnabled) { Text("Play a sound when a session needs you") }
-                Defaults.Toggle(key: .agentSoundMuted) { Text("Mute") }
-                Picker("Sound", selection: $agentSoundName) {
-                    ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
-                        Text(name).tag(name)
+                Group {
+                    Defaults.Toggle(key: .agentSoundMuted) { Text("Mute") }
+                    Picker("Sound", selection: $agentSoundName) {
+                        ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
+                            Text(name).tag(name)
+                        }
                     }
+                    .onChange(of: agentSoundName) { _, name in AgentNotificationSound.play(name) }
+                    Button("Preview") { AgentNotificationSound.play(agentSoundName) }
                 }
-                .onChange(of: agentSoundName) { _, name in AgentNotificationSound.play(name) }
-                Button("Preview") { AgentNotificationSound.play(agentSoundName) }
+                .disabled(!agentSoundEnabled)
             } header: {
                 Text("Sound")
             } footer: {
                 Text("Uses a macOS system sound from /System/Library/Sounds.")
             }
-            .disabled(!agentSoundEnabled)
 
             Section {
                 Defaults.Toggle(key: .agentUsageEnabled) { Text("Show Claude usage (5h / 7d quotas)") }
-                HStack {
-                    Text("Statusline")
-                    Spacer()
-                    usageStatusLabel
+                Group {
+                    HStack {
+                        Text("Statusline")
+                        Spacer()
+                        usageStatusLabel
+                    }
+                    HStack {
+                        Button("Install statusline") { usage.installIfNeeded() }
+                        Button("Remove statusline") { usage.uninstall() }
+                        Spacer()
+                        Button("Refresh") { usage.refreshStatus() }
+                    }
                 }
-                HStack {
-                    Button("Install") { usage.installIfNeeded() }
-                    Button("Remove") { usage.uninstall() }
-                    Spacer()
-                    Button("Refresh") { usage.refreshStatus() }
-                }
+                .disabled(!agentUsageEnabled)
             } header: {
                 Text("Usage")
             } footer: {
                 Text("Adds a managed statusLine entry to Claude Code's settings.json that records your remaining quota. If you already have a custom statusline, NotchNerd wraps it so it keeps working. Reversible.")
             }
-            .disabled(!agentUsageEnabled)
         }
         .formStyle(.grouped)
         .navigationTitle("Agent")
