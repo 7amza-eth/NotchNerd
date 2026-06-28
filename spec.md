@@ -375,9 +375,14 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
   auto-generating the implicit scheme on first open / first `xcodebuild`. In a clean/CI checkout
   you may need to let xcodebuild autocreate it or use `-target NotchNerd`.
 - **Dev signing:** signing is effectively **ad-hoc** (`CODE_SIGN_IDENTITY[sdk=macosx*] = "-"`,
-  `DEVELOPMENT_TEAM = ""`, empty provisioning profile, no notarization config). Hardened runtime is
-  on the **app target only**. Run `tooling/scripts/setup-dev-signing.sh` to create a stable
-  self-signed "NotchNerd Dev" identity so TCC Automation/Accessibility grants survive rebuilds.
+  `DEVELOPMENT_TEAM = ""`, empty provisioning profile, no notarization config). **Hardened runtime is
+  OFF** (`ENABLE_HARDENED_RUNTIME = NO`). It was on, but its **Library Validation** refused to load the
+  ad-hoc-signed `MediaRemoteAdapter.framework` ("different Team IDs") → every *downloaded* release
+  crashed at launch with a DYLD "Library missing" error (the local Debug build had it off, so the bug
+  only surfaced on releases — v0.1.0/v0.2.0). **Don't re-enable it** without a real Developer ID +
+  notarization (or add `com.apple.security.cs.disable-library-validation` and sign nested frameworks
+  with the same identity). Run `tooling/scripts/setup-dev-signing.sh` to create a stable self-signed
+  "NotchNerd Dev" identity so TCC Automation/Accessibility grants survive rebuilds.
 - **The agent is OFF by default** (`Defaults[.agentEnabled] = false`). Enable it in
   **Settings → Agent** (and Install hooks there). The Agent tab itself is visible by default
   (`agentPanelEnabled = true`) but shows nothing until monitoring is enabled.
@@ -557,7 +562,9 @@ terminals) **require an unsandboxed app**; boring.notch shipped sandboxed.
    the app to `SWIFT_STRICT_CONCURRENCY=complete`. Embed the hook CLI via a Copy-Files phase →
    `Contents/Helpers`.
 2. **Sandbox — drop it in-place.** Flip `com.apple.security.app-sandbox` → `false` (entitlements-only;
-   **keep hardened runtime ON**; keep automation + network.client). Remove now-dead Sparkle sandbox
+   keep automation + network.client). *(Historical note: hardened runtime was kept on here, but has
+   since been disabled — `ENABLE_HARDENED_RUNTIME = NO` — because it crashed ad-hoc release launches;
+   see the Dev-signing gotcha.)* Remove now-dead Sparkle sandbox
    XPC shims and **re-qualify the full Sparkle download→install→relaunch cycle** (the EdDSA key is
    load-bearing). **Don't** route privileged ops through the XPC helper to stay sandboxed — a
    sandboxed app can't host the bridge socket, write `~/.claude`, or spawn `ps`/`osascript`.
@@ -749,6 +756,15 @@ each phase; git history holds the dated detail.)
   Updates* show the wrong version; releases set it from the git tag, so unaffected). Deferred as
   low-value/risky: the calendar shared-store deselect-all snap-back, `musicControlSlotLimit` vs
   `fixedSlotCount`, and the `sliderColor`/`agentSuppressFrontmost` symbol-vs-string mismatches.
+- **v0.2.x public release + the hardened-runtime launch fix (2026-06-28).** Tagged **v0.2.0** (first
+  release built by the NotchNerd `release.yml` — onboarding + the Settings redesign) and forced
+  `make_latest: true` so the fork's `0.x` releases win "Latest". Then **v0.2.1** fixes a crash that hit
+  *every downloaded release* (incl. v0.1.0): the Release build's **hardened runtime** rejected the
+  ad-hoc-signed `MediaRemoteAdapter.framework` via Library Validation → DYLD "Library missing" at
+  launch. Disabled hardened runtime (`ENABLE_HARDENED_RUNTIME = NO`); verified a Release build signs
+  `flags=0x2` and the dmg launches. Also: `gh` was defaulting to `upstream` (boring.notch) — the
+  "inherited releases" scare was a mirage (`gh repo set-default` fixed it); release notes are now
+  hand-curated per tag (the workflow's auto-notes are thin since commits skip PRs).
 
 ## Roadmap & TODO
 
