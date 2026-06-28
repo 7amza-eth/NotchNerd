@@ -181,7 +181,13 @@ struct WheelPicker: View {
 struct CalendarView: View {
     @EnvironmentObject var vm: NotchNerdViewModel
     @ObservedObject private var calendarManager = CalendarManager.shared
+    @Default(.showReminders) private var showReminders
     @State private var selectedDate = Date()
+
+    /// Events optionally filtered to drop reminders when "Include reminders" is off.
+    private var displayEvents: [EventModel] {
+        showReminders ? calendarManager.events : calendarManager.events.filter { !$0.type.isReminder }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -214,13 +220,13 @@ struct CalendarView: View {
             }
 
             let filteredEvents = EventListView.filteredEvents(
-                events: calendarManager.events
+                events: displayEvents
             )
             if filteredEvents.isEmpty {
                 EmptyEventsView(selectedDate: selectedDate)
                 Spacer(minLength: 0)
             } else {
-                EventListView(events: calendarManager.events)
+                EventListView(events: displayEvents)
             }
         }
         .listRowBackground(Color.clear)

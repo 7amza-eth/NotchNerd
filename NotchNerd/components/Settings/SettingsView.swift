@@ -801,12 +801,13 @@ struct Media: View {
 struct CalendarSettings: View {
     @ObservedObject private var calendarManager = CalendarManager.shared
     @Default(.showCalendar) var showCalendar: Bool
+    @Default(.showReminders) var showReminders: Bool
 
     var body: some View {
         Form {
             Section {
                 Defaults.Toggle(key: .showCalendar) {
-                    Text("Show calendar & reminders")
+                    Text("Show calendar")
                 }
                 Group {
                     Defaults.Toggle(key: .hideAllDayEvents) {
@@ -818,14 +819,28 @@ struct CalendarSettings: View {
                     Defaults.Toggle(key: .showFullEventTitles) {
                         Text("Always show full event titles")
                     }
-                    Defaults.Toggle(key: .hideCompletedReminders) {
-                        Text("Hide completed reminders")
-                    }
                 }
                 .disabled(!showCalendar)
             } header: {
-                Text("Calendar & reminders")
+                Text("Calendar")
             }
+
+            Section {
+                Defaults.Toggle(key: .showReminders) {
+                    Text("Include reminders")
+                }
+                Defaults.Toggle(key: .hideCompletedReminders) {
+                    Text("Hide completed reminders")
+                }
+                .disabled(!showReminders)
+            } header: {
+                Text("Reminders")
+            } footer: {
+                Text("Reminders appear inside the calendar widget, so they show only while the calendar is on.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .disabled(!showCalendar)
 
             Section(header: Text("Calendars")) {
                 if calendarManager.calendarAuthorizationStatus != .fullAccess {
