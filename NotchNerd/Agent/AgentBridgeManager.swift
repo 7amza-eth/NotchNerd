@@ -299,7 +299,8 @@ final class AgentBridgeManager: ObservableObject {
         // group, so an actionable session is never buried under newer running noise.
         let needsAttention = visible.filter { $0.phase.requiresAttention }
         let others = visible.filter { !$0.phase.requiresAttention }
-        sessions = (needsAttention + others).map(Self.debranded)
+        reconcileKeepPlanning()
+        sessions = (needsAttention + others).map(Self.debranded).map(projectedKeepPlanning)
         actionableSession = state.activeActionableSession.map(Self.debranded)
         attentionCount = state.attentionCount
         liveSessionCount = state.liveSessionCount
@@ -350,6 +351,45 @@ final class AgentBridgeManager: ObservableObject {
         republish()
         send(.answerQuestion(sessionID: session.id, response: response))
         notificationDismissPublisher.send(session.id)
+    }
+
+    // MARK: Plan mode ("No, keep planning")
+
+    /// Sessions where the user chose "keep planning" on a plan-review card. The engine's deny path
+    /// flips the row to `.completed` with a hardcoded "Permission denied…" summary (ignoring our
+    /// message), which reads wrong for a keep-planning action — `projectedKeepPlanning` rewrites
+    /// the projection until Claude resumes (`.running`) and the flag reconciles away.
+    private var keepPlanningSessionIDs: Set<String> = []
+
+    /// "No, keep planning" from the plan-review card: a deny whose message carries the user's plan
+    /// feedback back to Claude (it revises the plan and calls ExitPlanMode again).
+    func keepPlanning(sessionID: String, feedback: String) {
+        guard let session = state.session(id: sessionID) else { return }
+        let trimmed = feedback.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = trimmed.isEmpty
+            ? "Keep planning — the user wants to refine the plan before implementation."
+            : trimmed
+        let resolution = PermissionResolution.deny(message: message, interrupt: false)
+        keepPlanningSessionIDs.insert(session.id)
+        state.resolvePermission(sessionID: session.id, resolution: resolution)
+        republish()
+        send(.resolvePermission(sessionID: session.id, resolution: resolution))
+        notificationDismissPublisher.send(session.id)
+    }
+
+    private func reconcileKeepPlanning() {
+        guard !keepPlanningSessionIDs.isEmpty else { return }
+        keepPlanningSessionIDs = keepPlanningSessionIDs.filter { id in
+            guard let session = state.session(id: id) else { return false }
+            return session.phase != .running
+        }
+    }
+
+    private func projectedKeepPlanning(_ session: AgentSession) -> AgentSession {
+        guard keepPlanningSessionIDs.contains(session.id) else { return session }
+        var session = session
+        session.summary = "Planning continues — feedback sent to Claude."
+        return session
     }
 
     func dismiss(sessionID: String) {

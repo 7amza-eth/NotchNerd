@@ -181,7 +181,11 @@ struct AgentSessionRow: View {
                 AgentSessionDetailView(session: session)
             }
             if let request = session.permissionRequest, session.phase == .waitingForApproval {
-                permissionCard(request)
+                if request.toolName == "ExitPlanMode" {
+                    PlanReviewCard(session: session, request: request)
+                } else {
+                    permissionCard(request)
+                }
             } else if let question = session.questionPrompt, session.phase == .waitingForAnswer {
                 QuestionCard(prompt: question) { response in
                     agent.answer(sessionID: session.id, response: response)
@@ -239,6 +243,173 @@ struct AgentSessionRow: View {
         return request.primaryActionTitle.isEmpty ? "Allow" : request.primaryActionTitle
     }
 
+}
+
+/// Plan-mode review card, shown instead of the generic permission card when Claude calls
+/// `ExitPlanMode`. Mirrors the real CLI plan-approval menu (labels/values verified against the
+/// Claude Code v2.1.198 binary — see spec.md v0.3): the leading "yes" option depends on the
+/// session's mode ("Yes, and use auto mode" for auto sessions, else "Yes, auto-accept edits"),
+/// then "Yes, manually approve edits", an Ultraplan jump-to-terminal escape hatch, and
+/// "No, keep planning" with a first-class feedback field. Each "yes" round-trips
+/// allow + setMode(.session, mode) — the CLI provably applies updatedPermissions from
+/// PermissionRequest hooks. Do NOT use ClaudePermissionUpdate.displayLabel here (its mapping is
+/// inverted vs. the real menu).
+struct PlanReviewCard: View {
+    let session: AgentSession
+    let request: PermissionRequest
+    @ObservedObject private var agent = AgentBridgeManager.shared
+
+    @State private var planText: String?
+    @State private var planLoaded = false
+    @State private var resolving = false
+    @State private var showFeedback = false
+    @State private var feedback = ""
+    @FocusState private var feedbackFocused: Bool
+
+    private struct PlanChoice {
+        let label: String
+        let mode: ClaudePermissionMode
+        let prominent: Bool
+    }
+
+    /// CLI-mirrored "yes" options: the first (prominent) entry matches what the terminal shows
+    /// first for this session's current mode; mutually exclusive auto variants, like the CLI.
+    private var choices: [PlanChoice] {
+        let first: PlanChoice = session.claudeMetadata?.permissionMode == .auto
+            ? PlanChoice(label: "Yes, and use auto mode", mode: .auto, prominent: true)
+            : PlanChoice(label: "Yes, auto-accept edits", mode: .acceptEdits, prominent: true)
+        return [first, PlanChoice(label: "Yes, manually approve edits", mode: .default, prominent: false)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: "list.clipboard").font(.caption).foregroundStyle(.purple)
+                Text("Claude finished planning").font(.caption).bold()
+            }
+
+            planBody
+
+            if resolving {
+                Text("Sent — waiting for Claude…").font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+
+            ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in
+                planButton(choice)
+            }
+
+            if agent.canJump(session) {
+                Button {
+                    agent.jump(sessionID: session.id)
+                } label: {
+                    Label("Refine with Ultraplan — continue in terminal", systemImage: "arrow.uturn.forward.square")
+                        .font(.system(size: 9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderless).tint(.secondary).controlSize(.small)
+                .help("Ultraplan runs in the terminal/cloud — it can't be started from a hook")
+            }
+
+            keepPlanningSection
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.14)))
+        .disabled(resolving)
+        .task(id: request.id) {
+            guard let path = session.claudeMetadata?.transcriptPath else { planLoaded = true; return }
+            let toolUseID = request.toolUseID
+            planText = await Task.detached(priority: .userInitiated) {
+                PlanTextLoader.loadPlan(transcriptPath: path, toolUseID: toolUseID)
+            }.value
+            planLoaded = true
+        }
+        // Same non-key-panel dance as QuestionCard: the feedback field needs the notch to be key.
+        .background { if showFeedback { NotchFreeformKeyMaker() } }
+        .onChange(of: showFeedback) { _, active in
+            NotepadNotchFocus.allowsNotchKey = active
+            SharingStateManager.shared.preventNotchClose = active
+            if active { feedbackFocused = true }
+        }
+        .onDisappear {
+            if showFeedback {
+                NotepadNotchFocus.allowsNotchKey = false
+                SharingStateManager.shared.preventNotchClose = false
+            }
+        }
+    }
+
+    @ViewBuilder private var planBody: some View {
+        if let plan = planText {
+            ScrollView(.vertical) {
+                Text(plan)
+                    .font(.system(size: 10))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxHeight: 160)
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.4)))
+        } else if !planLoaded {
+            Text("Loading plan…").font(.caption2).foregroundStyle(.tertiary)
+        } else if !request.summary.isEmpty {
+            // Transcript unavailable — fall back to the engine's summary line.
+            Text(request.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
+        }
+    }
+
+    private func planButton(_ choice: PlanChoice) -> some View {
+        Button {
+            resolving = true
+            agent.resolve(
+                sessionID: session.id,
+                action: .allowWithUpdates([.setMode(destination: .session, mode: choice.mode)])
+            )
+        } label: {
+            Text(choice.label)
+                .font(.caption2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .tint(choice.prominent ? .green : .blue)
+        .controlSize(.small)
+    }
+
+    @ViewBuilder private var keepPlanningSection: some View {
+        if showFeedback {
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Tell Claude what to change", text: $feedback)
+                    .textFieldStyle(.roundedBorder).controlSize(.small)
+                    .focused($feedbackFocused)
+                    .onSubmit { sendKeepPlanning() }
+                HStack(spacing: 8) {
+                    Button("Send & keep planning") { sendKeepPlanning() }
+                        .buttonStyle(.borderedProminent).tint(.orange).controlSize(.small)
+                    Button("Cancel") {
+                        showFeedback = false
+                        feedback = ""
+                    }
+                    .buttonStyle(.borderless).controlSize(.small)
+                }
+            }
+        } else {
+            Button {
+                showFeedback = true
+            } label: {
+                Text("No, keep planning…")
+                    .font(.caption2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered).tint(.red).controlSize(.small)
+            .help("Claude stays in plan mode; optionally tell it what to change")
+        }
+    }
+
+    private func sendKeepPlanning() {
+        resolving = true
+        showFeedback = false
+        agent.keepPlanning(sessionID: session.id, feedback: feedback)
+    }
 }
 
 /// Interactive answer card for Claude's AskUserQuestion. Renders EVERY question (not just the first),
