@@ -169,6 +169,12 @@ struct AgentSessionRow: View {
                 Text(session.identityChips.joined(separator: "  ·  "))
                     .font(.system(size: 9)).foregroundStyle(.tertiary).lineLimit(1)
             }
+            // Waiting-on-subagents chip — on the activity line, not the crowded header row.
+            if session.phase == .running, let researching = session.subagentSummary {
+                Label(researching, systemImage: "arrow.triangle.branch")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(Color.cyan.opacity(0.9))
+            }
             // Recap (the outcome / current activity) instead of a raw transcript line.
             if let recap = session.recapLineText, !recap.isEmpty {
                 Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
@@ -662,6 +668,14 @@ extension AgentSession {
         let tasks = claudeMetadata?.activeTasks ?? []
         guard !tasks.isEmpty else { return nil }
         return (tasks.filter { $0.status == .completed }.count, tasks.count)
+    }
+
+    /// "N agents researching" — subagents currently running (no summary yet). Glance chip so a
+    /// session blocked on research/workflow subagents doesn't read as frozen.
+    var subagentSummary: String? {
+        let active = claudeMetadata?.activeSubagents.filter { $0.summary == nil }.count ?? 0
+        guard active > 0 else { return nil }
+        return active == 1 ? "1 agent researching" : "\(active) agents researching"
     }
 
     static func friendlyModelName(_ raw: String) -> String {
