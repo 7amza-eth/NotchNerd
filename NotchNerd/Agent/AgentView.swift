@@ -110,7 +110,9 @@ struct AgentView: View {
 struct AgentSessionRow: View {
     let session: AgentSession
     @ObservedObject private var agent = AgentBridgeManager.shared
-    @State private var isExpanded = false
+
+    /// Manager-owned so expansion survives row-view teardown (notch reopen / tab switch).
+    private var isExpanded: Bool { agent.expandedSessionIDs.contains(session.id) }
 
     private var hasDetail: Bool {
         !(session.claudeMetadata?.activeSubagents.isEmpty ?? true)
@@ -137,25 +139,10 @@ struct AgentSessionRow: View {
                 Text(session.spotlightAgeBadge)
                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
                     .help("Time since last activity")
-                if hasDetail {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            isExpanded.toggle()
-                            if isExpanded {
-                                AgentRowExpansion.userCollapsed.remove(session.id)
-                            } else {
-                                AgentRowExpansion.userCollapsed.insert(session.id)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(isExpanded ? "Hide subagents and tasks" : "Show subagents and tasks")
-                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .foregroundStyle(.secondary)
                 if agent.canJump(session) {
                     Button { agent.jump(sessionID: session.id) } label: {
                         Image(systemName: "arrow.uturn.forward.square")
@@ -164,6 +151,14 @@ struct AgentSessionRow: View {
                     .help("Jump to the terminal")
                 }
             }
+            // The whole header row is the expand/collapse affordance ("click the session box").
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    agent.toggleExpansion(session.id)
+                }
+            }
+            .help(isExpanded ? "Hide details" : "Show details")
             // Identity context — branch · terminal · model · mode — so same-repo sessions are distinct.
             if !session.identityChips.isEmpty {
                 Text(session.identityChips.joined(separator: "  ·  "))
@@ -183,8 +178,8 @@ struct AgentSessionRow: View {
             if let goal = session.recapGoalText, !goal.isEmpty {
                 Text("↳ \(goal)").font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1)
             }
-            if isExpanded && hasDetail {
-                AgentSessionDetailView(session: session)
+            if isExpanded {
+                AgentSessionExpandedView(session: session, hasDetail: hasDetail)
             }
             if let request = session.permissionRequest, session.phase == .waitingForApproval {
                 if request.toolName == "ExitPlanMode" {
@@ -200,10 +195,6 @@ struct AgentSessionRow: View {
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
-        .onAppear {
-            isExpanded = hasDetail && session.phase.requiresAttention
-                && !AgentRowExpansion.userCollapsed.contains(session.id)
-        }
     }
 
     private func permissionCard(_ request: PermissionRequest) -> some View {

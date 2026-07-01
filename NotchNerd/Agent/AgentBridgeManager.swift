@@ -287,6 +287,41 @@ final class AgentBridgeManager: ObservableObject {
         }
     }
 
+    // MARK: Row expansion (manager-owned)
+
+    /// Rows the user has expanded. Manager-owned (not per-row @State) so expansion survives the
+    /// notch reopening / tab switches, which tear down the row views (the old @State +
+    /// AgentRowExpansion.userCollapsed approach lost manual expands on every remount). Pruned
+    /// against the visible set in republish(); attention rows are seeded expanded on arrival.
+    @Published private(set) var expandedSessionIDs: Set<String> = []
+    /// Attention rows already auto-expanded once — so a user collapse isn't fought every republish.
+    private var attentionSeededIDs: Set<String> = []
+
+    func toggleExpansion(_ sessionID: String) {
+        if expandedSessionIDs.contains(sessionID) {
+            expandedSessionIDs.remove(sessionID)
+        } else {
+            expandedSessionIDs.insert(sessionID)
+        }
+    }
+
+    private func reconcileExpansion(visible: [AgentSession]) {
+        let visibleIDs = Set(visible.map(\.id))
+        expandedSessionIDs.formIntersection(visibleIDs)
+        attentionSeededIDs.formIntersection(visibleIDs)
+        for session in visible {
+            if session.phase.requiresAttention {
+                // Seed once per attention episode; re-arm after the episode ends.
+                if !attentionSeededIDs.contains(session.id) {
+                    attentionSeededIDs.insert(session.id)
+                    expandedSessionIDs.insert(session.id)
+                }
+            } else {
+                attentionSeededIDs.remove(session.id)
+            }
+        }
+    }
+
     /// Recompute the @Published projection from the private reducer.
     private func republish() {
         // Only surface sessions that are live in a terminal *right now* (`isVisibleInIsland`:
@@ -300,6 +335,7 @@ final class AgentBridgeManager: ObservableObject {
         let needsAttention = visible.filter { $0.phase.requiresAttention }
         let others = visible.filter { !$0.phase.requiresAttention }
         reconcileKeepPlanning()
+        reconcileExpansion(visible: visible)
         sessions = (needsAttention + others).map(Self.debranded).map(projectedKeepPlanning)
         actionableSession = state.activeActionableSession.map(Self.debranded)
         attentionCount = state.attentionCount

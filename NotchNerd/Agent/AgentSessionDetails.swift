@@ -144,10 +144,35 @@ struct AgentSessionDetailView: View {
     }
 }
 
-/// Remembers rows the user explicitly collapsed, so attention rows aren't force-re-expanded
-/// when AgentSessionRow remounts (notch re-open / tab switch tears down @State).
-enum AgentRowExpansion {
-    static var userCollapsed: Set<String> = []
+/// Expanded content for any session row (expansion state is manager-owned —
+/// `AgentBridgeManager.expandedSessionIDs` — so it survives row-view teardown).
+/// Shows the session's full goal, live subagents + tasks when present, and a
+/// quiet placeholder otherwise.
+struct AgentSessionExpandedView: View {
+    let session: AgentSession
+    let hasDetail: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Full goal (initial prompt), un-truncated — the collapsed row clips it to one line.
+            if let goal = session.initialUserPromptText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !goal.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Goal").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                    Text(goal)
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                }
+            }
+            if hasDetail {
+                AgentSessionDetailView(session: session)
+            } else if session.initialUserPromptText == nil {
+                Text("No details yet").font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.top, 2)
+    }
 }
 
 /// A small status dot that pulses while a session is running or needs attention.
