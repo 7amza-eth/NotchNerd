@@ -251,6 +251,10 @@ final class AgentBridgeManager: ObservableObject {
         republish()
         schedulePersist()
         emitNotification(for: event)
+        // Keep an expanded row's transcript detail fresh (debounced + mtime-guarded inside).
+        if expandedSessionIDs.contains(sid) {
+            loadTranscriptDetail(for: sid)
+        }
     }
 
     /// Every `AgentEvent` payload carries the session it concerns.
@@ -342,6 +346,38 @@ final class AgentBridgeManager: ObservableObject {
             expandedSessionIDs.remove(sessionID)
         } else {
             expandedSessionIDs.insert(sessionID)
+            loadTranscriptDetail(for: sessionID)
+        }
+    }
+
+    // MARK: Transcript detail (expanded rows)
+
+    /// Per-session transcript-derived detail (timeline / files / stats / plan text). Loaded
+    /// off-main on expand and opportunistically on new events for expanded rows; mtime-guarded,
+    /// debounced, pruned with the visible set.
+    @Published private(set) var transcriptDetails: [String: ClaudeTranscriptDetail] = [:]
+    private var transcriptMTimes: [String: Date] = [:]
+    private var transcriptReadAt: [String: Date] = [:]
+    private var transcriptLoadsInFlight: Set<String> = []
+
+    func loadTranscriptDetail(for sessionID: String) {
+        guard let session = state.session(id: sessionID),
+              let path = session.claudeMetadata?.transcriptPath else { return }
+        // Debounce event-burst refreshes; the mtime guard below dedupes identical content.
+        if let last = transcriptReadAt[sessionID], Date().timeIntervalSince(last) < 5 { return }
+        let mtime = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        if let mtime, transcriptMTimes[sessionID] == mtime, transcriptDetails[sessionID] != nil { return }
+        guard !transcriptLoadsInFlight.contains(sessionID) else { return }
+        transcriptLoadsInFlight.insert(sessionID)
+        transcriptReadAt[sessionID] = Date()
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let detail = ClaudeTranscriptReader.read(transcriptPath: path)
+            await MainActor.run {
+                guard let self else { return }
+                self.transcriptLoadsInFlight.remove(sessionID)
+                if let mtime { self.transcriptMTimes[sessionID] = mtime }
+                if let detail { self.transcriptDetails[sessionID] = detail }
+            }
         }
     }
 
@@ -351,6 +387,9 @@ final class AgentBridgeManager: ObservableObject {
         attentionSeededIDs.formIntersection(visibleIDs)
         stoppedSessionIDs.formIntersection(visibleIDs)
         compactingSessions = compactingSessions.filter { visibleIDs.contains($0.key) }
+        transcriptDetails = transcriptDetails.filter { visibleIDs.contains($0.key) }
+        transcriptMTimes = transcriptMTimes.filter { visibleIDs.contains($0.key) }
+        transcriptReadAt = transcriptReadAt.filter { visibleIDs.contains($0.key) }
         for session in visible {
             if session.phase.requiresAttention {
                 // Seed once per attention episode; re-arm after the episode ends.

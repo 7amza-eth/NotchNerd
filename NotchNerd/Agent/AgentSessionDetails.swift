@@ -154,16 +154,21 @@ struct AgentSessionDetailView: View {
 struct AgentSessionExpandedView: View {
     let session: AgentSession
     let hasDetail: Bool
+    @ObservedObject private var agent = AgentBridgeManager.shared
 
     /// Collapsed-by-default clamp for long messages. Per-view state: losing it on
     /// remount just re-clamps, which is the safe default anyway.
     @State private var showFullMessage = false
     @State private var justCopied = false
 
+    private var transcriptDetail: ClaudeTranscriptDetail? { agent.transcriptDetails[session.id] }
+
     private var lastMessage: String? {
-        guard let text = session.lastAssistantMessageText?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
-        return text
+        // Metadata is freshest (updates per hook); the transcript covers stale/recovered sessions.
+        let text = session.lastAssistantMessageText ?? transcriptDetail?.fullLastAssistantMessage
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     /// Worth a Show-more toggle only when the clamp plausibly bites.
@@ -189,11 +194,79 @@ struct AgentSessionExpandedView: View {
             }
             if hasDetail {
                 AgentSessionDetailView(session: session)
-            } else if lastMessage == nil && session.initialUserPromptText == nil {
+            }
+            if let detail = transcriptDetail {
+                if !detail.recentActivity.isEmpty { activitySection(detail) }
+                if !detail.editedFiles.isEmpty { filesSection(detail) }
+                statsFooter(detail)
+            } else if lastMessage == nil && session.initialUserPromptText == nil && !hasDetail {
                 Text("No details yet").font(.system(size: 9)).foregroundStyle(.tertiary)
             }
         }
         .padding(.top, 2)
+        .onAppear { agent.loadTranscriptDetail(for: session.id) }
+    }
+
+    // MARK: Transcript-derived sections
+
+    private func activitySection(_ detail: ClaudeTranscriptDetail) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Recent activity").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+            ForEach(detail.recentActivity.suffix(5).reversed()) { entry in
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Image(systemName: entry.isSidechain ? "arrow.triangle.branch" : "wrench.and.screwdriver")
+                        .font(.system(size: 8))
+                        .foregroundStyle(entry.isSidechain ? Color.cyan.opacity(0.9) : Color.secondary)
+                    Text(entry.toolName).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                    if let preview = entry.preview {
+                        Text(preview)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private func filesSection(_ detail: ClaudeTranscriptDetail) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Files touched").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+            ForEach(detail.editedFiles.prefix(6)) { file in
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.badge.gearshape").font(.system(size: 8)).foregroundStyle(.tertiary)
+                    Text(file.path).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                    if file.version > 1 {
+                        Text("×\(file.version)").font(.system(size: 8)).foregroundStyle(.tertiary)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            if detail.editedFiles.count > 6 {
+                Text("+ \(detail.editedFiles.count - 6) more")
+                    .font(.system(size: 8)).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func statsFooter(_ detail: ClaudeTranscriptDetail) -> some View {
+        HStack(spacing: 4) {
+            Text("\(detail.turnCount) \(detail.turnCount == 1 ? "turn" : "turns")")
+            Text("·")
+            Text(Self.tokenLabel(detail.outputTokens))
+            if detail.truncated {
+                Text("·")
+                Text("large transcript — stats are partial")
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 8, design: .monospaced))
+        .foregroundStyle(.tertiary)
+    }
+
+    static func tokenLabel(_ tokens: Int) -> String {
+        tokens >= 1_000 ? String(format: "%.1fk tokens out", Double(tokens) / 1_000) : "\(tokens) tokens out"
     }
 
     private func lastMessageSection(_ message: String) -> some View {

@@ -109,6 +109,7 @@
 		14E9FEAA2C70BF610062E83F /* DownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEA92C70BF610062E83F /* DownloadView.swift */; };
 		14E9FEAE2C7325770062E83F /* Button+Bouncing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */; };
 		14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */; };
+		1E7DB3D57CA1D0BE41B0E8F4 /* ClaudeTranscriptReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C498DDEF5564D00E8400B9F1 /* ClaudeTranscriptReader.swift */; };
 		22353DBBEEEE803295590640 /* AgentMonitorOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7538835A1F722032A387A1CC /* AgentMonitorOnboardingView.swift */; };
 		3B35AEFA27C6647596C04D48 /* NotepadTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */; };
 		3C36DE4F394A57A7EE45E3E2 /* NotesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9DB0DB877CB83B59501DD04 /* NotesStore.swift */; };
@@ -343,6 +344,7 @@
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
 		B6D0FD510B346C0ABAC10B21 /* AgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentView.swift; sourceTree = "<group>"; };
 		BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentActivity.swift; sourceTree = "<group>"; };
+		C498DDEF5564D00E8400B9F1 /* ClaudeTranscriptReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeTranscriptReader.swift; sourceTree = "<group>"; };
 		C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadWindowController.swift; sourceTree = "<group>"; };
 		C9DB0DB877CB83B59501DD04 /* NotesStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
 		D40B3ECF7F69F23BD607D5A5 /* AgentSessionDetails.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentSessionDetails.swift; sourceTree = "<group>"; };
@@ -840,6 +842,7 @@
 				6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */,
 				1A6BC260493C09339D235B27 /* PlanTextLoader.swift */,
 				BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */,
+				C498DDEF5564D00E8400B9F1 /* ClaudeTranscriptReader.swift */,
 			);
 			name = Agent;
 			path = Agent;
@@ -1163,6 +1166,7 @@
 				09FE9CE0CA0D6CA2909B37C7 /* FeatureTourView.swift in Sources */,
 				565A6E45BD59827314953E81 /* PlanTextLoader.swift in Sources */,
 				D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */,
+				1E7DB3D57CA1D0BE41B0E8F4 /* ClaudeTranscriptReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
