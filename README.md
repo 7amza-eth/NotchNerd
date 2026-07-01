@@ -32,11 +32,23 @@ An in-notch **Agent tab** that watches your local Claude Code sessions through C
 It is **observe-only** — it never calls the Anthropic API and stores no credentials.
 
 - **Live session list as a recap, not a transcript** — each row shows the session's goal (its first
-  prompt), a one-line recap of the latest outcome (`Claude: …`) or current activity, plus identity
-  chips: **branch · terminal · model · permission-mode**, and a `k/n` task-progress badge. Sessions
-  that need you are pinned to the top.
+  prompt), a one-line recap of the latest outcome (`Claude: …`) or current activity **with a
+  per-activity icon** (thinking · terminal · editing · searching), plus identity chips:
+  **branch · terminal · model · permission-mode · Resumed/Cleared**, and a `k/n` task-progress
+  badge. Sessions that need you are pinned to the top; interrupted turns show a red **stopped**
+  badge instead of masquerading as done.
+- **Click any session to expand it** — Claude's **full last message** (with a copy button), the
+  live subagent/task checklists, **recent tool activity**, **files touched**, and a stats line:
+  turns · output tokens · **current context size** (`ctx 341k`). Expansion survives the notch
+  closing and reopening.
 - **Only what's actually running** — the list tracks the sessions live in your terminals (matched by
   TTY), so `/clear`'d, finished, and closed-tab sessions drop automatically instead of piling up.
+- **Plan-mode review in the notch** — when Claude presents a plan, the card shows the **plan text
+  itself** and the same choices as the CLI ("use auto mode" / "auto-accept edits" / "manually
+  approve edits"), plus **"keep planning" with feedback** — type what to change and Claude revises
+  without leaving plan mode. (Ultraplan hands off to the terminal.)
+- **Waiting-on-subagents at a glance** — a session blocked on research/workflow agents shows
+  "N agents researching" instead of looking frozen.
 - **Permission prompts in the notch** — Allow once / Deny, plus Claude's structured one-tap options
   ("always allow Bash here", mode changes) when offered.
 - **Question prompts in the notch** — answer Claude's `AskUserQuestion` with full support for

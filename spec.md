@@ -71,7 +71,10 @@ NotchNerd/                          repo root
 │  │  ├─ AgentBridgeManager.swift   headless OpenIslandCore driver (singleton) + notification signals
 │  │  ├─ AgentView.swift            in-notch Agent tab UI + AgentClosedIndicator + AgentSettings
 │  │  ├─ AgentSessionPresentation.swift  verbatim OI presentation extension (spotlight*/island* props)
-│  │  ├─ AgentSessionDetails.swift  status palette, subagent/task detail view, overview counts, status dot
+│  │  ├─ AgentSessionDetails.swift  status palette, expanded-row view (last msg/timeline/files/stats), status dot
+│  │  ├─ AgentActivity.swift        derived activity vocabulary (thinking/bash/edit/…/stopped/compacting descriptors)
+│  │  ├─ ClaudeTranscriptReader.swift  off-main transcript parse → timeline/files/turns/tokens/ctx/plan
+│  │  ├─ PlanTextLoader.swift       tail-read ExitPlanMode plan markdown for the plan-review card
 │  │  ├─ AgentNotificationSound.swift  NSSound system-sound alerts (Defaults-bound)
 │  │  ├─ AgentUsageManager.swift    statusline-wrapper install + ClaudeUsageLoader polling (5h/7d)
 │  │  ├─ UsageChip.swift            usage chip view for the Agent tab header
@@ -150,8 +153,12 @@ NotchNerd/                          repo root
 
 **New in NotchNerd:**
 - **Claude Code agent monitor** — observe-only, in-notch. Agent tab with an overview-counts row,
-  pulsing per-phase status dots, **expandable session rows** (live subagents + task/todo checklists
-  from `ClaudeSessionMetadata`), Allow Once/Deny permission cards, question option buttons, and a
+  pulsing per-phase status dots + per-activity recap icons (`AgentActivity`), **click-to-expand
+  session rows** (manager-owned expansion; full last assistant message + copy, live subagents +
+  task/todo checklists, transcript-derived recent activity / files touched / turns · output tokens ·
+  context size via `ClaudeTranscriptReader`), a **plan-mode review card** (CLI-mirrored options +
+  plan text + keep-planning feedback), a "N agents researching" chip, stopped/compacting states,
+  Allow Once/Deny permission cards, question option buttons, and a
   terminal jump button (already-focused short-circuit + live re-resolution; Ghostty **or**
   Terminal.app via the `AgentTerminalJump` dispatcher). **In-notch notification mode** auto-pops the
   notch on permission/question/completion events (never hijacks an open notch; frontmost-suppression;
@@ -422,6 +429,9 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 | `NotchNerd/Agent/AgentBridgeManager.swift` | headless OpenIslandCore driver (singleton) + notification signals |
 | `NotchNerd/Agent/AgentView.swift` | in-notch Agent tab UI (overview/rows/cards/chips) + AgentClosedIndicator + AgentSettings |
 | `NotchNerd/Agent/AgentSessionPresentation.swift` | verbatim OI presentation extension (spotlight*/island* computed props) |
+| `NotchNerd/Agent/AgentActivity.swift` | derived per-activity descriptor (icon/tint/label/pulse) incl. stopped/compacting |
+| `NotchNerd/Agent/ClaudeTranscriptReader.swift` | off-main transcript parse (timeline/files/turns/tokens/ctx/plan), mtime-cached by the manager |
+| `NotchNerd/Agent/PlanTextLoader.swift` | bounded tail-read of the ExitPlanMode plan for the plan-review card |
 | `NotchNerd/Agent/AgentUsageManager.swift` | usage-HUD: statusline-wrapper install + `ClaudeUsageLoader` polling |
 | `NotchNerd/Agent/TerminalAppJumpService.swift` | Terminal.app jump + `enum AgentTerminalJump` dispatcher (routes Ghostty / Terminal.app) |
 | `NotchNerd/NotchNerdViewCoordinator.swift` (agent notifications) | owns the in-notch notification auto-pop / auto-collapse |
@@ -768,6 +778,25 @@ each phase; git history holds the dated detail.)
   Updates* show the wrong version; releases set it from the git tag, so unaffected). Deferred as
   low-value/risky: the calendar shared-store deselect-all snap-back, `musicControlSlotLimit` vs
   `fixedSlotCount`, and the `sliderColor`/`agentSuppressFrontmost` symbol-vs-string mismatches.
+- **Agent-tab v0.3 build-out (2026-06-30).** Ultracode session: three research/design/verify
+  workflows (agent-tab UX; feature-set gaps incl. the keep-awake signing verdict; keep-awake
+  sentiment + lid-closed-alert verification) → locked roadmap → **P1–P7 built + committed**
+  (`cd41755`…`f217965`), all app-layer, zero Vendor patches. Load-bearing facts were pulled from
+  the **Claude Code v2.1.198 binary on-device**: the real ExitPlanMode menu (incl. the conditional
+  "Yes, and use auto mode" variant, Ultraplan, and the keep-planning input) and proof the CLI
+  applies `updatedPermissions` from PermissionRequest hooks (`handleHookAllow`). Shipped: plan-mode
+  review card (plan text via `PlanTextLoader` tail-read; CLI-mirrored setMode buttons; keep-planning
+  feedback with a projection rewrite so the row doesn't flash "Permission denied"); "N agents
+  researching" chip; manager-owned click-anywhere row expansion (fixes the @State expansion-loss
+  bug; pruned in `republish()`); full last message + copy (metadata is already un-truncated —
+  the 140-char cap was view-layer); `AgentActivity` per-activity recap icons; stopped (isInterrupt)
+  + compacting (PreCompact, 12s TTL) states; Resumed/Cleared/Compacted identity chips; "Fable 5"
+  model chip; `ClaudeTranscriptReader` (off-main, ≤12 MB full / 512 KB tail, mtime+debounce cached,
+  validated 5.7 MB→127 ms) powering recent-activity/files-touched/turns·tokens·**ctx** stats.
+  Genuine StopFailure (vs interrupt) detection needs a Vendor patch — deferred. Keep-awake v0.4:
+  design finalized in the roadmap (sentiment memo folded in) + the **BTM signing spike kit**
+  (`tooling/scripts/btm-spike-*.sh`) prepped for the user-assisted run. Build-verified only —
+  on-device QA pending (esp. live `setMode` honoring on the plan card).
 - **v0.2.x public release + the hardened-runtime launch fix (2026-06-28).** Tagged **v0.2.0** (first
   release built by the NotchNerd `release.yml` — onboarding + the Settings redesign) and forced
   `make_latest: true` so the fork's `0.x` releases win "Latest". Then **v0.2.1** fixes a crash that hit
@@ -807,6 +836,13 @@ verified against the Claude Code **v2.1.198 binary** on this machine (not guesse
   `claudeMetadata.lastAssistantMessage` (raw `last_assistant_message` hook field; the 140-char cap is
   view-layer `condensedForRecap`) — P6a renders it with **zero IO**; the transcript reader is only
   needed for plan text, activity timeline, edited files, stats, and stale-session fallback.
+
+**Status (2026-06-30): P1–P7 BUILT** (commits `cd41755`…`f217965`, each build-verified; plus a
+per-session **context-footprint stat** — `ctx Nk` in the expanded stats footer, computed from the
+last main-chain assistant record's input+cache tokens, raw count deliberately without a %).
+**Remaining: P8 polish** (markdown rendering, stop button, smart-expand, copy-summary) **+ the
+on-device QA pass** (esp. live confirmation that the plan card's `setMode` round-trip flips the
+terminal's mode footer). Ship as **v0.3.0** after QA.
 
 **Phase order** (each independently shippable + build-verified):
 **P1** plan-mode review card — plan text via a small tail-read `PlanTextLoader` (last `ExitPlanMode`
