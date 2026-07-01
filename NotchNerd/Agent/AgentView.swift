@@ -170,9 +170,23 @@ struct AgentSessionRow: View {
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Color.cyan.opacity(0.9))
             }
-            // Recap (the outcome / current activity) instead of a raw transcript line.
+            // Recap (the outcome / current activity) instead of a raw transcript line. Running
+            // sessions get a per-activity icon (thinking/bash/edit/search/…) so different kinds of
+            // "running" are tellable apart at a glance; the subagent chip above already carries the
+            // researching state, so the icon resolves the underlying tool instead.
             if let recap = session.recapLineText, !recap.isEmpty {
-                Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                if session.phase == .running {
+                    let descriptor = AgentActivity.resolve(for: session, ignoringSubagents: true).descriptor
+                    Label {
+                        Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                    } icon: {
+                        Image(systemName: descriptor.symbol)
+                            .font(.system(size: 9))
+                            .foregroundStyle(descriptor.tint)
+                    }
+                } else {
+                    Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                }
             }
             // The session's goal (its initial prompt), so a long/drifted session still shows its purpose.
             if let goal = session.recapGoalText, !goal.isEmpty {

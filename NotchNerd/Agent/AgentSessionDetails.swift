@@ -18,6 +18,7 @@ enum AgentStatusPalette {
     static let answer = Color(red: 255 / 255, green: 213 / 255, blue: 138 / 255)   // question (yellow)
     static let running = Color(red: 110 / 255, green: 167 / 255, blue: 255 / 255)  // live (blue)
     static let completed = Color(red: 111 / 255, green: 185 / 255, blue: 130 / 255) // done (green)
+    static let error = Color(red: 229 / 255, green: 112 / 255, blue: 79 / 255)      // failed (red-orange)
     static let idle = Color.white.opacity(0.35)
 
     static func tint(for phase: SessionPhase) -> Color {

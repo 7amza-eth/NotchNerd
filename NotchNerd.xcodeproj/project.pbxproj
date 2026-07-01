@@ -159,6 +159,7 @@
 		B1FEB4992C7686630066EBBC /* PanGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1FEB4982C7686630066EBBC /* PanGesture.swift */; };
 		D4B34A341EAAC48470D3C113 /* TerminalAppJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */; };
 		D5287D99FDCD8AC32A17E88D /* AgentUsageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A629446A5E38FC2A7B34B2F /* AgentUsageManager.swift */; };
+		D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */; };
 		E3E7E0A839C22FA4C78209C2 /* OpenIslandCore in Frameworks */ = {isa = PBXBuildFile; productRef = B11E5C1F3836AF0C941BEAD6 /* OpenIslandCore */; };
 		F38DE6482D8243E7008B5C6D /* BatteryActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */; };
 		F67E0F125E8F8903F98EC9A1 /* AgentNotificationSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603CCB82C090912E8305411C /* AgentNotificationSound.swift */; };
@@ -341,6 +342,7 @@
 		B1F747F82EC7E94000F841DB /* LottieView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieView.swift; sourceTree = "<group>"; };
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
 		B6D0FD510B346C0ABAC10B21 /* AgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentView.swift; sourceTree = "<group>"; };
+		BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentActivity.swift; sourceTree = "<group>"; };
 		C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadWindowController.swift; sourceTree = "<group>"; };
 		C9DB0DB877CB83B59501DD04 /* NotesStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
 		D40B3ECF7F69F23BD607D5A5 /* AgentSessionDetails.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentSessionDetails.swift; sourceTree = "<group>"; };
@@ -837,6 +839,7 @@
 				601C6725C4CB1BF5E1C99B3F /* UsageChip.swift */,
 				6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */,
 				1A6BC260493C09339D235B27 /* PlanTextLoader.swift */,
+				BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */,
 			);
 			name = Agent;
 			path = Agent;
@@ -1159,6 +1162,7 @@
 				07ECFF40C28A8A3CEA2C3D2D /* AutomationInfoView.swift in Sources */,
 				09FE9CE0CA0D6CA2909B37C7 /* FeatureTourView.swift in Sources */,
 				565A6E45BD59827314953E81 /* PlanTextLoader.swift in Sources */,
+				D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
