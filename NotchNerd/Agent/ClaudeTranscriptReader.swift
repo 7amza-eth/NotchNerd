@@ -37,6 +37,10 @@ struct ClaudeTranscriptDetail: Equatable {
     var editedFiles: [EditedFile] = []         // from the latest file-history-snapshot
     var turnCount: Int = 0                     // real user prompts (tool_result records excluded)
     var outputTokens: Int = 0
+    /// Current context footprint — the LAST main-chain assistant record's
+    /// input + cache_read + cache_creation tokens (how statuslines compute it). Raw count only:
+    /// the window size is model-dependent (Fable-class exceeds 200k), so no % is derived.
+    var contextTokens: Int = 0
     var truncated: Bool = false
 }
 
@@ -73,12 +77,20 @@ enum ClaudeTranscriptReader {
             switch type {
             case "assistant":
                 guard let message = record["message"] as? [String: Any] else { continue }
-                if let usage = message["usage"] as? [String: Any],
-                   let out = usage["output_tokens"] as? Int {
-                    detail.outputTokens += out
-                }
                 let timestamp = (record["timestamp"] as? String).flatMap(isoFormatter.date(from:))
                 let isSidechain = record["isSidechain"] as? Bool ?? false
+                if let usage = message["usage"] as? [String: Any] {
+                    if let out = usage["output_tokens"] as? Int {
+                        detail.outputTokens += out
+                    }
+                    // Subagents run their own contexts — only the main chain reflects this session.
+                    if !isSidechain {
+                        let context = (usage["input_tokens"] as? Int ?? 0)
+                            + (usage["cache_read_input_tokens"] as? Int ?? 0)
+                            + (usage["cache_creation_input_tokens"] as? Int ?? 0)
+                        if context > 0 { detail.contextTokens = context } // forward scan → last wins
+                    }
+                }
                 var texts: [String] = []
                 for block in message["content"] as? [[String: Any]] ?? [] {
                     switch block["type"] as? String {

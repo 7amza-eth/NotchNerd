@@ -255,6 +255,11 @@ struct AgentSessionExpandedView: View {
             Text("\(detail.turnCount) \(detail.turnCount == 1 ? "turn" : "turns")")
             Text("·")
             Text(Self.tokenLabel(detail.outputTokens))
+            if detail.contextTokens > 0 {
+                Text("·")
+                Text("ctx \(Self.compactTokens(detail.contextTokens))")
+                    .help("Current context footprint (last turn's input + cache tokens)")
+            }
             if detail.truncated {
                 Text("·")
                 Text("large transcript — stats are partial")
@@ -266,7 +271,11 @@ struct AgentSessionExpandedView: View {
     }
 
     static func tokenLabel(_ tokens: Int) -> String {
-        tokens >= 1_000 ? String(format: "%.1fk tokens out", Double(tokens) / 1_000) : "\(tokens) tokens out"
+        tokens >= 1_000 ? "\(Self.compactTokens(tokens)) tokens out" : "\(tokens) tokens out"
+    }
+
+    static func compactTokens(_ tokens: Int) -> String {
+        tokens >= 1_000 ? String(format: "%.0fk", Double(tokens) / 1_000) : "\(tokens)"
     }
 
     private func lastMessageSection(_ message: String) -> some View {
