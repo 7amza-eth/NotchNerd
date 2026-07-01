@@ -783,6 +783,96 @@ each phase; git history holds the dated detail.)
 The single source of truth for remaining work. Items reference the deferred-work and porting-recipe
 subsections below where an implementer needs the concrete recipe.
 
+### v0.3 — "Agent tab, grown up" (ACTIVE — locked 2026-06-30)
+
+Multi-agent-researched + adversarially-verified overhaul of the Agent tab (plan-mode card, richer
+recap/expand, subagent visibility). **All app-layer — zero Vendor patches.** Key research facts,
+verified against the Claude Code **v2.1.198 binary** on this machine (not guessed):
+
+- **The real ExitPlanMode plan-approval menu** (labels + values from the CLI bundle; the menu is
+  *conditional on session state*): `"Yes, and use auto mode"` (`yes-resume-auto-mode`, shown instead
+  of auto-accept when the session was in auto mode) / `"Yes, auto-accept edits"`
+  (`yes-accept-edits-keep-context`) / `"Yes, manually approve edits"` (`yes-default-keep-context`) /
+  conditional `"Yes, and publish plan as artifact"` / conditional `"No, refine with Ultraplan on
+  Claude Code on the web"` (`ultraplan`) / `"No, keep planning"` — an **input** option with
+  placeholder *"Tell Claude what to change"*.
+- **`updatedPermissions` from a PermissionRequest hook IS honored** — the CLI's hook-allow path
+  applies it via `handleHookAllow(...)` → `setToolPermissionContext`. So NotchNerd's
+  `resolve(.allowWithUpdates([.setMode(.session, <mode>)]))` round-trip works; mode buttons are real.
+- **Ultraplan cannot be triggered from a hook directive** (it's a CLI-side cloud-session flow) —
+  the card represents it as "continue in terminal" (jump), never fakes it.
+- **Do NOT use `ClaudePermissionUpdate.setMode(...).displayLabel`** for button copy — its mapping is
+  inverted vs. the real CLI menu. Hardcode labels.
+- The full last assistant message is **already un-truncated** in
+  `claudeMetadata.lastAssistantMessage` (raw `last_assistant_message` hook field; the 140-char cap is
+  view-layer `condensedForRecap`) — P6a renders it with **zero IO**; the transcript reader is only
+  needed for plan text, activity timeline, edited files, stats, and stale-session fallback.
+
+**Phase order** (each independently shippable + build-verified):
+**P1** plan-mode review card — plan text via a small tail-read `PlanTextLoader` (last `ExitPlanMode`
+`tool_use.input.plan`, matched by `toolUseID`), CLI-mirrored buttons (order + prominence match the
+CLI; single-shot `resolving` guard), "keep planning" feedback field (notch `makeKey` trick) sending
+`deny(message: feedback)` with the projected summary rewritten at the `debranded()` boundary so the
+row doesn't flash "Permission denied" →
+**P2** subagent chip — "N researching" on the *activity line* (not the crowded header), counting
+`activeSubagents` without a `summary`; no auto-expand/soft-pin; closed-notch unchanged →
+**P4** manager-owned expansion — `@Published expandedSessionIDs` in `AgentBridgeManager` (fixes the
+@State-teardown expansion-loss bug), every row expandable, pruned in `republish()` →
+**P6a** full last message + copy button ("Last message"/"Details", NOT "recap" — `/recap` is
+API-synthesized and unreproducible) →
+**P3** `AgentActivity` vocabulary — per-activity icon/tint descriptor (planReview/researching/
+failed/compacting differentiation; status dot keeps phase color) →
+**P5/P6b** `ClaudeTranscriptReader` — off-MainActor streaming read (≤12 MB forward, else 64 KB tail),
+mtime-cached, never from a SwiftUI body; timeline/files/stats (validate jsonl field shapes first) →
+**P7** `.failed` (isInterrupt/StopFailure) + `.compacting` (PreCompact, ~12s TTL) + startup-source
+chip → **P8** polish (stop button, copy-summary, markdown, smart-expand).
+
+**QA/pre-work:** audit our bridge use vs upstream PR **#503** (subagent permission requests dropped
+by a bridge filter) before P2; retest upstream issue **#559** (decisions ignored/stuck) during P1 QA.
+**Skip the upstream re-pull** at v1.1.4 (delta is ~90% Codex/Cursor-only; a re-pull clobbers the
+`QuestionOption.preview` patch) — re-evaluate at upstream's next minor.
+
+### v0.4 — "Close the lid" keep-awake (locked 2026-06-30, signing-gated)
+
+Lidless-style (github.com/nghialuong/Lidless, MIT — add to `THIRD_PARTY_LICENSES` when built)
+keep-awake via the **`SleepDisabled` flag in `IOPMrootDomain`** — the only mechanism that survives
+lid-close on Apple Silicon (`caffeinate`/IOPMAssertion do not). Needs a **root helper**; a 90s
+heartbeat watchdog restores sleep if the app dies. ⚠️ `SleepDisabled` is **undocumented on macOS
+26.4** — treat as volatile: re-assert/clear at every boot, assume no persistence. Differentiator:
+**nobody in the Claude-companion space ships agent-aware keep-awake** (field is saturated on usage
+tracking + phone remotes instead; Anthropic's official Remote Control subsumes the remote niche —
+don't build remote approve/deny).
+
+- **Modes:** **Manual** (menu-bar toggle + hotkey, auto-off timer 15m–4h with live countdown, NO
+  charging requirement — explicit user act); **While-Claude-works** (`workingCount > 0` + grace
+  period, default 5 min, + `keepAwakeAgentMaxHours` runaway cap, default 8h); **Remote-ready**
+  (`liveSessionCount > 0` — keeps the Mac reachable for Claude Code's phone remote control, e.g.
+  backpack + hotspot; once asleep there is NO remote-wake path on a hotspot — no Bonjour Sleep
+  Proxy — so "don't sleep while reachable matters" is the design, not "wake").
+- **Safety rails** (agent modes): only-while-charging default ON, low-battery cutoff 20%, thermal
+  pause (`ProcessInfo.thermalState`), watchdog invariant, safety releases announced via notch HUD +
+  sound. `applicationWillTerminate` restores sleep.
+- **Lid-closed attention alerts:** clamshell audio keeps playing while awake → escalating repeat
+  sound while a session needs the user and `AppleClamshellState` (IORegistry, no root) says closed;
+  opt-in phone push (user-supplied ntfy/Pushover webhook or iMessage-to-self — no stored
+  credentials; channel choice pending the sentiment-research memo).
+- **Defaults keys:** `keepAwakeEnabled` (off, consent-gated helper install), `keepAwakeAgentMode`,
+  `keepAwakeAgentGraceMinutes` (5), `keepAwakeAgentMaxHours` (8), `keepAwakeOnlyOnPower` (on),
+  `keepAwakeLowBatteryCutoff` (20), `keepAwakeAutoOffMinutes` (60). Settings → Keep Awake tab
+  mirroring the `AgentSettings` install/status pattern.
+- **⚠️ SIGNING GATE (must resolve before building):** `SMAppService.daemon` under ad-hoc signing is
+  a **confirmed non-starter** (macOS 26 SDK header: "Apps that contain LaunchDaemons must be
+  notarized"; Lidless itself ships Developer ID + notarized). The classic
+  `/Library/LaunchDaemons` fallback (one admin-prompt install) is *maybe* viable but **Background
+  Task Management** (Sonoma 14.6.1+) gates daemons by developer signature (it broke Nix's daemons
+  on Tahoe — "unidentified developer", disabled until manually toggled in Login Items). **Run the
+  ~30-min user-assisted spike first** (ad-hoc helper → one-prompt install → `launchctl bootstrap
+  system` → reboot → `sudo sfltool dumpbtm`; re-check after a re-signed binary swap — cdhash churn
+  may reset BTM trust). Branch: spike passes → classic-daemon path; fails → **Developer ID +
+  notarization** becomes the keep-awake prerequisite (one $99 gate that also retires quarantine
+  friction, per-build TCC churn, and unblocks the Watch relay); either way a zero-privilege
+  monitor+nag v1 can ship. Disclose the root-helper posture change in README/onboarding.
+
 ### Phase 6 — Modernize & harden
 
 - **Socket / hooks / statusline-cache namespacing off `eth.7amza.notchnerd`** (locked decision #8).
@@ -880,8 +970,8 @@ in Core, UI is not).
   the music visualizer for the ✦ without the music notch vanishing); the **taller Agent tab**
   (640×320) and that the **music notch is unchanged**; the **music-visualizer presets** looking right
   in the tiny slot; approve/deny round-trip; TCC consent (Accessibility in-app, Automation for the
-  Ghostty/Terminal jump). The `workingCount` indicator is a **60s-recency heuristic** — see *Roadmap →
-  real-time signal*.
+  Ghostty/Terminal jump). (`workingCount` is now event-driven — `phase == .running &&
+  isProcessAlive`, no recency window; the old "60s-recency heuristic" note is obsolete.)
 - **Build-output location cleanup** *(trivial, deferred).* CLI builds use `-derivedDataPath build`
   (project-local `build/Build/Products/Debug/NotchNerd.app`), which is a **different** binary from
   Xcode's default DerivedData output — so launching the wrong one runs stale code, and TCC grants are
