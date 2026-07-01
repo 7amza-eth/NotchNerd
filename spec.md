@@ -852,10 +852,33 @@ don't build remote approve/deny).
 - **Safety rails** (agent modes): only-while-charging default ON, low-battery cutoff 20%, thermal
   pause (`ProcessInfo.thermalState`), watchdog invariant, safety releases announced via notch HUD +
   sound. `applicationWillTerminate` restores sleep.
-- **Lid-closed attention alerts:** clamshell audio keeps playing while awake → escalating repeat
-  sound while a session needs the user and `AppleClamshellState` (IORegistry, no root) says closed;
-  opt-in phone push (user-supplied ntfy/Pushover webhook or iMessage-to-self — no stored
-  credentials; channel choice pending the sentiment-research memo).
+- **Lid-closed attention alerts** *(revised per the 2026-06-30 sentiment/verification memo)*:
+  phone push is the primary channel, stacked: (1) **first-party Remote Control push** ("Push when
+  actions required", CLI ≥ 2.1.110) — document/integrate, don't rebuild; (2) **ntfy topic URL**
+  (no-account, high-entropy topic generated in-app; add a "send test push — did it sound?" setup
+  step, open iOS silent-notification bug ntfy#1562); (3) a **generic webhook field** (covers
+  Pushover/Telegram/Slack). **iMessage-to-self is CUT** (self-sends produce no banner/sound, and
+  per-cdhash Automation TCC would drop every rebuild). Local escalating sounds are **secondary,
+  off-by-default** (clamshell audio confirmed working while awake, but lid+backpack muffles it —
+  same-room channel only; play via AVAudioPlayer to the default output, NOT NSSound's alert
+  device). Keep the Adrafinil-style **armed chime on lid close**. Lid detection: subscribe to
+  `kIOPMMessageClamshellStateChange` (public IOPM.h) in-app — not the XPC helper, no root/TCC.
+- **Adds from the sentiment memo:** **display-off while held awake** (raw `disablesleep` leaves the
+  panel lit under the closed lid — Modafinil's entire raison d'être); **`CLAUDE_CLIENT_PRESENCE_FILE`
+  integration** (CLI ≥ 2.1.181 — write/remove the presence marker from lid state so first-party RC
+  pushes fire when the lid is shut; observe-only); **battery %/temp in the usage HUD** during
+  held-awake runs; **coexistence with Claude Code's own `caffeinate -i`** (it already prevents
+  lid-open idle sleep during turns — NotchNerd's added value is *only* the lid-closed case; detect
+  it so state never looks contradictory); QA gate: lid closed + SleepDisabled + looping audio 5 min
+  on target hardware.
+- **Remote-ready mode CONFIRMED as ship-shape** — Remote Control is server-mediated outbound-HTTPS
+  polling; a sleeping Mac is unreachable, hotspots have no Bonjour Sleep Proxy, APNs can't wake a
+  Mac, and the documented reconnect-after-sleep is *empirically flaky* (anthropics/claude-code
+  #34255 #34531 #69543) — holding awake avoids the buggiest path entirely. **Do not assume
+  server-side message queueing** (unverified) — Remote-ready UI copy should treat
+  delivery-while-asleep as failure. **Scheduled-wake** (sleep + periodic root RTC DarkWakes,
+  ~4–6× better battery) is DEFERRED behind a spike: unknowns are DarkWake duration stretching and
+  whether the RC session survives repeated sleep/wake.
 - **Defaults keys:** `keepAwakeEnabled` (off, consent-gated helper install), `keepAwakeAgentMode`,
   `keepAwakeAgentGraceMinutes` (5), `keepAwakeAgentMaxHours` (8), `keepAwakeOnlyOnPower` (on),
   `keepAwakeLowBatteryCutoff` (20), `keepAwakeAutoOffMinutes` (60). Settings → Keep Awake tab
