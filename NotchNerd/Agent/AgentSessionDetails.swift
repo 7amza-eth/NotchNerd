@@ -8,6 +8,7 @@
 //  retinted to NotchNerd's palette.
 //
 
+import AppKit
 import SwiftUI
 import OpenIslandCore
 
@@ -146,14 +147,34 @@ struct AgentSessionDetailView: View {
 
 /// Expanded content for any session row (expansion state is manager-owned —
 /// `AgentBridgeManager.expandedSessionIDs` — so it survives row-view teardown).
-/// Shows the session's full goal, live subagents + tasks when present, and a
-/// quiet placeholder otherwise.
+/// Shows Claude's full last message (the metadata stores the raw, un-truncated
+/// `last_assistant_message` hook field — the 140-char cap is view-layer), the
+/// session's full goal, and live subagents + tasks when present.
 struct AgentSessionExpandedView: View {
     let session: AgentSession
     let hasDetail: Bool
 
+    /// Collapsed-by-default clamp for long messages. Per-view state: losing it on
+    /// remount just re-clamps, which is the safe default anyway.
+    @State private var showFullMessage = false
+    @State private var justCopied = false
+
+    private var lastMessage: String? {
+        guard let text = session.lastAssistantMessageText?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// Worth a Show-more toggle only when the clamp plausibly bites.
+    private func isLong(_ text: String) -> Bool {
+        text.count > 350 || text.filter(\.isNewline).count >= 8
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let message = lastMessage {
+                lastMessageSection(message)
+            }
             // Full goal (initial prompt), un-truncated — the collapsed row clips it to one line.
             if let goal = session.initialUserPromptText?.trimmingCharacters(in: .whitespacesAndNewlines),
                !goal.isEmpty {
@@ -161,17 +182,52 @@ struct AgentSessionExpandedView: View {
                     Text("Goal").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
                     Text(goal)
                         .font(.caption2).foregroundStyle(.secondary)
-                        .lineLimit(4)
+                        .lineLimit(showFullMessage ? nil : 4)
                         .textSelection(.enabled)
                 }
             }
             if hasDetail {
                 AgentSessionDetailView(session: session)
-            } else if session.initialUserPromptText == nil {
+            } else if lastMessage == nil && session.initialUserPromptText == nil {
                 Text("No details yet").font(.system(size: 9)).foregroundStyle(.tertiary)
             }
         }
         .padding(.top, 2)
+    }
+
+    private func lastMessageSection(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text("Last message").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                Spacer(minLength: 4)
+                // Explicit copy button — textSelection drag is fiddly on the non-key notch panel.
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message, forType: .string)
+                    justCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { justCopied = false }
+                } label: {
+                    Label(justCopied ? "Copied" : "Copy",
+                          systemImage: justCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 9))
+                        .foregroundStyle(justCopied ? AgentStatusPalette.completed : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy Claude's full last message")
+            }
+            Text(message)
+                .font(.caption2).foregroundStyle(.white.opacity(0.85))
+                .lineLimit(showFullMessage ? nil : 8)
+                .textSelection(.enabled)
+            if isLong(message) {
+                Button(showFullMessage ? "Show less" : "Show more") {
+                    withAnimation(.easeInOut(duration: 0.15)) { showFullMessage.toggle() }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.blue)
+            }
+        }
     }
 }
 
