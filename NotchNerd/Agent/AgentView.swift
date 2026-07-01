@@ -123,11 +123,19 @@ struct AgentSessionRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 AnimatedStatusDot(
-                    color: AgentStatusPalette.tint(for: session.phase),
+                    color: agent.isStopped(session.id)
+                        ? AgentStatusPalette.error
+                        : AgentStatusPalette.tint(for: session.phase),
                     pulsing: session.phase == .running || session.phase.requiresAttention
                 )
                 Text(session.title.isEmpty ? "Claude Code" : session.title)
                     .font(.subheadline).lineLimit(1)
+                if agent.isStopped(session.id) {
+                    Text("stopped")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(AgentStatusPalette.error)
+                        .help("The turn was interrupted before finishing")
+                }
                 Spacer(minLength: 4)
                 if let progress = session.taskProgress {
                     Label("\(progress.done)/\(progress.total)", systemImage: "checklist")
@@ -176,7 +184,11 @@ struct AgentSessionRow: View {
             // researching state, so the icon resolves the underlying tool instead.
             if let recap = session.recapLineText, !recap.isEmpty {
                 if session.phase == .running {
-                    let descriptor = AgentActivity.resolve(for: session, ignoringSubagents: true).descriptor
+                    let descriptor = AgentActivity.resolve(
+                        for: session,
+                        ignoringSubagents: true,
+                        isCompacting: agent.isCompacting(session.id)
+                    ).descriptor
                     Label {
                         Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                     } icon: {
@@ -656,7 +668,8 @@ extension AgentSession {
         }
     }
 
-    /// Compact identity context: branch · terminal · friendly model · non-default permission mode.
+    /// Compact identity context: branch · terminal · friendly model · non-default permission mode
+    /// · non-fresh startup source.
     var identityChips: [String] {
         var chips: [String] = []
         if let branch = spotlightWorktreeBranch { chips.append(branch) }
@@ -665,7 +678,19 @@ extension AgentSession {
         if let mode = claudeMetadata?.permissionMode, let label = Self.permissionModeLabel(mode) {
             chips.append(label)
         }
+        if let source = claudeMetadata?.startupSource, let label = Self.startupSourceLabel(source) {
+            chips.append(label)
+        }
         return chips
+    }
+
+    static func startupSourceLabel(_ source: ClaudeSessionStartSource) -> String? {
+        switch source {
+        case .startup: return nil          // a fresh session is the norm — not worth a chip
+        case .resume: return "Resumed"
+        case .clear: return "Cleared"
+        case .compact: return "Compacted"
+        }
     }
 
     /// (done, total) of the session's task checklist, when it has one.
@@ -688,7 +713,8 @@ extension AgentSession {
         if lowered.contains("opus") { return "Opus" }
         if lowered.contains("sonnet") { return "Sonnet" }
         if lowered.contains("haiku") { return "Haiku" }
-        if lowered.contains("fable") { return "Fable" }
+        if lowered.contains("fable") { return "Fable 5" }
+        if lowered.contains("mythos") { return "Mythos 5" }
         return raw
     }
 

@@ -237,6 +237,7 @@ final class AgentBridgeManager: ObservableObject {
     // MARK: - Event ingestion (our slim applyTrackedEvent)
 
     private func ingest(_ event: AgentEvent) {
+        trackActivityFlags(for: event)
         state.apply(event)                       // single source of truth
         // Keep an actively-emitting session marked alive so a transient `ps`/`lsof` hiccup can't
         // force-end a turn that's clearly still running (restores the per-event keep-alive that the
@@ -287,6 +288,45 @@ final class AgentBridgeManager: ObservableObject {
         }
     }
 
+    // MARK: Derived activity flags (stopped / compacting)
+
+    /// Sessions whose last completion was a user interrupt (ESC / `isInterrupt`). A genuine
+    /// StopFailure is NOT detectable observer-side (the engine folds it into a normal
+    /// `.sessionCompleted` whose summary is the error text) — that refinement needs a Vendor patch
+    /// and is deliberately deferred.
+    private var stoppedSessionIDs: Set<String> = []
+    /// PreCompact has no matching "compact done" hook; entries expire via `isCompacting`'s TTL.
+    private var compactingSessions: [String: Date] = [:]
+
+    func isStopped(_ sessionID: String) -> Bool { stoppedSessionIDs.contains(sessionID) }
+
+    func isCompacting(_ sessionID: String) -> Bool {
+        guard let began = compactingSessions[sessionID] else { return false }
+        return Date().timeIntervalSince(began) < 12
+    }
+
+    private func trackActivityFlags(for event: AgentEvent) {
+        switch event {
+        case let .sessionCompleted(payload):
+            if payload.isInterrupt == true { stoppedSessionIDs.insert(payload.sessionID) }
+            compactingSessions.removeValue(forKey: payload.sessionID)
+        case let .activityUpdated(payload):
+            stoppedSessionIDs.remove(payload.sessionID)
+            // The engine's PreCompact handler emits exactly this summary (BridgeServer .preCompact).
+            if payload.summary.hasSuffix("is compacting the conversation.") {
+                compactingSessions[payload.sessionID] = Date()
+            } else {
+                compactingSessions.removeValue(forKey: payload.sessionID)
+            }
+        case let .permissionRequested(payload):
+            stoppedSessionIDs.remove(payload.sessionID)
+        case let .questionAsked(payload):
+            stoppedSessionIDs.remove(payload.sessionID)
+        default:
+            break
+        }
+    }
+
     // MARK: Row expansion (manager-owned)
 
     /// Rows the user has expanded. Manager-owned (not per-row @State) so expansion survives the
@@ -309,6 +349,8 @@ final class AgentBridgeManager: ObservableObject {
         let visibleIDs = Set(visible.map(\.id))
         expandedSessionIDs.formIntersection(visibleIDs)
         attentionSeededIDs.formIntersection(visibleIDs)
+        stoppedSessionIDs.formIntersection(visibleIDs)
+        compactingSessions = compactingSessions.filter { visibleIDs.contains($0.key) }
         for session in visible {
             if session.phase.requiresAttention {
                 // Seed once per attention episode; re-arm after the episode ends.

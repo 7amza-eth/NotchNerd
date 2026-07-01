@@ -22,10 +22,12 @@ enum AgentActivity: Equatable {
     case reading
     case tool(String)
     case researching(Int)
+    case compacting
     case planReview
     case permission
     case question
     case done
+    case stopped
 
     struct Descriptor {
         let symbol: String
@@ -36,15 +38,23 @@ enum AgentActivity: Equatable {
 
     /// `ignoringSubagents` lets the recap line show the underlying tool state when the
     /// "N agents researching" chip already conveys the subagent count on its own line.
-    static func resolve(for session: AgentSession, ignoringSubagents: Bool = false) -> AgentActivity {
+    /// `isStopped`/`isCompacting` are the manager-derived flags (interrupted completion /
+    /// PreCompact TTL) — pass them from `AgentBridgeManager` since they aren't on the session.
+    static func resolve(
+        for session: AgentSession,
+        ignoringSubagents: Bool = false,
+        isStopped: Bool = false,
+        isCompacting: Bool = false
+    ) -> AgentActivity {
         switch session.phase {
         case .waitingForApproval:
             return session.permissionRequest?.toolName == "ExitPlanMode" ? .planReview : .permission
         case .waitingForAnswer:
             return .question
         case .completed:
-            return .done
+            return isStopped ? .stopped : .done
         case .running:
+            if isCompacting { return .compacting }
             if !ignoringSubagents {
                 let active = session.claudeMetadata?.activeSubagents.filter { $0.summary == nil }.count ?? 0
                 if active > 0 { return .researching(active) }
@@ -77,6 +87,12 @@ enum AgentActivity: Equatable {
         case let .researching(count):
             Descriptor(symbol: "arrow.triangle.branch", tint: .cyan,
                        label: count == 1 ? "1 agent researching" : "\(count) agents researching", pulses: true)
+        case .compacting:
+            Descriptor(symbol: "arrow.down.right.and.arrow.up.left", tint: AgentStatusPalette.idle,
+                       label: "Compacting context", pulses: true)
+        case .stopped:
+            Descriptor(symbol: "exclamationmark.triangle.fill", tint: AgentStatusPalette.error,
+                       label: "Stopped", pulses: false)
         case .planReview:
             Descriptor(symbol: "list.clipboard", tint: AgentStatusPalette.waiting, label: "Plan ready for review", pulses: true)
         case .permission:
