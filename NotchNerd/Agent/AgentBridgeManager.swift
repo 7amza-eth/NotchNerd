@@ -825,9 +825,12 @@ final class AgentBridgeManager: ObservableObject {
                 guard let self else { return }
                 let aliveClaudeIDs = self.aliveClaudeSessionIDs(from: snapshots)
                 let changed = self.state.markProcessLiveness(aliveSessionIDs: aliveClaudeIDs)
-                // Also refresh while a session is running so the time-based `workingCount` updates
-                // (the "Claude working" indicator turns off ~recency-window after events stop).
-                if !changed.isEmpty || self.state.sessions.contains(where: { $0.phase == .running }) {
+                // Only republish when liveness actually changed. `workingCount` is now event-driven
+                // (`phase == .running && isProcessAlive`), and both its inputs already trigger a
+                // republish — phase via `ingest`, isProcessAlive via `changed` here — so the old
+                // "republish every tick while any session is running" was a redundant per-3s
+                // full-tree re-render (a measured idle-battery cost).
+                if !changed.isEmpty {
                     self.republish()
                 }
                 // Re-adopt any live terminal we're not tracking (restart orphan / hookless bridge).

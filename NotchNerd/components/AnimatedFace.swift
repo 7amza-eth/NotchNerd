@@ -10,7 +10,8 @@ struct MinimalFaceFeatures: View {
     @State private var isBlinking = false
     @State var height:CGFloat = 20;
     @State var width:CGFloat = 30;
-    
+    @State private var blinkTimer: Timer?
+
     var body: some View {
         VStack(spacing: 4) { // Adjusted spacing to fit within 30x30
             // Eyes
@@ -43,10 +44,17 @@ struct MinimalFaceFeatures: View {
         .onAppear {
             startBlinking()
         }
+        .onDisappear {
+            // Invalidate so the 3s wakeup doesn't leak (and doesn't fire while off-screen);
+            // without this every re-appearance stacked another repeating timer forever.
+            blinkTimer?.invalidate()
+            blinkTimer = nil
+        }
     }
-    
+
     func startBlinking() {
-        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
+        guard blinkTimer == nil else { return }   // never stack timers on a re-appear
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
             withAnimation(.spring(duration: 0.2)) {
                 isBlinking = true
             }
