@@ -837,6 +837,16 @@ verified against the Claude Code **v2.1.198 binary** on this machine (not guesse
   view-layer `condensedForRecap`) — P6a renders it with **zero IO**; the transcript reader is only
   needed for plan text, activity timeline, edited files, stats, and stale-session fallback.
 
+**Live-QA findings (2026-06-30, real plan-mode session):** the plan card renders with plan text,
+"keep planning" feedback reaches Claude verbatim (deny-message channel), and **`setMode` from the
+hook IS honored** — the terminal's mode footer flipped and `permissionMode: default` round-tripped
+back into the registry. Two environment facts: (1) **Claude Code defers transcript flushes** — a
+short session may have NO `.jsonl` even after completing a turn (why `PermissionRequest.planText`
+is a Vendor patch and the expanded-row transcript sections appear only once the file exists —
+graceful fallback in place); (2) **the app ignores SIGTERM** (needed SIGKILL to restart — mind this
+for the keep-awake watchdog/terminate path, and when relaunching after rebuilds: verify the PID
+actually changed, `open` happily focuses a stale instance).
+
 **Status (2026-06-30): P1–P7 BUILT** (commits `cd41755`…`f217965`, each build-verified; plus a
 per-session **context-footprint stat** — `ctx Nk` in the expanded stats footer, computed from the
 last main-chain assistant record's input+cache tokens, raw count deliberately without a %).
