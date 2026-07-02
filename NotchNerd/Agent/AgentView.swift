@@ -144,6 +144,11 @@ struct AgentSessionRow: View {
                         .foregroundStyle(.tertiary)
                         .help("\(progress.done) of \(progress.total) tasks done")
                 }
+                if let ctx = agent.transcriptDetails[session.id]?.contextTokens, ctx > 0 {
+                    Text("ctx \(AgentSessionExpandedView.compactTokens(ctx))")
+                        .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
+                        .help("Current context size (last turn's input + cache tokens)")
+                }
                 Text(session.spotlightAgeBadge)
                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
                     .help("Time since last activity")
@@ -221,6 +226,9 @@ struct AgentSessionRow: View {
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
+        // Restored/idle sessions may never emit another event — fetch their detail (ctx badge)
+        // when the row first appears; the manager's cache guards make repeats free.
+        .onAppear { agent.loadTranscriptDetail(for: session.id) }
     }
 
     private func permissionCard(_ request: PermissionRequest) -> some View {

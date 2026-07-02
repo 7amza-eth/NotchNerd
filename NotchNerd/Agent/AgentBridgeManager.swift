@@ -251,10 +251,9 @@ final class AgentBridgeManager: ObservableObject {
         republish()
         schedulePersist()
         emitNotification(for: event)
-        // Keep an expanded row's transcript detail fresh (debounced + mtime-guarded inside).
-        if expandedSessionIDs.contains(sid) {
-            loadTranscriptDetail(for: sid)
-        }
+        // Keep transcript detail fresh for every visible session (debounced + mtime-guarded
+        // inside) — the collapsed row's ctx badge needs it, not just expanded rows.
+        loadTranscriptDetail(for: sid)
     }
 
     /// Every `AgentEvent` payload carries the session it concerns.
