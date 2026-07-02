@@ -346,6 +346,7 @@ final class AgentBridgeManager: ObservableObject {
         } else {
             expandedSessionIDs.insert(sessionID)
             loadTranscriptDetail(for: sessionID)
+            refreshWorkflowActivity(force: true)
         }
     }
 
@@ -755,6 +756,39 @@ final class AgentBridgeManager: ObservableObject {
     /// Throttle for the liveness-driven orphan rescan (the transcript scan isn't free).
     private var lastOrphanScanAt = Date.distantPast
 
+    // MARK: Dynamic-workflow agents (off-disk, hook-independent)
+
+    /// Per-session running-workflow-agent activity, read from `<sessionDir>/subagents/workflows/`.
+    /// The Workflow tool's agents don't fire SubagentStart hooks and aren't in `activeSubagents`, so
+    /// this is the only way to show them — and it works for hookless/bridge sessions.
+    @Published private(set) var workflowActivity: [String: WorkflowActivity] = [:]
+    private var lastWorkflowScanAt = Date.distantPast
+
+    /// Refresh workflow-agent activity for visible sessions (off-main, throttled). Cheap when no
+    /// workflow is running (a missing dir / stale journal short-circuits before any parse).
+    func refreshWorkflowActivity(force: Bool = false) {
+        let now = Date()
+        guard force || now.timeIntervalSince(lastWorkflowScanAt) > 3 else { return }
+        lastWorkflowScanAt = now
+        let paths: [(id: String, path: String)] = state.sessions
+            .filter { $0.isVisibleInIsland && $0.tool == .claudeCode }
+            .compactMap { session in session.claudeMetadata?.transcriptPath.map { (session.id, $0) } }
+        guard !paths.isEmpty else {
+            if !workflowActivity.isEmpty { workflowActivity = [:] }
+            return
+        }
+        Task.detached(priority: .utility) { [weak self] in
+            var result: [String: WorkflowActivity] = [:]
+            for (id, path) in paths {
+                if let activity = WorkflowAgentReader.read(transcriptPath: path) { result[id] = activity }
+            }
+            await MainActor.run {
+                guard let self, self.workflowActivity != result else { return }
+                self.workflowActivity = result   // @Published → rows re-render
+            }
+        }
+    }
+
     /// Self-heal: if a live `claude` terminal has no tracked session (app restarted under a running
     /// session, or a bridge session whose turns never fired a local hook), rediscover its transcript
     /// and adopt it via `applyDiscoveredSessions` so it reappears within a liveness cycle — no user
@@ -798,6 +832,8 @@ final class AgentBridgeManager: ObservableObject {
                 }
                 // Re-adopt any live terminal we're not tracking (restart orphan / hookless bridge).
                 self.adoptOrphansIfNeeded(snapshots: snapshots)
+                // Surface dynamic-workflow agents (the only signal for a hookless session's workflow).
+                self.refreshWorkflowActivity()
             }
         }
         timer.resume()

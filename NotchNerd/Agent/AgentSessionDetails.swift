@@ -192,6 +192,9 @@ struct AgentSessionExpandedView: View {
                         .textSelection(.enabled)
                 }
             }
+            if let workflow = agent.workflowActivity[session.id], workflow.runningAgents > 0 {
+                workflowSection(workflow)
+            }
             if hasDetail {
                 AgentSessionDetailView(session: session)
             }
@@ -205,6 +208,37 @@ struct AgentSessionExpandedView: View {
         }
         .padding(.top, 2)
         .onAppear { agent.loadTranscriptDetail(for: session.id) }
+    }
+
+    // MARK: Workflow agents (off-disk)
+
+    private func workflowSection(_ workflow: WorkflowActivity) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(
+                workflow.runningAgents == 1 ? "1 workflow agent running" : "\(workflow.runningAgents) workflow agents running",
+                systemImage: "arrow.triangle.branch"
+            )
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color.cyan.opacity(0.9))
+            if !workflow.agentTypes.isEmpty {
+                Text(Self.agentTypeSummary(workflow.agentTypes))
+                    .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(2)
+            }
+        }
+    }
+
+    /// "3 general-purpose · 1 code-reviewer" from the running agents' types.
+    static func agentTypeSummary(_ types: [String]) -> String {
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for type in types {
+            if counts[type] == nil { order.append(type) }
+            counts[type, default: 0] += 1
+        }
+        return order.map { type in
+            let n = counts[type] ?? 0
+            return n > 1 ? "\(n) \(type)" : type
+        }.joined(separator: " · ")
     }
 
     // MARK: Transcript-derived sections

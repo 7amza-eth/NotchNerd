@@ -177,8 +177,17 @@ struct AgentSessionRow: View {
                 Text(session.identityChips.joined(separator: "  ·  "))
                     .font(.system(size: 9)).foregroundStyle(.tertiary).lineLimit(1)
             }
-            // Waiting-on-subagents chip — on the activity line, not the crowded header row.
-            if session.phase == .running, let researching = session.subagentSummary {
+            // Waiting-on-agents chip — on the activity line, not the crowded header row.
+            // Dynamic-workflow agents (read off disk) take priority and are NOT gated on phase: a
+            // hookless/bridge session shows as .completed even while its workflow is mid-flight.
+            if let workflow = agent.workflowActivity[session.id], workflow.runningAgents > 0 {
+                Label(
+                    workflow.runningAgents == 1 ? "1 agent working" : "\(workflow.runningAgents) agents working",
+                    systemImage: "arrow.triangle.branch"
+                )
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Color.cyan.opacity(0.9))
+            } else if session.phase == .running, let researching = session.subagentSummary {
                 Label(researching, systemImage: "arrow.triangle.branch")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Color.cyan.opacity(0.9))
