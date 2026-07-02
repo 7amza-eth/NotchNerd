@@ -778,6 +778,25 @@ each phase; git history holds the dated detail.)
   Updates* show the wrong version; releases set it from the git tag, so unaffected). Deferred as
   low-value/risky: the calendar shared-store deselect-all snap-back, `musicControlSlotLimit` vs
   `fixedSlotCount`, and the `sliderColor`/`agentSuppressFrontmost` symbol-vs-string mismatches.
+- **v0.3.2 — battery pass (2026-07-02).** A measured audit (running app at **~13–33% idle CPU**,
+  0%→26% sawtooth every 3s) → multi-agent review (timers/wakeups · inherited subsystems · animations,
+  cross-verified — the re-run corrected a false "AnimatedFace is dead code" call: it's a rendered,
+  *leaking* timer) → fixes, worst-first. **Result: fast-mode CPU ~0–2% (from 13–33%), a ~10–15× drop.**
+  Two costs dominated: (1) the liveness backstop's fixed **3s `ps -Ao`+`lsof` sweep** with no idle
+  gating → **adaptive cadence** (3s while a session is `.running`/workflow active, **20s idle**;
+  `ingest` nudges back to fast in 250ms; a self-rescheduling one-shot timer; orphan-adoption +
+  workflow detection still work); (2) the v0.3.1 **ctx badge doing a full ≤12MB transcript scan on
+  every event** → `ClaudeTranscriptReader.readContextTokens` **256KB tail-read** (verified identical
+  result at **2ms vs ~195ms**), full `loadTranscriptDetail` now only for expanded rows. Also: dropped
+  the redundant per-tick `republish()` (workingCount is event-driven now); **paused the Lottie music
+  visualizer + lyrics ticker when music isn't playing** (Lottie looped ~60fps in the closed notch even
+  while paused); **fixed the `MinimalFaceFeatures` blink-timer leak** (never invalidated — stacked a
+  timer per re-appear); **deleted the dead `XPCHelperClient` AX-monitor poll**; usage poll 5s→30s.
+  Deferred (higher-risk, lower marginal value after the above): `ps`/`lsof` → in-process `libproc`.
+  Verified-clean and left alone: all inherited managers (Volume/Battery/Calendar/Webcam/Fullscreen/
+  Drag/Music — event-driven, no idle polling); the attention/working sparkle pulses (conditionally
+  rendered only during active states). Regression-checked: 3 sessions still track + Glacier bridge
+  session still adopts under the adaptive cadence.
 - **v0.3.1 — orphaned-live-session adoption (2026-07-02).** Live-QA found a session missing from the
   tab after the app was restarted out from under it (Sparkle auto-update + manual restarts during the
   v0.3 release). Root cause (NOT a v0.3 regression — 0 lines changed in discovery/liveness/registry;
