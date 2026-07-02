@@ -13,6 +13,10 @@ struct LottieView: NSViewRepresentable {
     let url: URL
     let speed: Double
     let loopMode: LottieLoopMode
+    /// When false, the animation is paused — a looping visualizer in the always-on closed notch
+    /// would otherwise redraw at ~60fps forever, even while music is paused. Defaults true so
+    /// Settings previews still animate.
+    var isPlaying: Bool = true
 
     private static var associatedURLKey: UInt8 = 0
 
@@ -53,14 +57,16 @@ struct LottieView: NSViewRepresentable {
                 animationView.contentMode = .scaleAspectFit
                 animationView.loopMode = loopMode
                 animationView.animationSpeed = CGFloat(speed)
-                animationView.play()
+                if isPlaying { animationView.play() }
                 objc_setAssociatedObject(animationView, &Self.associatedURLKey, url, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
         } else {
             animationView.loopMode = loopMode
             animationView.animationSpeed = CGFloat(speed)
-            if !animationView.isAnimationPlaying {
-                animationView.play()
+            if isPlaying {
+                if !animationView.isAnimationPlaying { animationView.play() }
+            } else if animationView.isAnimationPlaying {
+                animationView.pause()   // stop the 60fps redraw while music is paused
             }
         }
     }

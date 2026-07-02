@@ -154,7 +154,9 @@ struct MusicControlsView: View {
             )
             .fontWeight(.medium)
             if Defaults[.enableLyrics] {
-                TimelineView(.animation(minimumInterval: 0.25)) { timeline in
+                // Suspend the redraw when paused (nil interval) — the lyric line is hidden while
+                // paused anyway (opacity 0 below), so there's nothing to tick. Mirrors musicSlider.
+                TimelineView(.animation(minimumInterval: musicManager.isPlaying ? 0.25 : nil)) { timeline in
                     let currentElapsed: Double = {
                         guard musicManager.isPlaying else { return musicManager.elapsedTime }
                         let delta = timeline.date.timeIntervalSince(musicManager.timestampDate)

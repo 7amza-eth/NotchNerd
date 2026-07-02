@@ -592,7 +592,7 @@ struct ContentView: View {
                 } else {
                     // Constrain to the small slot (the Lottie NSView reports a large intrinsic size,
                     // so an unbounded frame would overflow the whole notch) + scaleAspectFit so it fits.
-                    LottieAnimationContainer()
+                    LottieAnimationContainer(isPlaying: musicManager.isPlaying)
                         .frame(
                             width: max(0, vm.effectiveClosedNotchHeight - 12),
                             height: max(0, vm.effectiveClosedNotchHeight - 12)

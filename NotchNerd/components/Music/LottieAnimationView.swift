@@ -11,12 +11,15 @@ import Defaults
 
 struct LottieAnimationContainer: View {
     @Default(.selectedVisualizer) var selectedVisualizer
+    /// Pause the loop when music isn't playing (threaded down to LottieView). Default true so
+    /// non-music callers (Settings previews) keep animating.
+    var isPlaying: Bool = true
     var body: some View {
         let visualizer = selectedVisualizer ?? CustomVisualizer.builtInPresets.first
         if let visualizer {
-            LottieView(url: visualizer.url, speed: visualizer.speed, loopMode: .loop)
+            LottieView(url: visualizer.url, speed: visualizer.speed, loopMode: .loop, isPlaying: isPlaying)
         } else {
-            LottieView(url: URL(string: "https://assets9.lottiefiles.com/packages/lf20_mniampqn.json")!, speed: 1.0, loopMode: .loop)
+            LottieView(url: URL(string: "https://assets9.lottiefiles.com/packages/lf20_mniampqn.json")!, speed: 1.0, loopMode: .loop, isPlaying: isPlaying)
         }
     }
 }
