@@ -778,6 +778,26 @@ each phase; git history holds the dated detail.)
   Updates* show the wrong version; releases set it from the git tag, so unaffected). Deferred as
   low-value/risky: the calendar shared-store deselect-all snap-back, `musicControlSlotLimit` vs
   `fixedSlotCount`, and the `sliderColor`/`agentSuppressFrontmost` symbol-vs-string mismatches.
+- **v0.3.1 — orphaned-live-session adoption (2026-07-02).** Live-QA found a session missing from the
+  tab after the app was restarted out from under it (Sparkle auto-update + manual restarts during the
+  v0.3 release). Root cause (NOT a v0.3 regression — 0 lines changed in discovery/liveness/registry;
+  NOT the CLI — 2.1.198 unchanged; NOT compaction — same session-id): NotchNerd rebuilds live sessions
+  from **hook events**, and a session already running when the app restarts doesn't re-announce itself;
+  it only re-registers on its next hook. A session recovered from its transcript is **tty-less**, and
+  the liveness backstop matches by TTY, so `discoverTranscriptsOnce` recovered it as an invisible
+  `.completed` record. Compounding it: the affected session was a **remote-control / bridge session**
+  (128 `bridge-session` transcript records) whose turns appear **not to fire local hooks** — so it
+  could *only* ever be surfaced via the process-liveness path, never hooks. **Fix
+  (`AgentBridgeManager.applyDiscoveredSessions`):** attach a live `claude` process's TTY (+terminal
+  app) to a recovered session sharing its **cwd**, so the existing liveness path keeps it visible; runs
+  at startup and as a throttled (20s) self-heal from the liveness backstop when an orphan TTY exists.
+  Safe against the deliberately-removed cwd stale-rescue (only a *live* process's cwd adopts, newest
+  recovered session per free TTY only, 15-min transcript freshness). Verified live: the bridge session
+  reappeared automatically on the fixed build with no prompt. **Gotcha for future work:** the *persisted
+  registry file* is not the UI — adopted sessions show via `republish()` immediately but persist only on
+  a later event, so debug against the app UI, not the registry JSON. **Open limitation:** remote-control/
+  bridge sessions not firing local hooks means approve/deny + live phase for them still depend on the
+  process path only (ties into the Phase-7 / v0.4 remote-session notes).
 - **Agent-tab v0.3 build-out (2026-06-30).** Ultracode session: three research/design/verify
   workflows (agent-tab UX; feature-set gaps incl. the keep-awake signing verdict; keep-awake
   sentiment + lid-closed-alert verification) → locked roadmap → **P1–P7 built + committed**
