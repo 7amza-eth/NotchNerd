@@ -778,6 +778,17 @@ each phase; git history holds the dated detail.)
   Updates* show the wrong version; releases set it from the git tag, so unaffected). Deferred as
   low-value/risky: the calendar shared-store deselect-all snap-back, `musicControlSlotLimit` vs
   `fixedSlotCount`, and the `sliderColor`/`agentSuppressFrontmost` symbol-vs-string mismatches.
+- **Verified gotcha — Sparkle auto-updates reset TCC grants (2026-07-02).** Releases are **ad-hoc
+  signed (no Team ID)**, so TCC anchors Accessibility/Automation grants to the **cdhash**, which
+  changes every release (confirmed: v0.3.0 `e3e621f5…` vs v0.3.2 `4fa707bf…`, both `TeamIdentifier:
+  not set`). So every Sparkle auto-update **invalidates the HUD's Accessibility grant** (the
+  `MediaKeyInterceptor` `CGEventTap`) and the terminal-jump **Automation** grant — the System Settings
+  toggle often still shows "on" but is non-functional until toggled off/on or re-added. The CLAUDE.md
+  ad-hoc-cdhash gotcha (framed for local rebuilds) therefore **also hits end users on every release**.
+  No ad-hoc workaround (cdhash = hash of the code). **Fix = Developer ID + notarization** (anchors TCC
+  to the stable Team ID). This is now the **3rd converging driver for a Developer ID**, alongside
+  Gatekeeper quarantine friction and the v0.4 keep-awake daemon. *(Also validated Sparkle's auto-update
+  fires on its own: `/Applications` silently went 0.3.0→0.3.2 in the background.)*
 - **v0.3.2 — battery pass (2026-07-02).** A measured audit (running app at **~13–33% idle CPU**,
   0%→26% sawtooth every 3s) → multi-agent review (timers/wakeups · inherited subsystems · animations,
   cross-verified — the re-run corrected a false "AnimatedFace is dead code" call: it's a rendered,
