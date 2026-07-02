@@ -39,6 +39,19 @@ xcodebuild -project NotchNerd.xcodeproj -scheme NotchNerd -configuration Debug b
 - **`gh` defaults to `upstream` (boring.notch), not the fork.** Pass `--repo 7amza-eth/NotchNerd` (or run `gh repo set-default`) for any `gh release` / `gh run` — otherwise you see boring.notch's `v2.7.x` releases/Actions, not the fork's `0.x`.
 - **Ignore SourceKit "No such module 'Defaults'/'KeyboardShortcuts'/…" diagnostics** for SPM deps after edits — they're re-index artifacts, not real errors. Trust the `xcodebuild` result.
 
+## Verify before declaring done (working pattern)
+
+Don't call something done/fixed/working from inference — confirm with real evidence first.
+- **Perf work → measure real before/after** (`top`/`ps` CPU, timings), never assert an improvement. The
+  v0.3.2 battery win (~13–33% → ~0–2%) and its dominant cost (a full-transcript scan per event) were
+  only found by measuring.
+- **Check claims against ground truth.** A `grep` on the registry once falsely "confirmed" a session was
+  back (it matched the word in this session's own saved text). When a new reader/optimization must match
+  the old path, prove it (the ctx tail-read was byte-matched to the full scan: identical, 2ms vs 195ms).
+- **Re-run / resume flaky or partial subagents** rather than trust incomplete output. Resuming two
+  audit agents that died on "Connection closed mid-response" corrected a *wrong* "dead code" call (it was
+  a rendered, leaking timer) and surfaced a HIGH finding the survivor missed.
+
 ## Commit conventions
 
 Branch is `main` (personal fork, `upstream` = boring.notch). Commit messages end with the
