@@ -260,9 +260,11 @@ final class AgentBridgeManager: ObservableObject {
         republish()
         schedulePersist()
         emitNotification(for: event)
-        // Keep transcript detail fresh for every visible session (debounced + mtime-guarded
-        // inside) — the collapsed row's ctx badge needs it, not just expanded rows.
-        loadTranscriptDetail(for: sid)
+        // Keep an expanded row's full detail fresh; collapsed rows only need the cheap ctx tail-read
+        // (refreshed from the liveness tick), so don't pay the full ≤12MB scan on every event.
+        if expandedSessionIDs.contains(sid) {
+            loadTranscriptDetail(for: sid)
+        }
         // If this event made a session active, switch the liveness backstop to its fast cadence now
         // rather than waiting out the (up to 20s) idle interval.
         nudgeLivenessIfIdle()
@@ -368,6 +370,9 @@ final class AgentBridgeManager: ObservableObject {
     /// off-main on expand and opportunistically on new events for expanded rows; mtime-guarded,
     /// debounced, pruned with the visible set.
     @Published private(set) var transcriptDetails: [String: ClaudeTranscriptDetail] = [:]
+    /// Cheap per-session context footprint (tail-read) for the collapsed `ctx` badge — separate from
+    /// the full `transcriptDetails` (≤12MB forward scan) which is only loaded for expanded rows.
+    @Published private(set) var contextTokensBySession: [String: Int] = [:]
     private var transcriptMTimes: [String: Date] = [:]
     private var transcriptReadAt: [String: Date] = [:]
     private var transcriptLoadsInFlight: Set<String> = []
@@ -402,6 +407,7 @@ final class AgentBridgeManager: ObservableObject {
         transcriptDetails = transcriptDetails.filter { visibleIDs.contains($0.key) }
         transcriptMTimes = transcriptMTimes.filter { visibleIDs.contains($0.key) }
         transcriptReadAt = transcriptReadAt.filter { visibleIDs.contains($0.key) }
+        contextTokensBySession = contextTokensBySession.filter { visibleIDs.contains($0.key) }
         for session in visible {
             if session.phase.requiresAttention {
                 // Seed once per attention episode; re-arm after the episode ends.
@@ -801,6 +807,29 @@ final class AgentBridgeManager: ObservableObject {
         }
     }
 
+    /// Refresh the cheap per-session context footprint (tail-read) for every visible session — for
+    /// the collapsed `ctx` badge. Runs off the liveness tick, so it inherits the adaptive cadence
+    /// (3s active / 20s idle). Far cheaper than the full `loadTranscriptDetail` scan.
+    func refreshContextTokens() {
+        let paths: [(id: String, path: String)] = state.sessions
+            .filter { $0.isVisibleInIsland && $0.tool == .claudeCode }
+            .compactMap { session in session.claudeMetadata?.transcriptPath.map { (session.id, $0) } }
+        guard !paths.isEmpty else {
+            if !contextTokensBySession.isEmpty { contextTokensBySession = [:] }
+            return
+        }
+        Task.detached(priority: .utility) { [weak self] in
+            var result: [String: Int] = [:]
+            for (id, path) in paths {
+                if let ctx = ClaudeTranscriptReader.readContextTokens(transcriptPath: path) { result[id] = ctx }
+            }
+            await MainActor.run {
+                guard let self, self.contextTokensBySession != result else { return }
+                self.contextTokensBySession = result
+            }
+        }
+    }
+
     /// Self-heal: if a live `claude` terminal has no tracked session (app restarted under a running
     /// session, or a bridge session whose turns never fired a local hook), rediscover its transcript
     /// and adopt it via `applyDiscoveredSessions` so it reappears within a liveness cycle — no user
@@ -851,6 +880,8 @@ final class AgentBridgeManager: ObservableObject {
                 self.adoptOrphansIfNeeded(snapshots: snapshots)
                 // Surface dynamic-workflow agents (the only signal for a hookless session's workflow).
                 self.refreshWorkflowActivity()
+                // Cheap ctx tail-read for collapsed badges (replaces the full scan on every ingest).
+                self.refreshContextTokens()
                 // Pick the next tick's cadence from the (possibly just-updated) state.
                 self.rescheduleLiveness()
             }

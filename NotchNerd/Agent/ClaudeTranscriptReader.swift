@@ -147,6 +147,34 @@ enum ClaudeTranscriptReader {
         return detail
     }
 
+    /// Just the session's current context footprint (last main-chain assistant record's input +
+    /// cache tokens), via a small TAIL read — for the collapsed row's `ctx` badge, which every
+    /// visible session refreshes frequently. Avoids the full ≤12MB `read()` forward scan that
+    /// computes turn/token/file stats (those are only needed when a row is expanded).
+    static func readContextTokens(transcriptPath: String) -> Int? {
+        guard let handle = FileHandle(forReadingAtPath: transcriptPath) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size > 0 else { return nil }
+        let tail: UInt64 = 256 * 1024
+        let start = size > tail ? size - tail : 0
+        do { try handle.seek(toOffset: start) } catch { return nil }
+        guard let data = try? handle.readToEnd(), !data.isEmpty else { return nil }
+
+        // Scan from the end — the newest main-chain assistant record with usage wins.
+        for line in data.split(separator: UInt8(ascii: "\n")).reversed() {
+            guard let record = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  (record["type"] as? String) == "assistant",
+                  record["isSidechain"] as? Bool != true,
+                  let message = record["message"] as? [String: Any],
+                  let usage = message["usage"] as? [String: Any] else { continue }
+            let context = (usage["input_tokens"] as? Int ?? 0)
+                + (usage["cache_read_input_tokens"] as? Int ?? 0)
+                + (usage["cache_creation_input_tokens"] as? Int ?? 0)
+            if context > 0 { return context }
+        }
+        return nil
+    }
+
     /// Best-effort one-line preview of a tool call, mirroring the engine's key priority.
     private static func toolInputPreview(_ input: [String: Any]?) -> String? {
         guard let input else { return nil }

@@ -144,7 +144,7 @@ struct AgentSessionRow: View {
                         .foregroundStyle(.tertiary)
                         .help("\(progress.done) of \(progress.total) tasks done")
                 }
-                if let ctx = agent.transcriptDetails[session.id]?.contextTokens, ctx > 0 {
+                if let ctx = agent.contextTokensBySession[session.id], ctx > 0 {
                     Text("ctx \(AgentSessionExpandedView.compactTokens(ctx))")
                         .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
                         .help("Current context size (last turn's input + cache tokens)")
