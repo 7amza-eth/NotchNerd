@@ -797,7 +797,16 @@ each phase; git history holds the dated detail.)
   registry file* is not the UI — adopted sessions show via `republish()` immediately but persist only on
   a later event, so debug against the app UI, not the registry JSON. **Open limitation:** remote-control/
   bridge sessions not firing local hooks means approve/deny + live phase for them still depend on the
-  process path only (ties into the Phase-7 / v0.4 remote-session notes).
+  process path only (ties into the Phase-7 / v0.4 remote-session notes). Two follow-on fixes in the same
+  release: **(a) jump button for adopted sessions** — `ClaudeTranscriptDiscovery` stamps recovered
+  targets `terminalApp = "Unknown"`, and the adoption only overrode it when empty, so `canJump` rejected
+  them; now the matched live process's terminal (authoritative) wins. **(b) dynamic-workflow agent
+  visibility** (`WorkflowAgentReader`) — the Workflow tool's agents fire no `SubagentStart` hooks and
+  aren't in the main transcript (invisible even for normal sessions), so they're read off disk from
+  `<sessionDir>/subagents/workflows/wf_*/` (running = journal `started` − `result`, confirmed by fresh
+  per-agent transcript mtime). `AgentBridgeManager.workflowActivity` refreshes off-main from the liveness
+  tick; the row shows "N agents working" **not gated on `phase == .running`** (a hookless session reads as
+  `.completed` while its workflow runs). Verified live: reader tracked `3→3→2→0` as agents finished.
 - **Agent-tab v0.3 build-out (2026-06-30).** Ultracode session: three research/design/verify
   workflows (agent-tab UX; feature-set gaps incl. the keep-awake signing verdict; keep-awake
   sentiment + lid-closed-alert verification) → locked roadmap → **P1–P7 built + committed**
