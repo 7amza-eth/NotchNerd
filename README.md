@@ -234,13 +234,21 @@ Notes:
   working Swift toolchain (i.e. full Xcode) is required.
 - The app is **not sandboxed** (required for media control and the float-over-fullscreen notch), so
   it is not distributable via the Mac App Store.
-- Signing is **ad-hoc** out of the box (no Developer ID / no notarization configured).
+- Signing is **ad-hoc** out of the box. Releases can be Developer-ID signed + notarized by configuring
+  the secrets in [`RELEASING.md`](RELEASING.md) — the release workflow does it automatically when they exist.
 
-## Install a prebuilt build (testers)
+## Install a prebuilt build
 
 Prebuilt downloads are attached to each [GitHub Release](https://github.com/7amza-eth/NotchNerd/releases).
-The build isn't notarized yet, so macOS Gatekeeper blocks it on first download — **the `.zip` is the
-smoothest path** (a downloaded `.dmg` silently does nothing on double-click until its quarantine is cleared):
+
+**If the release is notarized** (the install notes on the release will say so):
+
+1. Download **`NotchNerd.dmg`**, open it, and drag **`NotchNerd.app`** into `/Applications`.
+2. Launch it — no Terminal step needed.
+
+**If the release is an ad-hoc build** (not notarized), macOS Gatekeeper blocks it on first download —
+**the `.zip` is the smoothest path** (a downloaded `.dmg` silently does nothing on double-click until
+its quarantine is cleared):
 
 1. Download **`NotchNerd.zip`** from the latest release and double-click to unzip.
 2. Drag **`NotchNerd.app`** into `/Applications`.
@@ -251,14 +259,14 @@ smoothest path** (a downloaded `.dmg` silently does nothing on double-click unti
    open /Applications/NotchNerd.app
    ```
 
-Prefer the `.dmg`? Clear *its* quarantine first, then it mounts:
+   Prefer the `.dmg`? Clear *its* quarantine first, then it mounts:
 
-```sh
-xattr -dr com.apple.quarantine ~/Downloads/NotchNerd.dmg && open ~/Downloads/NotchNerd.dmg
-```
+   ```sh
+   xattr -dr com.apple.quarantine ~/Downloads/NotchNerd.dmg && open ~/Downloads/NotchNerd.dmg
+   ```
 
 After the first install, **updates are automatic** (Sparkle, EdDSA-signed) — no re-downloading or
-re-`xattr`. (Auto-updates verify a signature rather than Gatekeeper, so the quarantine step is one-time.)
+re-`xattr`. (Auto-updates verify a signature rather than Gatekeeper.)
 
 ## First run & permissions
 

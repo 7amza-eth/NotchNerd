@@ -1015,7 +1015,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\nENGINE=\"$PROJECT_DIR/Vendor/OpenIslandEngine\"\nSWIFT=\"$(xcrun --find swift)\"\necho \"note: building OpenIslandHooks (release) from $ENGINE\"\n\"$SWIFT\" build --package-path \"$ENGINE\" --product OpenIslandHooks -c release\nBIN=\"$ENGINE/.build/release/OpenIslandHooks\"\nDEST=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nmkdir -p \"$DEST\"\ncp -f \"$BIN\" \"$DEST/OpenIslandHooks\"\nchmod 0755 \"$DEST/OpenIslandHooks\"\ncodesign --force --options runtime -s \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" \"$DEST/OpenIslandHooks\" \\\n  || codesign --force -s - \"$DEST/OpenIslandHooks\"\necho \"note: embedded OpenIslandHooks at $DEST/OpenIslandHooks\"\n";
+			shellScript = "set -euo pipefail\nENGINE=\"$PROJECT_DIR/Vendor/OpenIslandEngine\"\nSWIFT=\"$(xcrun --find swift)\"\necho \"note: building OpenIslandHooks (release) from $ENGINE\"\n\"$SWIFT\" build --package-path \"$ENGINE\" --product OpenIslandHooks -c release\nBIN=\"$ENGINE/.build/release/OpenIslandHooks\"\nDEST=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nmkdir -p \"$DEST\"\ncp -f \"$BIN\" \"$DEST/OpenIslandHooks\"\nchmod 0755 \"$DEST/OpenIslandHooks\"\nSIGN_ID=\"${EXPANDED_CODE_SIGN_IDENTITY:--}\"\nif [ \"$SIGN_ID\" = \"-\" ]; then\n  codesign --force --options runtime -s - \"$DEST/OpenIslandHooks\"\nelse\n  codesign --force --options runtime --timestamp -s \"$SIGN_ID\" \"$DEST/OpenIslandHooks\"\nfi\necho \"note: embedded OpenIslandHooks at $DEST/OpenIslandHooks\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
