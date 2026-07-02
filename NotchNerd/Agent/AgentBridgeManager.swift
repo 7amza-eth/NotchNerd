@@ -732,7 +732,10 @@ final class AgentBridgeManager: ObservableObject {
                 var jump = enriched.jumpTarget
                     ?? JumpTarget(terminalApp: live.app ?? "", workspaceName: "", paneTitle: "")
                 jump.terminalTTY = live.tty
-                if jump.terminalApp.isEmpty, let app = live.app { jump.terminalApp = app }
+                // The live process authoritatively identifies the terminal (Ghostty/Terminal); the
+                // transcript-recovered target only has the "Unknown" placebo, so prefer the process's
+                // value — otherwise canJump rejects the adopted session and shows no jump button.
+                if let app = live.app, !app.isEmpty { jump.terminalApp = app }
                 enriched.jumpTarget = jump
             }
             state.apply(.sessionStarted(SessionStarted(
