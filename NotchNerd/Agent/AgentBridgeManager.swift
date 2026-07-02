@@ -676,22 +676,103 @@ final class AgentBridgeManager: ObservableObject {
     private func discoverTranscriptsOnce() {
         Task { [weak self] in
             guard let self else { return }
+            let (discovered, snapshots) = await Task.detached(priority: .utility) { [discovery = self.transcriptDiscovery] in
+                (discovery.discoverRecentSessions(), ActiveAgentProcessDiscovery().discover())
+            }.value
+            self.applyDiscoveredSessions(discovered, liveSnapshots: snapshots)
+            self.republish()
+        }
+    }
+
+    /// Apply recovered transcript sessions, attaching a live `claude` process's TTY (+ terminal app)
+    /// when one shares the session's cwd. Without this, a session that was live across an app restart
+    /// — or a remote-control/bridge session whose turns don't fire local hooks — is recovered only as
+    /// a tty-less `.completed` record that the liveness backstop can't match, so it never becomes
+    /// visible even though its process is alive. Attaching the TTY lets the existing liveness path
+    /// keep it visible.
+    ///
+    /// Safe against the deliberately-removed cwd-matching (which used to rescue *dead* sessions via a
+    /// sibling terminal in the same repo): only a **live** process's cwd adopts a session, only the
+    /// **newest** recovered session per free TTY is adopted, and `ClaudeTranscriptDiscovery`'s 15-min
+    /// freshness window already excludes stale transcripts.
+    private func applyDiscoveredSessions(
+        _ discovered: [AgentSession],
+        liveSnapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]
+    ) {
+        let newSessions = discovered.filter { state.session(id: $0.id) == nil }
+        guard !newSessions.isEmpty else { return }
+
+        // Live claude terminals by cwd, minus TTYs already covered by a tracked (non-ended) session.
+        let trackedTTYs = Set(state.sessions
+            .filter { $0.tool == .claudeCode && !$0.isSessionEnded }
+            .compactMap { $0.jumpTarget?.terminalTTY })
+        var liveByCwd: [String: [(tty: String, app: String?)]] = [:]
+        for snap in liveSnapshots where snap.tool == .claudeCode {
+            guard let cwd = snap.workingDirectory, let tty = snap.terminalTTY,
+                  !trackedTTYs.contains(tty) else { continue }
+            liveByCwd[cwd, default: []].append((tty, snap.terminalApp))
+        }
+
+        // Assign each free TTY to the newest recovered session in the same cwd.
+        var ttyForID: [String: (tty: String, app: String?)] = [:]
+        let byCwd = Dictionary(grouping: newSessions.filter { $0.jumpTarget?.workingDirectory != nil }) {
+            $0.jumpTarget!.workingDirectory!
+        }
+        for (cwd, sessions) in byCwd {
+            var free = liveByCwd[cwd] ?? []
+            for session in sessions.sorted(by: { $0.updatedAt > $1.updatedAt }) {
+                guard !free.isEmpty else { break }
+                ttyForID[session.id] = free.removeFirst()
+            }
+        }
+
+        for session in newSessions {
+            var enriched = session
+            if let live = ttyForID[session.id] {
+                var jump = enriched.jumpTarget
+                    ?? JumpTarget(terminalApp: live.app ?? "", workspaceName: "", paneTitle: "")
+                jump.terminalTTY = live.tty
+                if jump.terminalApp.isEmpty, let app = live.app { jump.terminalApp = app }
+                enriched.jumpTarget = jump
+            }
+            state.apply(.sessionStarted(SessionStarted(
+                sessionID: enriched.id,
+                title: enriched.title,
+                tool: .claudeCode,
+                origin: .live,
+                initialPhase: .completed,           // recovered = completed/stale; hooks/liveness refine it
+                summary: enriched.summary,
+                timestamp: enriched.updatedAt,
+                jumpTarget: enriched.jumpTarget,
+                claudeMetadata: enriched.claudeMetadata
+            )))
+        }
+    }
+
+    /// Throttle for the liveness-driven orphan rescan (the transcript scan isn't free).
+    private var lastOrphanScanAt = Date.distantPast
+
+    /// Self-heal: if a live `claude` terminal has no tracked session (app restarted under a running
+    /// session, or a bridge session whose turns never fired a local hook), rediscover its transcript
+    /// and adopt it via `applyDiscoveredSessions` so it reappears within a liveness cycle — no user
+    /// interaction required. Only runs when an orphan TTY actually exists, throttled to 20s.
+    private func adoptOrphansIfNeeded(snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]) {
+        let trackedTTYs = Set(state.sessions
+            .filter { $0.tool == .claudeCode && !$0.isSessionEnded }
+            .compactMap { $0.jumpTarget?.terminalTTY })
+        let hasOrphan = snapshots.contains { snap in
+            snap.tool == .claudeCode && (snap.terminalTTY.map { !trackedTTYs.contains($0) } ?? false)
+        }
+        guard hasOrphan else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastOrphanScanAt) > 20 else { return }
+        lastOrphanScanAt = now
+        Task { [weak self] in
+            guard let self else { return }
             let discovered = await Task.detached(priority: .utility) { [discovery = self.transcriptDiscovery] in
                 discovery.discoverRecentSessions()
             }.value
-            for session in discovered where self.state.session(id: session.id) == nil {
-                self.state.apply(.sessionStarted(SessionStarted(
-                    sessionID: session.id,
-                    title: session.title,
-                    tool: .claudeCode,
-                    origin: .live,
-                    initialPhase: .completed,           // recovered = completed/stale
-                    summary: session.summary,
-                    timestamp: session.updatedAt,
-                    jumpTarget: session.jumpTarget,
-                    claudeMetadata: session.claudeMetadata
-                )))
-            }
+            self.applyDiscoveredSessions(discovered, liveSnapshots: snapshots)
             self.republish()
         }
     }
@@ -712,6 +793,8 @@ final class AgentBridgeManager: ObservableObject {
                 if !changed.isEmpty || self.state.sessions.contains(where: { $0.phase == .running }) {
                     self.republish()
                 }
+                // Re-adopt any live terminal we're not tracking (restart orphan / hookless bridge).
+                self.adoptOrphansIfNeeded(snapshots: snapshots)
             }
         }
         timer.resume()
