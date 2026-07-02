@@ -120,7 +120,16 @@ final class AgentBridgeManager: ObservableObject {
 
     private static let reconnectBaseDelay: Duration = .seconds(2)
     private static let reconnectMaxDelay: Duration = .seconds(30)
+    /// Fast cadence — used only while a session is actively working (or a workflow is running), when
+    /// we want responsive death-detection / workflow updates.
     private static let livenessInterval: DispatchTimeInterval = .seconds(3)
+    /// Idle cadence — when nothing is `.running`, the backstop only needs to notice a session dying
+    /// or a new live/bridge process appearing, which tolerates a much slower poll. This is the
+    /// single biggest idle-battery win: it turns a fixed 3s `ps -Ao`/`lsof` spawn loop into a ~20s
+    /// one whenever nothing is actively happening (most of the time).
+    private static let livenessIdleInterval: DispatchTimeInterval = .seconds(20)
+    /// Whether the liveness timer is currently on the fast (3s) schedule.
+    private var livenessIsFast = false
 
     private init() {}
 
@@ -254,6 +263,9 @@ final class AgentBridgeManager: ObservableObject {
         // Keep transcript detail fresh for every visible session (debounced + mtime-guarded
         // inside) — the collapsed row's ctx badge needs it, not just expanded rows.
         loadTranscriptDetail(for: sid)
+        // If this event made a session active, switch the liveness backstop to its fast cadence now
+        // rather than waiting out the (up to 20s) idle interval.
+        nudgeLivenessIfIdle()
     }
 
     /// Every `AgentEvent` payload carries the session it concerns.
@@ -817,8 +829,10 @@ final class AgentBridgeManager: ObservableObject {
     /// Process-liveness backstop: if the bridge dies before SessionEnd, missed polls mark a
     /// hook-managed session ended so it stops being stuck-visible.
     private func startLivenessBackstop() {
+        // Self-rescheduling one-shot (not a fixed `repeating:`) so the cadence can adapt each tick:
+        // 3s while something is actively happening, 20s when idle. The `ps -Ao`/`lsof` subprocess
+        // spawns per tick are the cost, so stretching the idle cadence is the main battery win.
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        timer.schedule(deadline: .now() + Self.livenessInterval, repeating: Self.livenessInterval)
         timer.setEventHandler { [weak self] in
             let snapshots = ActiveAgentProcessDiscovery().discover()  // shells out to ps/lsof (off-actor)
             Task { @MainActor [weak self] in
@@ -837,10 +851,33 @@ final class AgentBridgeManager: ObservableObject {
                 self.adoptOrphansIfNeeded(snapshots: snapshots)
                 // Surface dynamic-workflow agents (the only signal for a hookless session's workflow).
                 self.refreshWorkflowActivity()
+                // Pick the next tick's cadence from the (possibly just-updated) state.
+                self.rescheduleLiveness()
             }
         }
-        timer.resume()
         livenessTimer = timer
+        livenessIsFast = true
+        timer.schedule(deadline: .now() + Self.livenessInterval)   // first tick soon
+        timer.resume()
+    }
+
+    /// Re-arm the one-shot liveness timer with the cadence appropriate to current state: fast while
+    /// any session is `.running` or a workflow is active, slow otherwise.
+    private func rescheduleLiveness() {
+        guard let timer = livenessTimer else { return }
+        let active = state.sessions.contains { $0.phase == .running } || !workflowActivity.isEmpty
+        livenessIsFast = active
+        timer.schedule(deadline: .now() + (active ? Self.livenessInterval : Self.livenessIdleInterval))
+    }
+
+    /// Pull the next liveness tick forward when state may have just become active, so the fast
+    /// cadence (and workingCount/workflow updates) kick in promptly instead of waiting out the idle
+    /// interval. Cheap no-op when already fast or nothing is running.
+    private func nudgeLivenessIfIdle() {
+        guard let timer = livenessTimer, !livenessIsFast,
+              state.sessions.contains(where: { $0.phase == .running }) else { return }
+        livenessIsFast = true
+        timer.schedule(deadline: .now() + .milliseconds(250))
     }
 
     /// Resolve which tracked Claude sessions are *currently hosted by a live terminal*, for the
