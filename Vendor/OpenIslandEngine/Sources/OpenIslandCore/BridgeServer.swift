@@ -735,6 +735,16 @@ public final class BridgeServer: @unchecked Sendable {
             } else {
                 let suggestions = payload.permissionSuggestions ?? []
 
+                // NotchNerd patch: surface the ExitPlanMode plan markdown to approval UIs — the
+                // transcript is not flushed while this hook blocks, so the payload's tool_input is
+                // the only live source. See Vendor/OpenIslandEngine/VENDORED-FROM.md.
+                var planText: String?
+                if payload.toolName == "ExitPlanMode",
+                   case let .object(input) = payload.toolInput,
+                   case let .string(plan) = input["plan"], !plan.isEmpty {
+                    planText = plan
+                }
+
                 emit(
                     .permissionRequested(
                         PermissionRequested(
@@ -747,7 +757,8 @@ public final class BridgeServer: @unchecked Sendable {
                                 secondaryActionTitle: "Deny",
                                 toolName: payload.toolName,
                                 toolUseID: claudeToolUseID(for: payload),
-                                suggestedUpdates: suggestions
+                                suggestedUpdates: suggestions,
+                                planText: planText // NotchNerd patch
                             ),
                             timestamp: .now
                         )

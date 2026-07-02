@@ -340,6 +340,14 @@ struct PlanReviewCard: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.14)))
         .disabled(resolving)
         .task(id: request.id) {
+            // Primary source: the hook payload's tool_input.plan, carried on the request via the
+            // documented Vendor patch — the transcript is NOT flushed while the hook blocks, so
+            // the tail-read below only helps for stale/re-created cards.
+            if let plan = request.planText, !plan.isEmpty {
+                planText = plan
+                planLoaded = true
+                return
+            }
             guard let path = session.claudeMetadata?.transcriptPath else { planLoaded = true; return }
             let toolUseID = request.toolUseID
             planText = await Task.detached(priority: .userInitiated) {
