@@ -937,6 +937,23 @@ by a bridge filter) before P2; retest upstream issue **#559** (decisions ignored
 **Skip the upstream re-pull** at v1.1.4 (delta is ~90% Codex/Cursor-only; a re-pull clobbers the
 `QuestionOption.preview` patch) — re-evaluate at upstream's next minor.
 
+### v0.4 also carries — restart-phantom cleanup latency (deferred bug, 2026-07-09)
+
+**Symptom (reported + verified):** after restarting NotchNerd, a session that was already closed shows
+briefly (e.g. a 4th "StrataMentis-Site" row) before disappearing — it cleared only after a hook fired
+in another session. **Root cause:** a session that ends *without a clean `SessionEnd`* (abrupt terminal
+tab-close) stays in the persisted registry marked alive; on restart `restoreFromRegistry` optimistically
+shows it (`isHookManaged && !isSessionEnded` → visible) until the liveness backstop confirms its process
+is gone via **2 misses** (`processNotSeenCount >= 2`). The v0.3.2 **adaptive liveness interval**
+(3s active / 20s idle) stretched that cleanup from ~6s (old fixed 3s) to **up to ~20s** — the phantom
+lingers longer, hence more noticeable; a hook nudge (`nudgeLivenessIfIdle`) is what cleared it early.
+Self-heals (no corruption). **Fix (do after the BTM spike, in v0.4):** keep the liveness backstop on the
+fast cadence during a **startup reconciliation window** — until every restored session has been confirmed
+alive-or-dead once — *then* drop to the adaptive idle cadence (restores ~6s cleanup without losing the
+idle-battery win). Alt: prune a restored-but-never-confirmed session after **1** miss instead of 2
+(lower confidence in a session inherited from a prior app instance). ~15 lines in `AgentBridgeManager`;
+verify by reproducing (restart with a stale registry entry, time the clear).
+
 ### v0.4 — "Close the lid" keep-awake (locked 2026-06-30, signing-gated)
 
 Lidless-style (github.com/nghialuong/Lidless, MIT — add to `THIRD_PARTY_LICENSES` when built)
