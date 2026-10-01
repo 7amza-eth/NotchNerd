@@ -601,7 +601,7 @@ struct ContentView: View {
                 } else {
                     // Constrain to the small slot (the Lottie NSView reports a large intrinsic size,
                     // so an unbounded frame would overflow the whole notch) + scaleAspectFit so it fits.
-                    LottieAnimationContainer()
+                    LottieAnimationContainer(isPlaying: musicManager.isPlaying)
                         .frame(
                             width: max(0, vm.effectiveClosedNotchHeight - 12),
                             height: max(0, vm.effectiveClosedNotchHeight - 12)
@@ -643,6 +643,12 @@ struct ContentView: View {
     }
 
     private func doOpen() {
+        // Keep the notch dormant during first-launch onboarding. handleHover already early-returns
+        // while firstLaunch (so hover can't open OR close it) — but tap/gesture/drop opens weren't
+        // guarded, so a stray click could open the notch and then get STUCK (hover-out can't close
+        // it), showing an empty tab bar (NotchHomeView is blanked while firstLaunch) until onboarding
+        // finishes. Completing the intended "inert during onboarding" behavior fixes that.
+        guard !coordinator.firstLaunch else { return }
         withAnimation(animationSpring) {
             vm.open()
         }
@@ -669,7 +675,10 @@ struct ContentView: View {
                   Defaults[.openNotchOnHover] else { return }
             
             hoverTask = Task {
-                try? await Task.sleep(for: .seconds(Defaults[.minimumHoverDuration]))
+                // Explicit tolerance: without one the system may slide this timer by a second or more
+                // for a background (UIElement) app, so the 0.3s hover-open fired late and was usually
+                // cancelled by the pointer moving on — "hovering doesn't always open the notch".
+                try? await Task.sleep(for: .seconds(Defaults[.minimumHoverDuration]), tolerance: .milliseconds(10))
                 guard !Task.isCancelled else { return }
                 
                 await MainActor.run {
@@ -685,7 +694,7 @@ struct ContentView: View {
             }
         } else {
             hoverTask = Task {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(100), tolerance: .milliseconds(10))
                 guard !Task.isCancelled else { return }
                 
                 await MainActor.run {

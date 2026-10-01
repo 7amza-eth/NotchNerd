@@ -186,6 +186,11 @@ public struct PermissionRequest: Equatable, Identifiable, Codable, Sendable {
     public var toolUseID: String?
     public var suggestedUpdates: [ClaudePermissionUpdate]
     public var requiresTerminalApproval: Bool
+    /// The plan markdown attached to an ExitPlanMode request, so approval UIs can show the plan
+    /// being approved. Carried from the blocking hook payload's `tool_input.plan` — the transcript
+    /// is not flushed while the hook blocks, so the payload is the only live source.
+    /// NotchNerd patch — see Vendor/OpenIslandEngine/VENDORED-FROM.md.
+    public var planText: String?
 
     public init(
         id: UUID = UUID(),
@@ -197,7 +202,8 @@ public struct PermissionRequest: Equatable, Identifiable, Codable, Sendable {
         toolName: String? = nil,
         toolUseID: String? = nil,
         suggestedUpdates: [ClaudePermissionUpdate] = [],
-        requiresTerminalApproval: Bool = false
+        requiresTerminalApproval: Bool = false,
+        planText: String? = nil // NotchNerd patch
     ) {
         self.id = id
         self.title = title
@@ -209,6 +215,7 @@ public struct PermissionRequest: Equatable, Identifiable, Codable, Sendable {
         self.toolUseID = toolUseID
         self.suggestedUpdates = suggestedUpdates
         self.requiresTerminalApproval = requiresTerminalApproval
+        self.planText = planText // NotchNerd patch
     }
 }
 

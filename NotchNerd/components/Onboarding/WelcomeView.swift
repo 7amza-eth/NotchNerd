@@ -33,7 +33,15 @@ struct WelcomeView: View {
                     Text("Welcome")
                         .font(.title)
                         .foregroundStyle(.secondary)
-                        .padding(.bottom, 30)
+                        .padding(.bottom, 16)
+
+                    Text("**The notch, but useful.** NotchNerd wraps your camera notch with quick controls — now-playing music, a drag-and-drop shelf, calendar and reminders, a webcam mirror, and an always-open notepad. It also keeps a live eye on your Claude Code sessions, right from the notch.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 24)
                     if false {
                         Text("PRO")
                             .font(.system(size: 18, design: .rounded))

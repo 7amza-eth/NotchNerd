@@ -8,6 +8,7 @@
 //  retinted to NotchNerd's palette.
 //
 
+import AppKit
 import SwiftUI
 import OpenIslandCore
 
@@ -17,6 +18,7 @@ enum AgentStatusPalette {
     static let answer = Color(red: 255 / 255, green: 213 / 255, blue: 138 / 255)   // question (yellow)
     static let running = Color(red: 110 / 255, green: 167 / 255, blue: 255 / 255)  // live (blue)
     static let completed = Color(red: 111 / 255, green: 185 / 255, blue: 130 / 255) // done (green)
+    static let error = Color(red: 229 / 255, green: 112 / 255, blue: 79 / 255)      // failed (red-orange)
     static let idle = Color.white.opacity(0.35)
 
     static func tint(for phase: SessionPhase) -> Color {
@@ -144,10 +146,206 @@ struct AgentSessionDetailView: View {
     }
 }
 
-/// Remembers rows the user explicitly collapsed, so attention rows aren't force-re-expanded
-/// when AgentSessionRow remounts (notch re-open / tab switch tears down @State).
-enum AgentRowExpansion {
-    static var userCollapsed: Set<String> = []
+/// Expanded content for any session row (expansion state is manager-owned —
+/// `AgentBridgeManager.expandedSessionIDs` — so it survives row-view teardown).
+/// Shows Claude's full last message (the metadata stores the raw, un-truncated
+/// `last_assistant_message` hook field — the 140-char cap is view-layer), the
+/// session's full goal, and live subagents + tasks when present.
+struct AgentSessionExpandedView: View {
+    let session: AgentSession
+    let hasDetail: Bool
+    @ObservedObject private var agent = AgentBridgeManager.shared
+
+    /// Collapsed-by-default clamp for long messages. Per-view state: losing it on
+    /// remount just re-clamps, which is the safe default anyway.
+    @State private var showFullMessage = false
+    @State private var justCopied = false
+
+    private var transcriptDetail: ClaudeTranscriptDetail? { agent.transcriptDetails[session.id] }
+
+    private var lastMessage: String? {
+        // Metadata is freshest (updates per hook); the transcript covers stale/recovered sessions.
+        let text = session.lastAssistantMessageText ?? transcriptDetail?.fullLastAssistantMessage
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// Worth a Show-more toggle only when the clamp plausibly bites.
+    private func isLong(_ text: String) -> Bool {
+        text.count > 350 || text.filter(\.isNewline).count >= 8
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let message = lastMessage {
+                lastMessageSection(message)
+            }
+            // Full goal (initial prompt), un-truncated — the collapsed row clips it to one line.
+            if let goal = session.initialUserPromptText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !goal.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Goal").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                    Text(goal)
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .lineLimit(showFullMessage ? nil : 4)
+                        .textSelection(.enabled)
+                }
+            }
+            if let workflow = agent.workflowActivity[session.id], workflow.runningAgents > 0 {
+                workflowSection(workflow)
+            }
+            if hasDetail {
+                AgentSessionDetailView(session: session)
+            }
+            if let detail = transcriptDetail {
+                if !detail.recentActivity.isEmpty { activitySection(detail) }
+                if !detail.editedFiles.isEmpty { filesSection(detail) }
+                statsFooter(detail)
+            } else if lastMessage == nil && session.initialUserPromptText == nil && !hasDetail {
+                Text("No details yet").font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.top, 2)
+        .onAppear { agent.loadTranscriptDetail(for: session.id) }
+    }
+
+    // MARK: Workflow agents (off-disk)
+
+    private func workflowSection(_ workflow: WorkflowActivity) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(
+                workflow.runningAgents == 1 ? "1 workflow agent running" : "\(workflow.runningAgents) workflow agents running",
+                systemImage: "arrow.triangle.branch"
+            )
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color.cyan.opacity(0.9))
+            if !workflow.agentTypes.isEmpty {
+                Text(Self.agentTypeSummary(workflow.agentTypes))
+                    .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(2)
+            }
+        }
+    }
+
+    /// "3 general-purpose · 1 code-reviewer" from the running agents' types.
+    static func agentTypeSummary(_ types: [String]) -> String {
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for type in types {
+            if counts[type] == nil { order.append(type) }
+            counts[type, default: 0] += 1
+        }
+        return order.map { type in
+            let n = counts[type] ?? 0
+            return n > 1 ? "\(n) \(type)" : type
+        }.joined(separator: " · ")
+    }
+
+    // MARK: Transcript-derived sections
+
+    private func activitySection(_ detail: ClaudeTranscriptDetail) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Recent activity").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+            ForEach(detail.recentActivity.suffix(5).reversed()) { entry in
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Image(systemName: entry.isSidechain ? "arrow.triangle.branch" : "wrench.and.screwdriver")
+                        .font(.system(size: 8))
+                        .foregroundStyle(entry.isSidechain ? Color.cyan.opacity(0.9) : Color.secondary)
+                    Text(entry.toolName).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                    if let preview = entry.preview {
+                        Text(preview)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private func filesSection(_ detail: ClaudeTranscriptDetail) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Files touched").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+            ForEach(detail.editedFiles.prefix(6)) { file in
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.badge.gearshape").font(.system(size: 8)).foregroundStyle(.tertiary)
+                    Text(file.path).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                    if file.version > 1 {
+                        Text("×\(file.version)").font(.system(size: 8)).foregroundStyle(.tertiary)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            if detail.editedFiles.count > 6 {
+                Text("+ \(detail.editedFiles.count - 6) more")
+                    .font(.system(size: 8)).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func statsFooter(_ detail: ClaudeTranscriptDetail) -> some View {
+        HStack(spacing: 4) {
+            Text("\(detail.turnCount) \(detail.turnCount == 1 ? "turn" : "turns")")
+            Text("·")
+            Text(Self.tokenLabel(detail.outputTokens))
+            if detail.contextTokens > 0 {
+                Text("·")
+                Text("ctx \(Self.compactTokens(detail.contextTokens))")
+                    .help("Current context footprint (last turn's input + cache tokens)")
+            }
+            if detail.truncated {
+                Text("·")
+                Text("large transcript — stats are partial")
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 8, design: .monospaced))
+        .foregroundStyle(.tertiary)
+    }
+
+    static func tokenLabel(_ tokens: Int) -> String {
+        tokens >= 1_000 ? "\(Self.compactTokens(tokens)) tokens out" : "\(tokens) tokens out"
+    }
+
+    static func compactTokens(_ tokens: Int) -> String {
+        tokens >= 1_000 ? String(format: "%.0fk", Double(tokens) / 1_000) : "\(tokens)"
+    }
+
+    private func lastMessageSection(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text("Last message").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                Spacer(minLength: 4)
+                // Explicit copy button — textSelection drag is fiddly on the non-key notch panel.
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message, forType: .string)
+                    justCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { justCopied = false }
+                } label: {
+                    Label(justCopied ? "Copied" : "Copy",
+                          systemImage: justCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 9))
+                        .foregroundStyle(justCopied ? AgentStatusPalette.completed : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy Claude's full last message")
+            }
+            Text(message)
+                .font(.caption2).foregroundStyle(.white.opacity(0.85))
+                .lineLimit(showFullMessage ? nil : 8)
+                .textSelection(.enabled)
+            if isLong(message) {
+                Button(showFullMessage ? "Show less" : "Show more") {
+                    withAnimation(.easeInOut(duration: 0.15)) { showFullMessage.toggle() }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.blue)
+            }
+        }
+    }
 }
 
 /// A small status dot that pulses while a session is running or needs attention.

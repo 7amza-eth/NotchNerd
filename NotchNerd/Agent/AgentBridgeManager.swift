@@ -137,7 +137,16 @@ final class AgentBridgeManager: ObservableObject {
 
     private static let reconnectBaseDelay: Duration = .seconds(2)
     private static let reconnectMaxDelay: Duration = .seconds(30)
+    /// Fast cadence — used only while a session is actively working (or a workflow is running), when
+    /// we want responsive death-detection / workflow updates.
     private static let livenessInterval: DispatchTimeInterval = .seconds(3)
+    /// Idle cadence — when nothing is `.running`, the backstop only needs to notice a session dying
+    /// or a new live/bridge process appearing, which tolerates a much slower poll. This is the
+    /// single biggest idle-battery win: it turns a fixed 3s `ps -Ao`/`lsof` spawn loop into a ~20s
+    /// one whenever nothing is actively happening (most of the time).
+    private static let livenessIdleInterval: DispatchTimeInterval = .seconds(20)
+    /// Whether the liveness timer is currently on the fast (3s) schedule.
+    private var livenessIsFast = false
 
     private init() {}
 
@@ -256,6 +265,7 @@ final class AgentBridgeManager: ObservableObject {
     // MARK: - Event ingestion (our slim applyTrackedEvent)
 
     private func ingest(_ event: AgentEvent) {
+        trackActivityFlags(for: event)
         state.apply(event)                       // single source of truth
         // Keep an actively-emitting session marked alive so a transient `ps`/`lsof` hiccup can't
         // force-end a turn that's clearly still running (restores the per-event keep-alive that the
@@ -269,6 +279,14 @@ final class AgentBridgeManager: ObservableObject {
         republish()
         schedulePersist()
         emitNotification(for: event)
+        // Keep an expanded row's full detail fresh; collapsed rows only need the cheap ctx tail-read
+        // (refreshed from the liveness tick), so don't pay the full ≤12MB scan on every event.
+        if expandedSessionIDs.contains(sid) {
+            loadTranscriptDetail(for: sid)
+        }
+        // If this event made a session active, switch the liveness backstop to its fast cadence now
+        // rather than waiting out the (up to 20s) idle interval.
+        nudgeLivenessIfIdle()
     }
 
     /// Every `AgentEvent` payload carries the session it concerns.
@@ -306,6 +324,122 @@ final class AgentBridgeManager: ObservableObject {
         }
     }
 
+    // MARK: Derived activity flags (stopped / compacting)
+
+    /// Sessions whose last completion was a user interrupt (ESC / `isInterrupt`). A genuine
+    /// StopFailure is NOT detectable observer-side (the engine folds it into a normal
+    /// `.sessionCompleted` whose summary is the error text) — that refinement needs a Vendor patch
+    /// and is deliberately deferred.
+    private var stoppedSessionIDs: Set<String> = []
+    /// PreCompact has no matching "compact done" hook; entries expire via `isCompacting`'s TTL.
+    private var compactingSessions: [String: Date] = [:]
+
+    func isStopped(_ sessionID: String) -> Bool { stoppedSessionIDs.contains(sessionID) }
+
+    func isCompacting(_ sessionID: String) -> Bool {
+        guard let began = compactingSessions[sessionID] else { return false }
+        return Date().timeIntervalSince(began) < 12
+    }
+
+    private func trackActivityFlags(for event: AgentEvent) {
+        switch event {
+        case let .sessionCompleted(payload):
+            if payload.isInterrupt == true { stoppedSessionIDs.insert(payload.sessionID) }
+            compactingSessions.removeValue(forKey: payload.sessionID)
+        case let .activityUpdated(payload):
+            stoppedSessionIDs.remove(payload.sessionID)
+            // The engine's PreCompact handler emits exactly this summary (BridgeServer .preCompact).
+            if payload.summary.hasSuffix("is compacting the conversation.") {
+                compactingSessions[payload.sessionID] = Date()
+            } else {
+                compactingSessions.removeValue(forKey: payload.sessionID)
+            }
+        case let .permissionRequested(payload):
+            stoppedSessionIDs.remove(payload.sessionID)
+        case let .questionAsked(payload):
+            stoppedSessionIDs.remove(payload.sessionID)
+        default:
+            break
+        }
+    }
+
+    // MARK: Row expansion (manager-owned)
+
+    /// Rows the user has expanded. Manager-owned (not per-row @State) so expansion survives the
+    /// notch reopening / tab switches, which tear down the row views (the old @State +
+    /// AgentRowExpansion.userCollapsed approach lost manual expands on every remount). Pruned
+    /// against the visible set in republish(); attention rows are seeded expanded on arrival.
+    @Published private(set) var expandedSessionIDs: Set<String> = []
+    /// Attention rows already auto-expanded once — so a user collapse isn't fought every republish.
+    private var attentionSeededIDs: Set<String> = []
+
+    func toggleExpansion(_ sessionID: String) {
+        if expandedSessionIDs.contains(sessionID) {
+            expandedSessionIDs.remove(sessionID)
+        } else {
+            expandedSessionIDs.insert(sessionID)
+            loadTranscriptDetail(for: sessionID)
+            refreshWorkflowActivity(force: true)
+        }
+    }
+
+    // MARK: Transcript detail (expanded rows)
+
+    /// Per-session transcript-derived detail (timeline / files / stats / plan text). Loaded
+    /// off-main on expand and opportunistically on new events for expanded rows; mtime-guarded,
+    /// debounced, pruned with the visible set.
+    @Published private(set) var transcriptDetails: [String: ClaudeTranscriptDetail] = [:]
+    /// Cheap per-session context footprint (tail-read) for the collapsed `ctx` badge — separate from
+    /// the full `transcriptDetails` (≤12MB forward scan) which is only loaded for expanded rows.
+    @Published private(set) var contextTokensBySession: [String: Int] = [:]
+    private var transcriptMTimes: [String: Date] = [:]
+    private var transcriptReadAt: [String: Date] = [:]
+    private var transcriptLoadsInFlight: Set<String> = []
+
+    func loadTranscriptDetail(for sessionID: String) {
+        guard let session = state.session(id: sessionID),
+              let path = session.claudeMetadata?.transcriptPath else { return }
+        // Debounce event-burst refreshes; the mtime guard below dedupes identical content.
+        if let last = transcriptReadAt[sessionID], Date().timeIntervalSince(last) < 5 { return }
+        let mtime = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        if let mtime, transcriptMTimes[sessionID] == mtime, transcriptDetails[sessionID] != nil { return }
+        guard !transcriptLoadsInFlight.contains(sessionID) else { return }
+        transcriptLoadsInFlight.insert(sessionID)
+        transcriptReadAt[sessionID] = Date()
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let detail = ClaudeTranscriptReader.read(transcriptPath: path)
+            await MainActor.run {
+                guard let self else { return }
+                self.transcriptLoadsInFlight.remove(sessionID)
+                if let mtime { self.transcriptMTimes[sessionID] = mtime }
+                if let detail { self.transcriptDetails[sessionID] = detail }
+            }
+        }
+    }
+
+    private func reconcileExpansion(visible: [AgentSession]) {
+        let visibleIDs = Set(visible.map(\.id))
+        expandedSessionIDs.formIntersection(visibleIDs)
+        attentionSeededIDs.formIntersection(visibleIDs)
+        stoppedSessionIDs.formIntersection(visibleIDs)
+        compactingSessions = compactingSessions.filter { visibleIDs.contains($0.key) }
+        transcriptDetails = transcriptDetails.filter { visibleIDs.contains($0.key) }
+        transcriptMTimes = transcriptMTimes.filter { visibleIDs.contains($0.key) }
+        transcriptReadAt = transcriptReadAt.filter { visibleIDs.contains($0.key) }
+        contextTokensBySession = contextTokensBySession.filter { visibleIDs.contains($0.key) }
+        for session in visible {
+            if session.phase.requiresAttention {
+                // Seed once per attention episode; re-arm after the episode ends.
+                if !attentionSeededIDs.contains(session.id) {
+                    attentionSeededIDs.insert(session.id)
+                    expandedSessionIDs.insert(session.id)
+                }
+            } else {
+                attentionSeededIDs.remove(session.id)
+            }
+        }
+    }
+
     /// Recompute the @Published projection from the private reducer.
     private func republish() {
         // Only surface sessions that are live in a terminal *right now* (`isVisibleInIsland`:
@@ -321,7 +455,9 @@ final class AgentBridgeManager: ObservableObject {
         let needsAttention = visible.filter { $0.phase.requiresAttention }
         let finished = visible.filter { $0.phase == .completed }
         let running = visible.filter { $0.phase == .running }
-        sessions = (needsAttention + finished + running).map(presented)
+        reconcileKeepPlanning()
+        reconcileExpansion(visible: visible)
+        sessions = (needsAttention + finished + running).map(presented).map(projectedKeepPlanning)
         actionableSession = needsAttention.first.map(presented)
         attentionCount = needsAttention.count
         yourTurnCount = finished.count
@@ -492,6 +628,45 @@ final class AgentBridgeManager: ObservableObject {
         notificationDismissPublisher.send(session.id)
     }
 
+    // MARK: Plan mode ("No, keep planning")
+
+    /// Sessions where the user chose "keep planning" on a plan-review card. The engine's deny path
+    /// flips the row to `.completed` with a hardcoded "Permission denied…" summary (ignoring our
+    /// message), which reads wrong for a keep-planning action — `projectedKeepPlanning` rewrites
+    /// the projection until Claude resumes (`.running`) and the flag reconciles away.
+    private var keepPlanningSessionIDs: Set<String> = []
+
+    /// "No, keep planning" from the plan-review card: a deny whose message carries the user's plan
+    /// feedback back to Claude (it revises the plan and calls ExitPlanMode again).
+    func keepPlanning(sessionID: String, feedback: String) {
+        guard let session = state.session(id: sessionID) else { return }
+        let trimmed = feedback.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = trimmed.isEmpty
+            ? "Keep planning — the user wants to refine the plan before implementation."
+            : trimmed
+        let resolution = PermissionResolution.deny(message: message, interrupt: false)
+        keepPlanningSessionIDs.insert(session.id)
+        state.resolvePermission(sessionID: session.id, resolution: resolution)
+        republish()
+        send(.resolvePermission(sessionID: session.id, resolution: resolution))
+        notificationDismissPublisher.send(session.id)
+    }
+
+    private func reconcileKeepPlanning() {
+        guard !keepPlanningSessionIDs.isEmpty else { return }
+        keepPlanningSessionIDs = keepPlanningSessionIDs.filter { id in
+            guard let session = state.session(id: id) else { return false }
+            return session.phase != .running
+        }
+    }
+
+    private func projectedKeepPlanning(_ session: AgentSession) -> AgentSession {
+        guard keepPlanningSessionIDs.contains(session.id) else { return session }
+        var session = session
+        session.summary = "Planning continues — feedback sent to Claude."
+        return session
+    }
+
     func dismiss(sessionID: String) {
         state.dismissSession(id: sessionID)
         republish()
@@ -568,12 +743,21 @@ final class AgentBridgeManager: ObservableObject {
         return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
     }
 
-    func installHooks() {
+    /// Installs the Claude Code hooks. Returns `false` ONLY for the SYNCHRONOUS failure (the embedded
+    /// helper is missing); the async outcome is published later via `hookInstallState`. Callers that
+    /// need a per-attempt completion signal observe `hookInstallState` — it is reset to a transient
+    /// value here first, so a repeated identical result is still an observable Equatable change.
+    @discardableResult
+    func installHooks() -> Bool {
         guard let source = embeddedHooksBinaryURL() else {
             hookInstallState = .failed("Agent hook helper not found in the app bundle.")
             lastStatusMessage = hookInstallStateMessage
-            return
+            return false
         }
+
+        // Reset before the async work so an identical repeat result (.installed/.failed with the same
+        // value) is still an observable transition for SwiftUI `onChange` observers, not a deduped no-op.
+        hookInstallState = .unknown
 
         Task { [weak self] in
             guard let self else { return }
@@ -592,6 +776,7 @@ final class AgentBridgeManager: ObservableObject {
                 self.lastStatusMessage = "Hook install failed: \(error.localizedDescription)"
             }
         }
+        return true
     }
 
     func uninstallHooks() {
@@ -669,22 +854,162 @@ final class AgentBridgeManager: ObservableObject {
     private func discoverTranscriptsOnce() {
         Task { [weak self] in
             guard let self else { return }
+            let (discovered, snapshots) = await Task.detached(priority: .utility) { [discovery = self.transcriptDiscovery] in
+                (discovery.discoverRecentSessions(), ActiveAgentProcessDiscovery().discover())
+            }.value
+            self.applyDiscoveredSessions(discovered, liveSnapshots: snapshots)
+            self.republish()
+        }
+    }
+
+    /// Apply recovered transcript sessions, attaching a live `claude` process's TTY (+ terminal app)
+    /// when one shares the session's cwd. Without this, a session that was live across an app restart
+    /// — or a remote-control/bridge session whose turns don't fire local hooks — is recovered only as
+    /// a tty-less `.completed` record that the liveness backstop can't match, so it never becomes
+    /// visible even though its process is alive. Attaching the TTY lets the existing liveness path
+    /// keep it visible.
+    ///
+    /// Safe against the deliberately-removed cwd-matching (which used to rescue *dead* sessions via a
+    /// sibling terminal in the same repo): only a **live** process's cwd adopts a session, only the
+    /// **newest** recovered session per free TTY is adopted, and `ClaudeTranscriptDiscovery`'s 15-min
+    /// freshness window already excludes stale transcripts.
+    private func applyDiscoveredSessions(
+        _ discovered: [AgentSession],
+        liveSnapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]
+    ) {
+        let newSessions = discovered.filter { state.session(id: $0.id) == nil }
+        guard !newSessions.isEmpty else { return }
+
+        // Live claude terminals by cwd, minus TTYs already covered by a tracked (non-ended) session.
+        let trackedTTYs = Set(state.sessions
+            .filter { $0.tool == .claudeCode && !$0.isSessionEnded }
+            .compactMap { $0.jumpTarget?.terminalTTY })
+        var liveByCwd: [String: [(tty: String, app: String?)]] = [:]
+        for snap in liveSnapshots where snap.tool == .claudeCode {
+            guard let cwd = snap.workingDirectory, let tty = snap.terminalTTY,
+                  !trackedTTYs.contains(tty) else { continue }
+            liveByCwd[cwd, default: []].append((tty, snap.terminalApp))
+        }
+
+        // Assign each free TTY to the newest recovered session in the same cwd.
+        var ttyForID: [String: (tty: String, app: String?)] = [:]
+        let byCwd = Dictionary(grouping: newSessions.filter { $0.jumpTarget?.workingDirectory != nil }) {
+            $0.jumpTarget!.workingDirectory!
+        }
+        for (cwd, sessions) in byCwd {
+            var free = liveByCwd[cwd] ?? []
+            for session in sessions.sorted(by: { $0.updatedAt > $1.updatedAt }) {
+                guard !free.isEmpty else { break }
+                ttyForID[session.id] = free.removeFirst()
+            }
+        }
+
+        for session in newSessions {
+            var enriched = session
+            if let live = ttyForID[session.id] {
+                var jump = enriched.jumpTarget
+                    ?? JumpTarget(terminalApp: live.app ?? "", workspaceName: "", paneTitle: "")
+                jump.terminalTTY = live.tty
+                // The live process authoritatively identifies the terminal (Ghostty/Terminal); the
+                // transcript-recovered target only has the "Unknown" placebo, so prefer the process's
+                // value — otherwise canJump rejects the adopted session and shows no jump button.
+                if let app = live.app, !app.isEmpty { jump.terminalApp = app }
+                enriched.jumpTarget = jump
+            }
+            state.apply(.sessionStarted(SessionStarted(
+                sessionID: enriched.id,
+                title: enriched.title,
+                tool: .claudeCode,
+                origin: .live,
+                initialPhase: .completed,           // recovered = completed/stale; hooks/liveness refine it
+                summary: enriched.summary,
+                timestamp: enriched.updatedAt,
+                jumpTarget: enriched.jumpTarget,
+                claudeMetadata: enriched.claudeMetadata
+            )))
+        }
+    }
+
+    /// Throttle for the liveness-driven orphan rescan (the transcript scan isn't free).
+    private var lastOrphanScanAt = Date.distantPast
+
+    // MARK: Dynamic-workflow agents (off-disk, hook-independent)
+
+    /// Per-session running-workflow-agent activity, read from `<sessionDir>/subagents/workflows/`.
+    /// The Workflow tool's agents don't fire SubagentStart hooks and aren't in `activeSubagents`, so
+    /// this is the only way to show them — and it works for hookless/bridge sessions.
+    @Published private(set) var workflowActivity: [String: WorkflowActivity] = [:]
+    private var lastWorkflowScanAt = Date.distantPast
+
+    /// Refresh workflow-agent activity for visible sessions (off-main, throttled). Cheap when no
+    /// workflow is running (a missing dir / stale journal short-circuits before any parse).
+    func refreshWorkflowActivity(force: Bool = false) {
+        let now = Date()
+        guard force || now.timeIntervalSince(lastWorkflowScanAt) > 3 else { return }
+        lastWorkflowScanAt = now
+        let paths: [(id: String, path: String)] = state.sessions
+            .filter { $0.isVisibleInIsland && $0.tool == .claudeCode }
+            .compactMap { session in session.claudeMetadata?.transcriptPath.map { (session.id, $0) } }
+        guard !paths.isEmpty else {
+            if !workflowActivity.isEmpty { workflowActivity = [:] }
+            return
+        }
+        Task.detached(priority: .utility) { [weak self] in
+            var result: [String: WorkflowActivity] = [:]
+            for (id, path) in paths {
+                if let activity = WorkflowAgentReader.read(transcriptPath: path) { result[id] = activity }
+            }
+            await MainActor.run {
+                guard let self, self.workflowActivity != result else { return }
+                self.workflowActivity = result   // @Published → rows re-render
+            }
+        }
+    }
+
+    /// Refresh the cheap per-session context footprint (tail-read) for every visible session — for
+    /// the collapsed `ctx` badge. Runs off the liveness tick, so it inherits the adaptive cadence
+    /// (3s active / 20s idle). Far cheaper than the full `loadTranscriptDetail` scan.
+    func refreshContextTokens() {
+        let paths: [(id: String, path: String)] = state.sessions
+            .filter { $0.isVisibleInIsland && $0.tool == .claudeCode }
+            .compactMap { session in session.claudeMetadata?.transcriptPath.map { (session.id, $0) } }
+        guard !paths.isEmpty else {
+            if !contextTokensBySession.isEmpty { contextTokensBySession = [:] }
+            return
+        }
+        Task.detached(priority: .utility) { [weak self] in
+            var result: [String: Int] = [:]
+            for (id, path) in paths {
+                if let ctx = ClaudeTranscriptReader.readContextTokens(transcriptPath: path) { result[id] = ctx }
+            }
+            await MainActor.run {
+                guard let self, self.contextTokensBySession != result else { return }
+                self.contextTokensBySession = result
+            }
+        }
+    }
+
+    /// Self-heal: if a live `claude` terminal has no tracked session (app restarted under a running
+    /// session, or a bridge session whose turns never fired a local hook), rediscover its transcript
+    /// and adopt it via `applyDiscoveredSessions` so it reappears within a liveness cycle — no user
+    /// interaction required. Only runs when an orphan TTY actually exists, throttled to 20s.
+    private func adoptOrphansIfNeeded(snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]) {
+        let trackedTTYs = Set(state.sessions
+            .filter { $0.tool == .claudeCode && !$0.isSessionEnded }
+            .compactMap { $0.jumpTarget?.terminalTTY })
+        let hasOrphan = snapshots.contains { snap in
+            snap.tool == .claudeCode && (snap.terminalTTY.map { !trackedTTYs.contains($0) } ?? false)
+        }
+        guard hasOrphan else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastOrphanScanAt) > 20 else { return }
+        lastOrphanScanAt = now
+        Task { [weak self] in
+            guard let self else { return }
             let discovered = await Task.detached(priority: .utility) { [discovery = self.transcriptDiscovery] in
                 discovery.discoverRecentSessions()
             }.value
-            for session in discovered where self.state.session(id: session.id) == nil {
-                self.state.apply(.sessionStarted(SessionStarted(
-                    sessionID: session.id,
-                    title: session.title,
-                    tool: .claudeCode,
-                    origin: .live,
-                    initialPhase: .completed,           // recovered = completed/stale
-                    summary: session.summary,
-                    timestamp: session.updatedAt,
-                    jumpTarget: session.jumpTarget,
-                    claudeMetadata: session.claudeMetadata
-                )))
-            }
+            self.applyDiscoveredSessions(discovered, liveSnapshots: snapshots)
             self.republish()
         }
     }
@@ -692,8 +1017,10 @@ final class AgentBridgeManager: ObservableObject {
     /// Process-liveness backstop: if the bridge dies before SessionEnd, missed polls mark a
     /// hook-managed session ended so it stops being stuck-visible.
     private func startLivenessBackstop() {
+        // Self-rescheduling one-shot (not a fixed `repeating:`) so the cadence can adapt each tick:
+        // 3s while something is actively happening, 20s when idle. The `ps -Ao`/`lsof` subprocess
+        // spawns per tick are the cost, so stretching the idle cadence is the main battery win.
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        timer.schedule(deadline: .now() + Self.livenessInterval, repeating: Self.livenessInterval)
         timer.setEventHandler { [weak self] in
             let snapshots = ActiveAgentProcessDiscovery().discover()  // shells out to ps/lsof (off-actor)
             Task { @MainActor [weak self] in
@@ -705,17 +1032,48 @@ final class AgentBridgeManager: ObservableObject {
                 let changed = self.state.markProcessLiveness(aliveSessionIDs: aliveClaudeIDs)
                 let titlesChanged = await self.refreshChatTitles()
                 self.pruneSnoozes()
-                // Also refresh while a session is running so the time-based `workingCount` updates
-                // (the "Claude working" indicator turns off ~recency-window after events stop).
-                if !changed.isEmpty || titlesChanged || namesChanged || self.desktopSessionIDs != previousDesktopIDs
-                    || self.state.sessions.contains(where: { $0.phase == .running }) {
+                // Only republish when something visible actually changed — liveness, chat titles/names,
+                // or which sessions are desktop chats. `workingCount` is event-driven (`phase ==
+                // .running && isProcessAlive`), and both its inputs already trigger a republish — phase
+                // via `ingest`, isProcessAlive via `changed` here — so republishing every tick while a
+                // session runs was a redundant per-3s full-tree re-render (a measured idle-battery cost).
+                if !changed.isEmpty || titlesChanged || namesChanged || self.desktopSessionIDs != previousDesktopIDs {
                     self.republish()
                 }
                 self.checkNudges()
+                // Re-adopt any live terminal we're not tracking (restart orphan / hookless bridge).
+                self.adoptOrphansIfNeeded(snapshots: snapshots)
+                // Surface dynamic-workflow agents (the only signal for a hookless session's workflow).
+                self.refreshWorkflowActivity()
+                // Cheap ctx tail-read for collapsed badges (replaces the full scan on every ingest).
+                self.refreshContextTokens()
+                // Pick the next tick's cadence from the (possibly just-updated) state.
+                self.rescheduleLiveness()
             }
         }
-        timer.resume()
         livenessTimer = timer
+        livenessIsFast = true
+        timer.schedule(deadline: .now() + Self.livenessInterval)   // first tick soon
+        timer.resume()
+    }
+
+    /// Re-arm the one-shot liveness timer with the cadence appropriate to current state: fast while
+    /// any session is `.running` or a workflow is active, slow otherwise.
+    private func rescheduleLiveness() {
+        guard let timer = livenessTimer else { return }
+        let active = state.sessions.contains { $0.phase == .running } || !workflowActivity.isEmpty
+        livenessIsFast = active
+        timer.schedule(deadline: .now() + (active ? Self.livenessInterval : Self.livenessIdleInterval))
+    }
+
+    /// Pull the next liveness tick forward when state may have just become active, so the fast
+    /// cadence (and workingCount/workflow updates) kick in promptly instead of waiting out the idle
+    /// interval. Cheap no-op when already fast or nothing is running.
+    private func nudgeLivenessIfIdle() {
+        guard let timer = livenessTimer, !livenessIsFast,
+              state.sessions.contains(where: { $0.phase == .running }) else { return }
+        livenessIsFast = true
+        timer.schedule(deadline: .now() + .milliseconds(250))
     }
 
     /// Resolve which tracked Claude sessions are *currently hosted by a live terminal*, for the

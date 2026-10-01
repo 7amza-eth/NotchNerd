@@ -40,7 +40,7 @@ On top of that base, NotchNerd adds two new surfaces:
 | UI | SwiftUI hosted in AppKit `NSPanel`s; `MenuBarExtra` scene; SwiftUIIntrospect. |
 | Min OS | **macOS 14.0 (Sonoma)** (`MACOSX_DEPLOYMENT_TARGET = 14.0`, `platforms: [.macOS(.v14)]`). |
 | Toolchain | **Full Xcode required** (not just Command Line Tools). `xcode-select -p` → `/Applications/Xcode.app/Contents/Developer`. A run-script build phase shells out to `swift build`. |
-| Version | `MARKETING_VERSION = 2.7.3`, `CURRENT_PROJECT_VERSION = 271`. |
+| Version | `MARKETING_VERSION = 0.2.1`, `CURRENT_PROJECT_VERSION = 271` — local dev-build values; the release workflow overrides both from the git tag (latest release: `v0.2.1`). |
 | License | **GNU GPL v3** (both boring.notch and Open Island are GPL v3 → merged work is GPL v3). |
 | Bundle IDs | App `eth.7amza.notchnerd`; XPC helper `eth.7amza.notchnerd.XPCHelper`. |
 
@@ -71,7 +71,10 @@ NotchNerd/                          repo root
 │  │  ├─ AgentBridgeManager.swift   headless OpenIslandCore driver (singleton) + notification signals
 │  │  ├─ AgentView.swift            in-notch Agent tab UI + AgentClosedIndicator + AgentSettings
 │  │  ├─ AgentSessionPresentation.swift  verbatim OI presentation extension (spotlight*/island* props)
-│  │  ├─ AgentSessionDetails.swift  status palette, subagent/task detail view, overview counts, status dot
+│  │  ├─ AgentSessionDetails.swift  status palette, expanded-row view (last msg/timeline/files/stats), status dot
+│  │  ├─ AgentActivity.swift        derived activity vocabulary (thinking/bash/edit/…/stopped/compacting descriptors)
+│  │  ├─ ClaudeTranscriptReader.swift  off-main transcript parse → timeline/files/turns/tokens/ctx/plan
+│  │  ├─ PlanTextLoader.swift       tail-read ExitPlanMode plan markdown for the plan-review card
 │  │  ├─ AgentNotificationSound.swift  NSSound system-sound alerts (Defaults-bound)
 │  │  ├─ AgentUsageManager.swift    statusline-wrapper install + ClaudeUsageLoader polling (5h/7d)
 │  │  ├─ UsageChip.swift            usage chip view for the Agent tab header
@@ -119,10 +122,10 @@ NotchNerd/                          repo root
 │  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
-├─ updater/                         appcast.xml + Sparkle (feed currently disabled)
 ├─ spec.md                          this doc — reference + roadmap + decisions + TODO + deferred reference
-├─ README.md  SECURITY.md  crowdin.yml
+├─ README.md  SECURITY.md
 ├─ LICENSE (GPL v3)  THIRD_PARTY_LICENSES
+├─ .github/workflows/release.yml    CI release: build + Sparkle-sign + appcast + GitHub Release (on a v* tag)
 └─ .github/  .devcontainer/  build/ (ignored Xcode output incl. boringNotch.build)
 ```
 
@@ -150,8 +153,12 @@ NotchNerd/                          repo root
 
 **New in NotchNerd:**
 - **Claude Code agent monitor** — observe-only, in-notch. Agent tab with an overview-counts row,
-  pulsing per-phase status dots, **expandable session rows** (live subagents + task/todo checklists
-  from `ClaudeSessionMetadata`), Allow Once/Deny permission cards, question option buttons, and a
+  pulsing per-phase status dots + per-activity recap icons (`AgentActivity`), **click-to-expand
+  session rows** (manager-owned expansion; full last assistant message + copy, live subagents +
+  task/todo checklists, transcript-derived recent activity / files touched / turns · output tokens ·
+  context size via `ClaudeTranscriptReader`), a **plan-mode review card** (CLI-mirrored options +
+  plan text + keep-planning feedback), a "N agents researching" chip, stopped/compacting states,
+  Allow Once/Deny permission cards, question option buttons, and a
   terminal jump button (already-focused short-circuit + live re-resolution; Ghostty **or**
   Terminal.app via the `AgentTerminalJump` dispatcher). **In-notch notification mode** auto-pops the
   notch on permission/question/completion events (never hijacks an open notch; frontmost-suppression;
@@ -165,6 +172,12 @@ NotchNerd/                          repo root
   `agentSoundEnabled` / `agentUsageEnabled`).
 - **Always-open Notepad** — floating key-capable panel + in-notch Notes tab over one shared
   multi-note store; toggled via menu-bar button and a global hotkey.
+- **First-run onboarding + feature tour** — a guided wizard (welcome → camera/calendar/reminders/
+  accessibility/music → an Automation explainer → an opt-in **agent-monitor consent** that installs
+  hooks and enables monitoring only on a *confirmed* install) + a re-runnable 7-card feature tour
+  (menu-bar item + Settings → General; auto-shown once to upgraders via `hasSeenFeatureTour`).
+- **Redesigned Settings** — an enum-driven (`SettingsTab`) grouped sidebar (General/Appearance · Notch
+  features · Advanced · About), with **Notepad** + **Webcam** tabs and **Reset-to-defaults**.
 
 ## Architecture
 
@@ -322,6 +335,39 @@ the last note auto-creates a new one (never empty). Assumes the app is unsandbox
 `NotchNerdXPCHelper.xpc` and embedded into the app. It vends accessibility-authorization checks +
 keyboard/screen brightness (CoreBrightness). App-side client is `XPCHelperClient/`.
 
+### Onboarding & first-run
+
+`AppDelegate` shows a 400×600 `OnboardingView` window (`showOnboardingWindow`) when
+`coordinator.firstLaunch` (`@AppStorage`). Step chain:
+`welcome → camera → calendar → reminders → accessibility → music → automationInfo → agentMonitor →
+finished`. `firstLaunch` flips false on entering `.finished` (so every path that completes is covered,
+and a quit before then re-surfaces the wizard). The returning-user now-playing re-prompt
+(`isNowPlayingDeprecated`) reuses `.musicPermission` and branches music→`.finished` directly — it reads
+`firstLaunch` *before* any flip, so it skips the new steps.
+
+- **`automationInfo`** (`AutomationInfoView`) — explains the just-in-time macOS Automation (Apple
+  Events) prompt (music control + terminal jump). There's no up-front grant API, so it's a heads-up
+  card + an in-app "Open Automation Settings" deep-link (runs in-app — the app sends the Apple Events).
+- **`agentMonitor`** (`AgentMonitorOnboardingView`) — the **single** opt-in consent surface for the
+  agent. "Not now" writes **nothing** (agent stays off). "Turn on monitoring" flips
+  `Defaults[.agentEnabled] = true` **only on a confirmed hook install** (roll-back-on-failure): it calls
+  `AgentBridgeManager.installHooks()` (now `@discardableResult -> Bool`; `false` = the synchronous
+  missing-helper failure), observes `hookInstallState` via `onChange` + a polling `.task` backstop, and
+  only then sets `agentEnabled = true` + `start()` (install-first/start-after dodges the
+  `refreshHookStatus()` clobber). `installHooks()` resets state to a transient `.unknown` first so a
+  repeat-identical result is still an observable change (no stuck spinner).
+- **Feature tour** (`FeatureTourView`, step `.featureTour`) — 7 educational cards with inline ✦ mock
+  visuals (no live-notch coachmarks — the notch is click-through). Re-runnable from the menu-bar
+  "Feature Tour" item and Settings → General → "Replay feature tour" (both post `.featureTourRequested`
+  → `presentFeatureTour()`, which rebuilds the window fresh and is guarded so it can't tear down an
+  in-progress wizard). Existing upgraders (who never see the wizard) get it auto-presented **once** via
+  `Defaults[.hasSeenFeatureTour]`.
+
+The onboarding `NSWindow` caches by step; `onFinish`/`onOpenSettings` nil `onboardingWindowController`
+on close (and capture `window` **weakly**) so a re-present rebuilds and the old window + SwiftUI tree
+deallocate. New `components/Onboarding/*.swift` are registered via
+`tooling/scripts/add_onboarding_files.rb` (normal PBXGroup — they won't compile otherwise).
+
 ## Build & run
 
 **Exact command:**
@@ -342,17 +388,29 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
   auto-generating the implicit scheme on first open / first `xcodebuild`. In a clean/CI checkout
   you may need to let xcodebuild autocreate it or use `-target NotchNerd`.
 - **Dev signing:** signing is effectively **ad-hoc** (`CODE_SIGN_IDENTITY[sdk=macosx*] = "-"`,
-  `DEVELOPMENT_TEAM = ""`, empty provisioning profile, no notarization config). Hardened runtime is
-  on the **app target only**. Run `tooling/scripts/setup-dev-signing.sh` to create a stable
-  self-signed "NotchNerd Dev" identity so TCC Automation/Accessibility grants survive rebuilds.
+  `DEVELOPMENT_TEAM = ""`, empty provisioning profile, no notarization config). **Hardened runtime is
+  OFF** (`ENABLE_HARDENED_RUNTIME = NO`). It was on, but its **Library Validation** refused to load the
+  ad-hoc-signed `MediaRemoteAdapter.framework` ("different Team IDs") → every *downloaded* release
+  crashed at launch with a DYLD "Library missing" error (the local Debug build had it off, so the bug
+  only surfaced on releases — v0.1.0/v0.2.0). **Don't re-enable it** without a real Developer ID +
+  notarization (or add `com.apple.security.cs.disable-library-validation` and sign nested frameworks
+  with the same identity). Run `tooling/scripts/setup-dev-signing.sh` to create a stable self-signed
+  "NotchNerd Dev" identity so TCC Automation/Accessibility grants survive rebuilds.
 - **The agent is OFF by default** (`Defaults[.agentEnabled] = false`). Enable it in
   **Settings → Agent** (and Install hooks there). The Agent tab itself is visible by default
   (`agentPanelEnabled = true`) but shows nothing until monitoring is enabled.
 - **App is non-sandboxed** (`com.apple.security.app-sandbox = false`) with apple-events automation +
   temporary exceptions for `com.spotify.client` / `com.apple.Music` — required for media control,
   but blocks Mac App Store distribution.
-- **Sparkle 2.9.1 is linked but the update feed is disabled** (`SUEnableAutomaticChecks = false`,
-  no `SUFeedURL`/`SUPublicEDKey` anywhere). Updates won't fetch until a feed is configured.
+- **Sparkle 2.9.1 — auto-updates ENABLED.** NotchNerd ships its OWN EdDSA key (`SUPublicEDKey` in
+  `Info.plist`; the private half is the `SPARKLE_PRIVATE_KEY` GitHub Actions secret + a Keychain backup)
+  and `SUFeedURL` → `https://github.com/7amza-eth/NotchNerd/releases/latest/download/appcast.xml`. The
+  **release workflow** (`.github/workflows/release.yml`) builds, EdDSA-signs the build, generates +
+  signs the `appcast.xml`, and attaches it (with the zip + dmg) to a GitHub Release on each `v*` tag —
+  so installed copies auto-update. Builds are still **ad-hoc signed and NOT notarized**, so a first
+  download is Gatekeeper-blocked (testers clear quarantine once: `xattr -dr com.apple.quarantine …`);
+  Sparkle's own updates aren't re-quarantined, so it's a one-time step. ⚠️ **Never re-add boring.notch's
+  `SUPublicEDKey`** — only NotchNerd-signed updates verify against our key.
 
 ## Key files (entry points)
 
@@ -371,6 +429,9 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 | `NotchNerd/Agent/AgentBridgeManager.swift` | headless OpenIslandCore driver (singleton) + notification signals |
 | `NotchNerd/Agent/AgentView.swift` | in-notch Agent tab UI (overview/rows/cards/chips) + AgentClosedIndicator + AgentSettings |
 | `NotchNerd/Agent/AgentSessionPresentation.swift` | verbatim OI presentation extension (spotlight*/island* computed props) |
+| `NotchNerd/Agent/AgentActivity.swift` | derived per-activity descriptor (icon/tint/label/pulse) incl. stopped/compacting |
+| `NotchNerd/Agent/ClaudeTranscriptReader.swift` | off-main transcript parse (timeline/files/turns/tokens/ctx/plan), mtime-cached by the manager |
+| `NotchNerd/Agent/PlanTextLoader.swift` | bounded tail-read of the ExitPlanMode plan for the plan-review card |
 | `NotchNerd/Agent/AgentUsageManager.swift` | usage-HUD: statusline-wrapper install + `ClaudeUsageLoader` polling |
 | `NotchNerd/Agent/TerminalAppJumpService.swift` | Terminal.app jump + `enum AgentTerminalJump` dispatcher (routes Ghostty / Terminal.app) |
 | `NotchNerd/NotchNerdViewCoordinator.swift` (agent notifications) | owns the in-notch notification auto-pop / auto-collapse |
@@ -386,23 +447,26 @@ Swap `-configuration Release` for a release build (project `defaultConfiguration
 
 ## Project status
 
-The app is **feature-complete** — all core implementation phases are shipped and the comprehensive
-rename to NotchNerd is done. Full phase history is in **Part II → Changelog**; the canonical list of
-remaining work is **Part II → Roadmap & TODO**.
+The app is **feature-complete and publicly released** (latest **v0.2.1**) — all core implementation
+phases are shipped. The **user-visible** rebrand to NotchNerd is done; the **structural** rename (SPM
+module/products, the embedded hook-binary + socket/statusline paths, the XPC helper display name) is
+deliberately deferred to Phase 6. Full phase history is in **Part II → Changelog**; the canonical list
+of remaining work is **Part II → Roadmap & TODO**.
 
-- **Done:** Phase 0 (sandbox-off regression baseline), Phase 1 (vendor engine as local SPM), Phase 2
-  (agent driver `AgentBridgeManager` — bridge + observer + reducer + hook install + approve/deny
-  round-trip), Phase 3 (Agent tab UI), Phase 4 (Ghostty jump), Phase 5 (notepad — both surfaces,
-  spike validated GO on-device), the rebrand identity work (bundle id `eth.7amza.notchnerd`, Sparkle
-  disabled, violet icon), Phase 5.5 (loose-thread audit & fixes), OI-feature-port batch 1
-  (notification mode + sounds, expanded session panel, usage HUD, Ghostty hardening), and this
-  session's work (Terminal.app jump, taller Agent tab, closed-notch working/active status, music
-  visualizer presets).
+- **Done:** Phase 0 (sandbox-off baseline), Phase 1 (vendor engine as local SPM), Phase 2 (agent driver
+  `AgentBridgeManager` — bridge + observer + reducer + hook install + approve/deny), Phase 3 (Agent tab
+  UI), Phase 4 (Ghostty jump), Phase 5 (notepad — both surfaces), the rebrand identity work (bundle id
+  `eth.7amza.notchnerd`, **Sparkle auto-updates enabled**, violet icon), Phase 5.5 (loose-thread audit),
+  OI-feature-port batch 1 (notification mode + sounds, expanded panel, usage HUD, Ghostty hardening),
+  Terminal.app jump / taller Agent tab / closed-notch status / visualizer presets, **HookHealthCheck**,
+  and the **public-release line** — the GitHub Actions release workflow + Sparkle pipeline, the
+  **v0.2.0** onboarding wizard + feature tour + Settings redesign, and **v0.2.1** (the hardened-runtime
+  launch fix).
 - **Remaining (see Part II → Roadmap & TODO for the authoritative list):** Phase 6 (socket/hook +
   statusline-cache namespacing off `eth.7amza.notchnerd`; the inherited pending-interaction overwrite
-  patch; http-hook spike; HookHealthCheck; residual rebrand), more terminals / more agents (engine
-  already vendored — wiring jobs), and the optional Phase 7 Cowork read-only watcher (approve/deny
-  stays CLI-only).
+  patch; http-hook spike; residual structural rebrand), more terminals / more agents (engine already
+  vendored — wiring jobs), and the optional Phase 7 Cowork read-only watcher (approve/deny stays
+  CLI-only).
 
 ## Conventions / gotchas
 
@@ -417,6 +481,21 @@ remaining work is **Part II → Roadmap & TODO**.
   steps are in `VENDORED-FROM.md`.
 - **`Defaults.Keys` are split across two files** — most in `models/Constants.swift`, but
   `notepadVisible` / `notepadFloatStrategy` live in `Notepad/NotepadWindowController.swift`.
+- **Settings tabs are enum-driven.** `SettingsTab` (in `SettingsView.swift`) is the single source for
+  both the sidebar list and the detail `switch` — add a tab there, not in two places. The selected tab
+  persists via `@AppStorage("settingsSelectedTab")`.
+- **Version: local vs release.** `project.pbxproj` `MARKETING_VERSION` (currently `0.2.1`) /
+  `CURRENT_PROJECT_VERSION` (`271`) govern **local dev builds only**; the release workflow overrides both
+  from the git tag (`v0.2.1` → marketing `0.2.1`, build = `github.run_number`). The high local build
+  number keeps dev builds correctly "up to date" against the low release run-numbers — it is **not** the
+  release counter. The workflow forces `make_latest: true`.
+- **`gh` defaults to `upstream` (boring.notch), not the fork.** Remotes: `origin` = `7amza-eth/NotchNerd`,
+  `upstream` = `TheBoredTeam/boring.notch`. Without a default set, `gh release` / `gh run` resolve against
+  **upstream** and show boring.notch's `v2.7.x` releases + its Actions — *not* the fork's. Fix:
+  `gh repo set-default 7amza-eth/NotchNerd` (set) or always pass `--repo 7amza-eth/NotchNerd`. The fork's
+  only releases are NotchNerd's `0.x` (`v0.1.0`, `v0.2.0`, …); the `v2.x` tags/releases are upstream's and
+  unrelated. The fork's `.github/workflows/` is just `release.yml` (the inherited crowdin/pages/build
+  workflows were already removed; old failed runs are stale history).
 - **`AppDelegate`, not the App body, owns lifecycle.** Don't look for window/agent/notepad wiring
   in the SwiftUI scene.
 - **Two notch window classes; only `NotchNerdSkyLightWindow` is live.** Editing `NotchNerdWindow.swift`
@@ -426,6 +505,10 @@ remaining work is **Part II → Roadmap & TODO**.
   `setActivationPolicy(.regular)` / `NSApp.activate` for the notepad or it steals the frontmost app.
 - **Notch close paths all check `preventNotchClose`** (hover-out, sharingDidFinish, battery popover,
   drop debounce, swipe-up). Swipe-up is the explicit override that also clears the pin.
+- **The notch is dormant during first-launch onboarding.** Both `handleHover` and `doOpen()`
+  early-return while `coordinator.firstLaunch`, so the notch can't open — or get stuck open showing the
+  blanked `NotchHomeView` — until onboarding completes. (The `doOpen()` guard is a NotchNerd fix; the
+  inherited code guarded only hover, so a stray tap opened the notch and it then couldn't close.)
 - **Agent-tab gesture fix:** the swipe-up-to-close gesture is gated **off** the Agent tab
   (`coordinator.currentView != .agent` in `ContentView`) so it doesn't hijack the Agent tab's own
   scrolling.
@@ -498,7 +581,9 @@ terminals) **require an unsandboxed app**; boring.notch shipped sandboxed.
    the app to `SWIFT_STRICT_CONCURRENCY=complete`. Embed the hook CLI via a Copy-Files phase →
    `Contents/Helpers`.
 2. **Sandbox — drop it in-place.** Flip `com.apple.security.app-sandbox` → `false` (entitlements-only;
-   **keep hardened runtime ON**; keep automation + network.client). Remove now-dead Sparkle sandbox
+   keep automation + network.client). *(Historical note: hardened runtime was kept on here, but has
+   since been disabled — `ENABLE_HARDENED_RUNTIME = NO` — because it crashed ad-hoc release launches;
+   see the Dev-signing gotcha.)* Remove now-dead Sparkle sandbox
    XPC shims and **re-qualify the full Sparkle download→install→relaunch cycle** (the EdDSA key is
    load-bearing). **Don't** route privileged ops through the XPC helper to stay sandboxed — a
    sandboxed app can't host the bridge socket, write `~/.claude`, or spawn `ps`/`osascript`.
@@ -561,6 +646,9 @@ scope entirely: chat-app AX automation and any MCP-based monitor (MCP only ever 
 *own* tools, never the session or the permission prompt).
 
 ## Changelog
+
+> Dev-facing technical phase history (the load-bearing what + why per phase). The **user-facing**
+> changelog is **GitHub Releases** — curated per `v*` tag — *not* a `CHANGELOG.md` file.
 
 Condensed per-phase summary of what shipped. (Build-verified `BUILD SUCCEEDED`, committed, pushed at
 each phase; git history holds the dated detail.)
@@ -654,11 +742,281 @@ each phase; git history holds the dated detail.)
     inherited `FUNDING.yml` (routed to upstream), the dead boring.notch `appcast.xml` / issue & PR
     templates / `crowdin.yml`, and de-branded the DMG packaging defaults; `THIRD_PARTY_LICENSES` now
     lists the linked SPM deps.
+  - **Public release + auto-update pipeline.** Repo flipped **public**; added the GitHub Actions
+    **release workflow** (`.github/workflows/release.yml`) — on a `v*` tag it builds, packages zip + dmg,
+    EdDSA-signs + generates a Sparkle appcast, and publishes a GitHub Release. **Sparkle auto-updates
+    enabled** with NotchNerd's own key (first release: `v0.1.0`). Distribution is still ad-hoc / **not
+    notarized**, so testers clear quarantine once (README "Install a prebuilt build" has the steps);
+    notarization is a possible future step (deliberately not documented here).
+- **Onboarding wizard + feature tour + README state-doc (2026-06-28).** Extended the inherited
+  first-run wizard and added a re-runnable feature tour (full reference in Part I → *Onboarding &
+  first-run*). Welcome screen got a real app description; new **Automation** explainer
+  (`AutomationInfoView`); new **Agent** consent step (`AgentMonitorOnboardingView`) — the single opt-in
+  enable surface, **roll-back-on-failure** (`agentEnabled` flips true only on a *confirmed* install;
+  "Not now" writes nothing), backed by a hardened `installHooks()` (`@discardableResult -> Bool` +
+  transient-state reset) and an `onChange`+poll state machine. New **7-card tour** (`FeatureTourView`)
+  with inline ✦ mocks, re-runnable from the menu bar + Settings, **auto-shown once** to upgraders via
+  `hasSeenFeatureTour`. Fixed the **stuck-open notch** during onboarding (`doOpen()` now shares the
+  `firstLaunch` guard hover already had — inherited bug). Adversarial review caught + fixed a
+  **retain cycle** in the onboarding-window closures (per-replay `NSWindow` leak) and a window-reuse
+  latent bug. README gained a **"What the notch shows you"** state-reading guide (ASCII diagrams + ✦
+  reference). New files registered via `tooling/scripts/add_onboarding_files.rb`. Build-verified;
+  live-walked on-device.
+- **Settings IA redesign + version fix (2026-06-28).** Three-phase refactor of the Settings UI (driven
+  by a multi-agent review → adversarial critique). **P1:** dropped 4 zero-consumer Defaults keys + dead
+  decls; fixed the Agent Notifications/Sound/Usage sections that trapped their own masters inside
+  `.disabled(!master)` (Usage shipped permanently un-enableable). **P2:** replaced the flat 11-tab
+  sidebar with a single `SettingsTab` enum driving both sidebar + detail, grouped (General / Notch
+  features / Advanced / About) with `@AppStorage` tab persistence (an accent change no longer resets to
+  General); moved theming → Appearance and music visuals → Media; added **Notepad** + **Webcam** tabs;
+  slimmed Advanced + a Reset-to-defaults button; fixed the gesture-enable inversion, a force-unwrap
+  crash in the visualizer add-sheet, the `vizualizers`/`unkown` typos; applied disable-in-place child
+  gating + a sentence-case sweep; removed ~215 lines of commented Downloads/Extensions + dead helpers;
+  gave `toggleNotepad` a default (⌘⇧N) and dropped 4 handler-less shortcut names. **P3:** an "Include
+  reminders" master (`showReminders`) wired at the `CalendarView` display layer. Also fixed the
+  **local-build version** (`MARKETING_VERSION` 2.7.3 → 0.1.0 — boring.notch's leftover made *Check for
+  Updates* show the wrong version; releases set it from the git tag, so unaffected). Deferred as
+  low-value/risky: the calendar shared-store deselect-all snap-back, `musicControlSlotLimit` vs
+  `fixedSlotCount`, and the `sliderColor`/`agentSuppressFrontmost` symbol-vs-string mismatches.
+- **Verified gotcha — Sparkle auto-updates reset TCC grants (2026-07-02).** Releases are **ad-hoc
+  signed (no Team ID)**, so TCC anchors Accessibility/Automation grants to the **cdhash**, which
+  changes every release (confirmed: v0.3.0 `e3e621f5…` vs v0.3.2 `4fa707bf…`, both `TeamIdentifier:
+  not set`). So every Sparkle auto-update **invalidates the HUD's Accessibility grant** (the
+  `MediaKeyInterceptor` `CGEventTap`) and the terminal-jump **Automation** grant — the System Settings
+  toggle often still shows "on" but is non-functional until toggled off/on or re-added. The CLAUDE.md
+  ad-hoc-cdhash gotcha (framed for local rebuilds) therefore **also hits end users on every release**.
+  No ad-hoc workaround (cdhash = hash of the code). **Fix = Developer ID + notarization** (anchors TCC
+  to the stable Team ID). This is now the **3rd converging driver for a Developer ID**, alongside
+  Gatekeeper quarantine friction and the v0.4 keep-awake daemon. *(Also validated Sparkle's auto-update
+  fires on its own: `/Applications` silently went 0.3.0→0.3.2 in the background.)*
+- **v0.3.2 — battery pass (2026-07-02).** A measured audit (running app at **~13–33% idle CPU**,
+  0%→26% sawtooth every 3s) → multi-agent review (timers/wakeups · inherited subsystems · animations,
+  cross-verified — the re-run corrected a false "AnimatedFace is dead code" call: it's a rendered,
+  *leaking* timer) → fixes, worst-first. **Result: fast-mode CPU ~0–2% (from 13–33%), a ~10–15× drop.**
+  Two costs dominated: (1) the liveness backstop's fixed **3s `ps -Ao`+`lsof` sweep** with no idle
+  gating → **adaptive cadence** (3s while a session is `.running`/workflow active, **20s idle**;
+  `ingest` nudges back to fast in 250ms; a self-rescheduling one-shot timer; orphan-adoption +
+  workflow detection still work); (2) the v0.3.1 **ctx badge doing a full ≤12MB transcript scan on
+  every event** → `ClaudeTranscriptReader.readContextTokens` **256KB tail-read** (verified identical
+  result at **2ms vs ~195ms**), full `loadTranscriptDetail` now only for expanded rows. Also: dropped
+  the redundant per-tick `republish()` (workingCount is event-driven now); **paused the Lottie music
+  visualizer + lyrics ticker when music isn't playing** (Lottie looped ~60fps in the closed notch even
+  while paused); **fixed the `MinimalFaceFeatures` blink-timer leak** (never invalidated — stacked a
+  timer per re-appear); **deleted the dead `XPCHelperClient` AX-monitor poll**; usage poll 5s→30s.
+  Deferred (higher-risk, lower marginal value after the above): `ps`/`lsof` → in-process `libproc`.
+  Verified-clean and left alone: all inherited managers (Volume/Battery/Calendar/Webcam/Fullscreen/
+  Drag/Music — event-driven, no idle polling); the attention/working sparkle pulses (conditionally
+  rendered only during active states). Regression-checked: 3 sessions still track + Glacier bridge
+  session still adopts under the adaptive cadence.
+- **v0.3.1 — orphaned-live-session adoption (2026-07-02).** Live-QA found a session missing from the
+  tab after the app was restarted out from under it (Sparkle auto-update + manual restarts during the
+  v0.3 release). Root cause (NOT a v0.3 regression — 0 lines changed in discovery/liveness/registry;
+  NOT the CLI — 2.1.198 unchanged; NOT compaction — same session-id): NotchNerd rebuilds live sessions
+  from **hook events**, and a session already running when the app restarts doesn't re-announce itself;
+  it only re-registers on its next hook. A session recovered from its transcript is **tty-less**, and
+  the liveness backstop matches by TTY, so `discoverTranscriptsOnce` recovered it as an invisible
+  `.completed` record. Compounding it: the affected session was a **remote-control / bridge session**
+  (128 `bridge-session` transcript records) whose turns appear **not to fire local hooks** — so it
+  could *only* ever be surfaced via the process-liveness path, never hooks. **Fix
+  (`AgentBridgeManager.applyDiscoveredSessions`):** attach a live `claude` process's TTY (+terminal
+  app) to a recovered session sharing its **cwd**, so the existing liveness path keeps it visible; runs
+  at startup and as a throttled (20s) self-heal from the liveness backstop when an orphan TTY exists.
+  Safe against the deliberately-removed cwd stale-rescue (only a *live* process's cwd adopts, newest
+  recovered session per free TTY only, 15-min transcript freshness). Verified live: the bridge session
+  reappeared automatically on the fixed build with no prompt. **Gotcha for future work:** the *persisted
+  registry file* is not the UI — adopted sessions show via `republish()` immediately but persist only on
+  a later event, so debug against the app UI, not the registry JSON. **Open limitation:** remote-control/
+  bridge sessions not firing local hooks means approve/deny + live phase for them still depend on the
+  process path only (ties into the Phase-7 / v0.4 remote-session notes). Two follow-on fixes in the same
+  release: **(a) jump button for adopted sessions** — `ClaudeTranscriptDiscovery` stamps recovered
+  targets `terminalApp = "Unknown"`, and the adoption only overrode it when empty, so `canJump` rejected
+  them; now the matched live process's terminal (authoritative) wins. **(b) dynamic-workflow agent
+  visibility** (`WorkflowAgentReader`) — the Workflow tool's agents fire no `SubagentStart` hooks and
+  aren't in the main transcript (invisible even for normal sessions), so they're read off disk from
+  `<sessionDir>/subagents/workflows/wf_*/` (running = journal `started` − `result`, confirmed by fresh
+  per-agent transcript mtime). `AgentBridgeManager.workflowActivity` refreshes off-main from the liveness
+  tick; the row shows "N agents working" **not gated on `phase == .running`** (a hookless session reads as
+  `.completed` while its workflow runs). Verified live: reader tracked `3→3→2→0` as agents finished.
+- **Agent-tab v0.3 build-out (2026-06-30).** Ultracode session: three research/design/verify
+  workflows (agent-tab UX; feature-set gaps incl. the keep-awake signing verdict; keep-awake
+  sentiment + lid-closed-alert verification) → locked roadmap → **P1–P7 built + committed**
+  (`cd41755`…`f217965`), all app-layer, zero Vendor patches. Load-bearing facts were pulled from
+  the **Claude Code v2.1.198 binary on-device**: the real ExitPlanMode menu (incl. the conditional
+  "Yes, and use auto mode" variant, Ultraplan, and the keep-planning input) and proof the CLI
+  applies `updatedPermissions` from PermissionRequest hooks (`handleHookAllow`). Shipped: plan-mode
+  review card (plan text via `PlanTextLoader` tail-read; CLI-mirrored setMode buttons; keep-planning
+  feedback with a projection rewrite so the row doesn't flash "Permission denied"); "N agents
+  researching" chip; manager-owned click-anywhere row expansion (fixes the @State expansion-loss
+  bug; pruned in `republish()`); full last message + copy (metadata is already un-truncated —
+  the 140-char cap was view-layer); `AgentActivity` per-activity recap icons; stopped (isInterrupt)
+  + compacting (PreCompact, 12s TTL) states; Resumed/Cleared/Compacted identity chips; "Fable 5"
+  model chip; `ClaudeTranscriptReader` (off-main, ≤12 MB full / 512 KB tail, mtime+debounce cached,
+  validated 5.7 MB→127 ms) powering recent-activity/files-touched/turns·tokens·**ctx** stats.
+  Genuine StopFailure (vs interrupt) detection needs a Vendor patch — deferred. Keep-awake v0.4:
+  design finalized in the roadmap (sentiment memo folded in) + the **BTM signing spike kit**
+  (`tooling/scripts/btm-spike-*.sh`) prepped for the user-assisted run. Build-verified only —
+  on-device QA pending (esp. live `setMode` honoring on the plan card).
+- **v0.2.x public release + the hardened-runtime launch fix (2026-06-28).** Tagged **v0.2.0** (first
+  release built by the NotchNerd `release.yml` — onboarding + the Settings redesign) and forced
+  `make_latest: true` so the fork's `0.x` releases win "Latest". Then **v0.2.1** fixes a crash that hit
+  *every downloaded release* (incl. v0.1.0): the Release build's **hardened runtime** rejected the
+  ad-hoc-signed `MediaRemoteAdapter.framework` via Library Validation → DYLD "Library missing" at
+  launch. Disabled hardened runtime (`ENABLE_HARDENED_RUNTIME = NO`); verified a Release build signs
+  `flags=0x2` and the dmg launches. Also: `gh` was defaulting to `upstream` (boring.notch) — the
+  "inherited releases" scare was a mirage (`gh repo set-default` fixed it); release notes are now
+  hand-curated per tag (the workflow's auto-notes are thin since commits skip PRs).
 
 ## Roadmap & TODO
 
 The single source of truth for remaining work. Items reference the deferred-work and porting-recipe
 subsections below where an implementer needs the concrete recipe.
+
+### v0.3 — "Agent tab, grown up" (ACTIVE — locked 2026-06-30)
+
+Multi-agent-researched + adversarially-verified overhaul of the Agent tab (plan-mode card, richer
+recap/expand, subagent visibility). **All app-layer — zero Vendor patches.** Key research facts,
+verified against the Claude Code **v2.1.198 binary** on this machine (not guessed):
+
+- **The real ExitPlanMode plan-approval menu** (labels + values from the CLI bundle; the menu is
+  *conditional on session state*): `"Yes, and use auto mode"` (`yes-resume-auto-mode`, shown instead
+  of auto-accept when the session was in auto mode) / `"Yes, auto-accept edits"`
+  (`yes-accept-edits-keep-context`) / `"Yes, manually approve edits"` (`yes-default-keep-context`) /
+  conditional `"Yes, and publish plan as artifact"` / conditional `"No, refine with Ultraplan on
+  Claude Code on the web"` (`ultraplan`) / `"No, keep planning"` — an **input** option with
+  placeholder *"Tell Claude what to change"*.
+- **`updatedPermissions` from a PermissionRequest hook IS honored** — the CLI's hook-allow path
+  applies it via `handleHookAllow(...)` → `setToolPermissionContext`. So NotchNerd's
+  `resolve(.allowWithUpdates([.setMode(.session, <mode>)]))` round-trip works; mode buttons are real.
+- **Ultraplan cannot be triggered from a hook directive** (it's a CLI-side cloud-session flow) —
+  the card represents it as "continue in terminal" (jump), never fakes it.
+- **Do NOT use `ClaudePermissionUpdate.setMode(...).displayLabel`** for button copy — its mapping is
+  inverted vs. the real CLI menu. Hardcode labels.
+- The full last assistant message is **already un-truncated** in
+  `claudeMetadata.lastAssistantMessage` (raw `last_assistant_message` hook field; the 140-char cap is
+  view-layer `condensedForRecap`) — P6a renders it with **zero IO**; the transcript reader is only
+  needed for plan text, activity timeline, edited files, stats, and stale-session fallback.
+
+**Live-QA findings (2026-06-30, real plan-mode session):** the plan card renders with plan text,
+"keep planning" feedback reaches Claude verbatim (deny-message channel), and **`setMode` from the
+hook IS honored** — the terminal's mode footer flipped and `permissionMode: default` round-tripped
+back into the registry. Two environment facts: (1) **Claude Code defers transcript flushes** — a
+short session may have NO `.jsonl` even after completing a turn (why `PermissionRequest.planText`
+is a Vendor patch and the expanded-row transcript sections appear only once the file exists —
+graceful fallback in place); (2) **the app ignores SIGTERM** (needed SIGKILL to restart — mind this
+for the keep-awake watchdog/terminate path, and when relaunching after rebuilds: verify the PID
+actually changed, `open` happily focuses a stale instance).
+
+**Status (2026-06-30): P1–P7 BUILT** (commits `cd41755`…`f217965`, each build-verified; plus a
+per-session **context-footprint stat** — `ctx Nk` in the expanded stats footer, computed from the
+last main-chain assistant record's input+cache tokens, raw count deliberately without a %).
+**Remaining: P8 polish** (markdown rendering, stop button, smart-expand, copy-summary) **+ the
+on-device QA pass** (esp. live confirmation that the plan card's `setMode` round-trip flips the
+terminal's mode footer). Ship as **v0.3.0** after QA.
+
+**Phase order** (each independently shippable + build-verified):
+**P1** plan-mode review card — plan text via a small tail-read `PlanTextLoader` (last `ExitPlanMode`
+`tool_use.input.plan`, matched by `toolUseID`), CLI-mirrored buttons (order + prominence match the
+CLI; single-shot `resolving` guard), "keep planning" feedback field (notch `makeKey` trick) sending
+`deny(message: feedback)` with the projected summary rewritten at the `debranded()` boundary so the
+row doesn't flash "Permission denied" →
+**P2** subagent chip — "N researching" on the *activity line* (not the crowded header), counting
+`activeSubagents` without a `summary`; no auto-expand/soft-pin; closed-notch unchanged →
+**P4** manager-owned expansion — `@Published expandedSessionIDs` in `AgentBridgeManager` (fixes the
+@State-teardown expansion-loss bug), every row expandable, pruned in `republish()` →
+**P6a** full last message + copy button ("Last message"/"Details", NOT "recap" — `/recap` is
+API-synthesized and unreproducible) →
+**P3** `AgentActivity` vocabulary — per-activity icon/tint descriptor (planReview/researching/
+failed/compacting differentiation; status dot keeps phase color) →
+**P5/P6b** `ClaudeTranscriptReader` — off-MainActor streaming read (≤12 MB forward, else 64 KB tail),
+mtime-cached, never from a SwiftUI body; timeline/files/stats (validate jsonl field shapes first) →
+**P7** `.failed` (isInterrupt/StopFailure) + `.compacting` (PreCompact, ~12s TTL) + startup-source
+chip → **P8** polish (stop button, copy-summary, markdown, smart-expand).
+
+**QA/pre-work:** audit our bridge use vs upstream PR **#503** (subagent permission requests dropped
+by a bridge filter) before P2; retest upstream issue **#559** (decisions ignored/stuck) during P1 QA.
+**Skip the upstream re-pull** at v1.1.4 (delta is ~90% Codex/Cursor-only; a re-pull clobbers the
+`QuestionOption.preview` patch) — re-evaluate at upstream's next minor.
+
+### v0.4 also carries — restart-phantom cleanup latency (deferred bug, 2026-07-09)
+
+**Symptom (reported + verified):** after restarting NotchNerd, a session that was already closed shows
+briefly (e.g. a 4th "StrataMentis-Site" row) before disappearing — it cleared only after a hook fired
+in another session. **Root cause:** a session that ends *without a clean `SessionEnd`* (abrupt terminal
+tab-close) stays in the persisted registry marked alive; on restart `restoreFromRegistry` optimistically
+shows it (`isHookManaged && !isSessionEnded` → visible) until the liveness backstop confirms its process
+is gone via **2 misses** (`processNotSeenCount >= 2`). The v0.3.2 **adaptive liveness interval**
+(3s active / 20s idle) stretched that cleanup from ~6s (old fixed 3s) to **up to ~20s** — the phantom
+lingers longer, hence more noticeable; a hook nudge (`nudgeLivenessIfIdle`) is what cleared it early.
+Self-heals (no corruption). **Fix (do after the BTM spike, in v0.4):** keep the liveness backstop on the
+fast cadence during a **startup reconciliation window** — until every restored session has been confirmed
+alive-or-dead once — *then* drop to the adaptive idle cadence (restores ~6s cleanup without losing the
+idle-battery win). Alt: prune a restored-but-never-confirmed session after **1** miss instead of 2
+(lower confidence in a session inherited from a prior app instance). ~15 lines in `AgentBridgeManager`;
+verify by reproducing (restart with a stale registry entry, time the clear).
+
+### v0.4 — "Close the lid" keep-awake (locked 2026-06-30, signing-gated)
+
+Lidless-style (github.com/nghialuong/Lidless, MIT — add to `THIRD_PARTY_LICENSES` when built)
+keep-awake via the **`SleepDisabled` flag in `IOPMrootDomain`** — the only mechanism that survives
+lid-close on Apple Silicon (`caffeinate`/IOPMAssertion do not). Needs a **root helper**; a 90s
+heartbeat watchdog restores sleep if the app dies. ⚠️ `SleepDisabled` is **undocumented on macOS
+26.4** — treat as volatile: re-assert/clear at every boot, assume no persistence. Differentiator:
+**nobody in the Claude-companion space ships agent-aware keep-awake** (field is saturated on usage
+tracking + phone remotes instead; Anthropic's official Remote Control subsumes the remote niche —
+don't build remote approve/deny).
+
+- **Modes:** **Manual** (menu-bar toggle + hotkey, auto-off timer 15m–4h with live countdown, NO
+  charging requirement — explicit user act); **While-Claude-works** (`workingCount > 0` + grace
+  period, default 5 min, + `keepAwakeAgentMaxHours` runaway cap, default 8h); **Remote-ready**
+  (`liveSessionCount > 0` — keeps the Mac reachable for Claude Code's phone remote control, e.g.
+  backpack + hotspot; once asleep there is NO remote-wake path on a hotspot — no Bonjour Sleep
+  Proxy — so "don't sleep while reachable matters" is the design, not "wake").
+- **Safety rails** (agent modes): only-while-charging default ON, low-battery cutoff 20%, thermal
+  pause (`ProcessInfo.thermalState`), watchdog invariant, safety releases announced via notch HUD +
+  sound. `applicationWillTerminate` restores sleep.
+- **Lid-closed attention alerts** *(revised per the 2026-06-30 sentiment/verification memo)*:
+  phone push is the primary channel, stacked: (1) **first-party Remote Control push** ("Push when
+  actions required", CLI ≥ 2.1.110) — document/integrate, don't rebuild; (2) **ntfy topic URL**
+  (no-account, high-entropy topic generated in-app; add a "send test push — did it sound?" setup
+  step, open iOS silent-notification bug ntfy#1562); (3) a **generic webhook field** (covers
+  Pushover/Telegram/Slack). **iMessage-to-self is CUT** (self-sends produce no banner/sound, and
+  per-cdhash Automation TCC would drop every rebuild). Local escalating sounds are **secondary,
+  off-by-default** (clamshell audio confirmed working while awake, but lid+backpack muffles it —
+  same-room channel only; play via AVAudioPlayer to the default output, NOT NSSound's alert
+  device). Keep the Adrafinil-style **armed chime on lid close**. Lid detection: subscribe to
+  `kIOPMMessageClamshellStateChange` (public IOPM.h) in-app — not the XPC helper, no root/TCC.
+- **Adds from the sentiment memo:** **display-off while held awake** (raw `disablesleep` leaves the
+  panel lit under the closed lid — Modafinil's entire raison d'être); **`CLAUDE_CLIENT_PRESENCE_FILE`
+  integration** (CLI ≥ 2.1.181 — write/remove the presence marker from lid state so first-party RC
+  pushes fire when the lid is shut; observe-only); **battery %/temp in the usage HUD** during
+  held-awake runs; **coexistence with Claude Code's own `caffeinate -i`** (it already prevents
+  lid-open idle sleep during turns — NotchNerd's added value is *only* the lid-closed case; detect
+  it so state never looks contradictory); QA gate: lid closed + SleepDisabled + looping audio 5 min
+  on target hardware.
+- **Remote-ready mode CONFIRMED as ship-shape** — Remote Control is server-mediated outbound-HTTPS
+  polling; a sleeping Mac is unreachable, hotspots have no Bonjour Sleep Proxy, APNs can't wake a
+  Mac, and the documented reconnect-after-sleep is *empirically flaky* (anthropics/claude-code
+  #34255 #34531 #69543) — holding awake avoids the buggiest path entirely. **Do not assume
+  server-side message queueing** (unverified) — Remote-ready UI copy should treat
+  delivery-while-asleep as failure. **Scheduled-wake** (sleep + periodic root RTC DarkWakes,
+  ~4–6× better battery) is DEFERRED behind a spike: unknowns are DarkWake duration stretching and
+  whether the RC session survives repeated sleep/wake.
+- **Defaults keys:** `keepAwakeEnabled` (off, consent-gated helper install), `keepAwakeAgentMode`,
+  `keepAwakeAgentGraceMinutes` (5), `keepAwakeAgentMaxHours` (8), `keepAwakeOnlyOnPower` (on),
+  `keepAwakeLowBatteryCutoff` (20), `keepAwakeAutoOffMinutes` (60). Settings → Keep Awake tab
+  mirroring the `AgentSettings` install/status pattern.
+- **⚠️ SIGNING GATE (must resolve before building):** `SMAppService.daemon` under ad-hoc signing is
+  a **confirmed non-starter** (macOS 26 SDK header: "Apps that contain LaunchDaemons must be
+  notarized"; Lidless itself ships Developer ID + notarized). The classic
+  `/Library/LaunchDaemons` fallback (one admin-prompt install) is *maybe* viable but **Background
+  Task Management** (Sonoma 14.6.1+) gates daemons by developer signature (it broke Nix's daemons
+  on Tahoe — "unidentified developer", disabled until manually toggled in Login Items). **Run the
+  ~30-min user-assisted spike first** (ad-hoc helper → one-prompt install → `launchctl bootstrap
+  system` → reboot → `sudo sfltool dumpbtm`; re-check after a re-signed binary swap — cdhash churn
+  may reset BTM trust). Branch: spike passes → classic-daemon path; fails → **Developer ID +
+  notarization** becomes the keep-awake prerequisite (one $99 gate that also retires quarantine
+  friction, per-build TCC churn, and unblocks the Watch relay); either way a zero-privilege
+  monitor+nag v1 can ship. Disclose the root-helper posture change in README/onboarding.
 
 ### Phase 6 — Modernize & harden
 
@@ -683,18 +1041,16 @@ subsections below where an implementer needs the concrete recipe.
 - **HookHealthCheck — DONE.** Wired into Settings → Agent (diagnose on launch/refresh/install + a
   Repair-hooks action reusing the installer's `settings.json` backup). Remaining: exercise against more
   live hook-schema drift (`StopFailure` is already handled).
-- **Finish the rebrand.** **User-visible surfaces DONE** (welcome-screen icon/wordmark, About tagline,
-  "webcam mirror", hook-error string, release codename, README). `THIRD_PARTY_LICENSES` already credits
-  Open Island (the earlier "omits" note was stale). **Remaining is structural** (not user-visible app
-  identity): the SPM module/products (`OpenIslandCore`/`OpenIslandHooks`), the embedded hook-binary name
-  + socket/statusline paths (folds into the namespacing item above), the `BoringNotchXPCHelper` display
-  name, the DMG volume name, and the dead boring.notch `updater/appcast.xml` + `.github/FUNDING.yml`
-  (routes to upstream — **fix before going public**) + inherited issue/PR templates + `crowdin.yml`. The
-  vendor-merge audit recommends **keeping the SPM boundary** (load-bearing: the separate hook-CLI Mach-O
-  must share Core, and the Swift-6/Swift-5 language-mode split must stay isolated) while rebranding its
-  identity in tiers (rename products via a `path:` override that preserves the re-pull dir; namespace
-  runtime paths). Also: reconcile `THIRD_PARTY_LICENSES` with the actual linked SPM deps (it lists some
-  unused deps + omits Lottie/Sparkle/etc.) before a public binary release.
+- **Finish the rebrand.** **User-visible + pre-public surfaces DONE** (welcome-screen icon/wordmark,
+  About tagline, "webcam mirror", hook-error string, release codename, README; DMG volume name
+  de-branded; the dead boring.notch `updater/appcast.xml` + `.github/FUNDING.yml` + inherited issue/PR
+  templates + `crowdin.yml` removed; `THIRD_PARTY_LICENSES` credits Open Island and now lists the linked
+  SPM deps). **Remaining is structural** (not user-visible app identity): the SPM module/products
+  (`OpenIslandCore`/`OpenIslandHooks`), the embedded hook-binary name + socket/statusline paths (folds
+  into the namespacing item above), and the `BoringNotchXPCHelper` display name. The vendor-merge audit
+  recommends **keeping the SPM boundary** (load-bearing: the separate hook-CLI Mach-O must share Core,
+  and the Swift-6/Swift-5 language-mode split must stay isolated) while rebranding its identity in tiers
+  (rename products via a `path:` override that preserves the re-pull dir; namespace runtime paths).
 
 ### More terminals (remainder of OI review item #5)
 
@@ -759,8 +1115,8 @@ in Core, UI is not).
   the music visualizer for the ✦ without the music notch vanishing); the **taller Agent tab**
   (640×320) and that the **music notch is unchanged**; the **music-visualizer presets** looking right
   in the tiny slot; approve/deny round-trip; TCC consent (Accessibility in-app, Automation for the
-  Ghostty/Terminal jump). The `workingCount` indicator is a **60s-recency heuristic** — see *Roadmap →
-  real-time signal*.
+  Ghostty/Terminal jump). (`workingCount` is now event-driven — `phase == .running &&
+  isProcessAlive`, no recency window; the old "60s-recency heuristic" note is obsolete.)
 - **Build-output location cleanup** *(trivial, deferred).* CLI builds use `-derivedDataPath build`
   (project-local `build/Build/Products/Debug/NotchNerd.app`), which is a **different** binary from
   Xcode's default DerivedData output — so launching the wrong one runs stale code, and TCC grants are

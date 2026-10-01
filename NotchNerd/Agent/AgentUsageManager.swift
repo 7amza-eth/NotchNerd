@@ -35,7 +35,10 @@ final class AgentUsageManager: ObservableObject {
 
     private var hasStarted = false
     private var pollTimer: DispatchSourceTimer?
-    private static let pollInterval: DispatchTimeInterval = .seconds(5)
+    // Quota windows (5h / 7d) move slowly and the statusline file only changes when Claude
+    // re-renders it, so a 5s poll was ~6× more wakeups than useful. 30s is imperceptible for a
+    // rolling-quota HUD.
+    private static let pollInterval: DispatchTimeInterval = .seconds(30)
 
     private init() {}
 

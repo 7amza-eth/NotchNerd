@@ -90,13 +90,10 @@ extension Defaults.Keys {
     )
     static let nonNotchHeight = Key<CGFloat>("nonNotchHeight", default: 32)
     static let notchHeight = Key<CGFloat>("notchHeight", default: 32)
-    //static let openLastTabByDefault = Key<Bool>("openLastTabByDefault", default: false)
     static let showOnLockScreen = Key<Bool>("showOnLockScreen", default: false)
     static let hideFromScreenRecording = Key<Bool>("hideFromScreenRecording", default: false)
     
     // MARK: Appearance
-    static let showEmojis = Key<Bool>("showEmojis", default: false)
-    //static let alwaysShowTabs = Key<Bool>("alwaysShowTabs", default: true)
     static let showMirror = Key<Bool>("showMirror", default: false)
     static let mirrorShape = Key<MirrorShapeEnum>("mirrorShape", default: MirrorShapeEnum.rectangle)
     static let settingsIconInNotch = Key<Bool>("settingsIconInNotch", default: true)
@@ -105,8 +102,8 @@ extension Defaults.Keys {
     static let cornerRadiusScaling = Key<Bool>("cornerRadiusScaling", default: true)
 
     static let showNotHumanFace = Key<Bool>("showNotHumanFace", default: false)
-    static let tileShowLabels = Key<Bool>("tileShowLabels", default: false)
     static let showCalendar = Key<Bool>("showCalendar", default: false)
+    static let showReminders = Key<Bool>("showReminders", default: true)
     static let hideCompletedReminders = Key<Bool>("hideCompletedReminders", default: true)
     static let sliderColor = Key<SliderColorEnum>(
         "sliderUseAlbumArtColor",
@@ -130,7 +127,6 @@ extension Defaults.Keys {
     static let enableSneakPeek = Key<Bool>("enableSneakPeek", default: false)
     static let sneakPeekStyles = Key<SneakPeekStyle>("sneakPeekStyles", default: .standard)
     static let waitInterval = Key<Double>("waitInterval", default: 3)
-    static let showShuffleAndRepeat = Key<Bool>("showShuffleAndRepeat", default: false)
     static let enableLyrics = Key<Bool>("enableLyrics", default: false)
     static let musicControlSlots = Key<[MusicControlButton]>(
         "musicControlSlots",
@@ -168,7 +164,6 @@ extension Defaults.Keys {
     // MARK: Shelf
     static let shelfEnabled = Key<Bool>("shelfEnabled", default: true)
     static let openShelfByDefault = Key<Bool>("openShelfByDefault", default: true)
-    static let shelfTapToOpen = Key<Bool>("shelfTapToOpen", default: true)
     static let quickShareProvider = Key<String>("quickShareProvider", default: QuickShareProvider.defaultProvider.id)
     static let copyOnDrag = Key<Bool>("copyOnDrag", default: false)
     static let autoRemoveShelfItems = Key<Bool>("autoRemoveShelfItems", default: false)
@@ -191,6 +186,11 @@ extension Defaults.Keys {
     static let customAccentColorData = Key<Data?>("customAccentColorData", default: nil)
     // Show or hide the title bar
     static let hideTitleBar = Key<Bool>("hideTitleBar", default: true)
+
+    // MARK: Onboarding
+    /// True once the user has seen (or been auto-shown) the feature tour. Default false so existing
+    /// upgraders — who never saw the first-run wizard — get the tour auto-presented once.
+    static let hasSeenFeatureTour = Key<Bool>("hasSeenFeatureTour", default: false)
 
     // MARK: Agent (Claude Code session monitor — NotchNerd)
     static let agentEnabled = Key<Bool>("agentEnabled", default: false)

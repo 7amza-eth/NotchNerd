@@ -153,7 +153,9 @@ struct AgentView: View {
 struct AgentSessionRow: View {
     let session: AgentSession
     @ObservedObject private var agent = AgentBridgeManager.shared
-    @State private var isExpanded = false
+
+    /// Manager-owned so expansion survives row-view teardown (notch reopen / tab switch).
+    private var isExpanded: Bool { agent.expandedSessionIDs.contains(session.id) }
 
     private var hasDetail: Bool {
         !(session.claudeMetadata?.activeSubagents.isEmpty ?? true)
@@ -164,13 +166,19 @@ struct AgentSessionRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 AnimatedStatusDot(
-                    color: AgentStatusPalette.tint(for: session.phase),
+                    color: agent.isStopped(session.id)
+                        ? AgentStatusPalette.error
+                        : AgentStatusPalette.tint(for: session.phase),
                     pulsing: session.phase == .running || session.phase.requiresAttention
                 )
                 Text(session.title.isEmpty ? "Claude Code" : session.title)
                     .font(.subheadline).lineLimit(1)
-                    .contentShape(Rectangle())
-                    .onTapGesture { if agent.canJump(session) { agent.jump(sessionID: session.id) } }
+                if agent.isStopped(session.id) {
+                    Text("stopped")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(AgentStatusPalette.error)
+                        .help("The turn was interrupted before finishing")
+                }
                 Spacer(minLength: 4)
                 if let progress = session.taskProgress {
                     Label("\(progress.done)/\(progress.total)", systemImage: "checklist")
@@ -179,28 +187,18 @@ struct AgentSessionRow: View {
                         .foregroundStyle(.tertiary)
                         .help("\(progress.done) of \(progress.total) tasks done")
                 }
+                if let ctx = agent.contextTokensBySession[session.id], ctx > 0 {
+                    Text("ctx \(AgentSessionExpandedView.compactTokens(ctx))")
+                        .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
+                        .help("Current context size (last turn's input + cache tokens)")
+                }
                 Text(session.spotlightAgeBadge)
                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.tertiary)
                     .help("Time since last activity")
-                if hasDetail {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            isExpanded.toggle()
-                            if isExpanded {
-                                AgentRowExpansion.userCollapsed.remove(session.id)
-                            } else {
-                                AgentRowExpansion.userCollapsed.insert(session.id)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(isExpanded ? "Hide subagents and tasks" : "Show subagents and tasks")
-                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .foregroundStyle(.secondary)
                 Button { agent.snooze(sessionID: session.id) } label: {
                     Image(systemName: "moon.zzz")
                 }
@@ -215,24 +213,69 @@ struct AgentSessionRow: View {
                     .help(agent.isDesktopSession(session.id) ? "Open the Claude app" : "Jump to the terminal")
                 }
             }
+            // The whole header row is the expand/collapse affordance ("click the session box").
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    agent.toggleExpansion(session.id)
+                }
+            }
+            .help(isExpanded ? "Hide details" : "Show details")
             // Identity context — branch · terminal · model · mode — so same-repo sessions are distinct.
             if !session.identityChips.isEmpty {
                 Text(session.identityChips.joined(separator: "  ·  "))
                     .font(.system(size: 9)).foregroundStyle(.tertiary).lineLimit(1)
             }
-            // Recap (the outcome / current activity) instead of a raw transcript line.
+            // Waiting-on-agents chip — on the activity line, not the crowded header row.
+            // Dynamic-workflow agents (read off disk) take priority and are NOT gated on phase: a
+            // hookless/bridge session shows as .completed even while its workflow is mid-flight.
+            if let workflow = agent.workflowActivity[session.id], workflow.runningAgents > 0 {
+                Label(
+                    workflow.runningAgents == 1 ? "1 agent working" : "\(workflow.runningAgents) agents working",
+                    systemImage: "arrow.triangle.branch"
+                )
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Color.cyan.opacity(0.9))
+            } else if session.phase == .running, let researching = session.subagentSummary {
+                Label(researching, systemImage: "arrow.triangle.branch")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(Color.cyan.opacity(0.9))
+            }
+            // Recap (the outcome / current activity) instead of a raw transcript line. Running
+            // sessions get a per-activity icon (thinking/bash/edit/search/…) so different kinds of
+            // "running" are tellable apart at a glance; the subagent chip above already carries the
+            // researching state, so the icon resolves the underlying tool instead.
             if let recap = session.recapLineText, !recap.isEmpty {
-                Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                if session.phase == .running {
+                    let descriptor = AgentActivity.resolve(
+                        for: session,
+                        ignoringSubagents: true,
+                        isCompacting: agent.isCompacting(session.id)
+                    ).descriptor
+                    Label {
+                        Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                    } icon: {
+                        Image(systemName: descriptor.symbol)
+                            .font(.system(size: 9))
+                            .foregroundStyle(descriptor.tint)
+                    }
+                } else {
+                    Text(recap).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                }
             }
             // The session's goal (its initial prompt), so a long/drifted session still shows its purpose.
             if let goal = session.recapGoalText, !goal.isEmpty {
                 Text("↳ \(goal)").font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1)
             }
-            if isExpanded && hasDetail {
-                AgentSessionDetailView(session: session)
+            if isExpanded {
+                AgentSessionExpandedView(session: session, hasDetail: hasDetail)
             }
             if let request = session.permissionRequest, session.phase == .waitingForApproval {
-                permissionCard(request)
+                if request.toolName == "ExitPlanMode" {
+                    PlanReviewCard(session: session, request: request)
+                } else {
+                    permissionCard(request)
+                }
             } else if let question = session.questionPrompt, session.phase == .waitingForAnswer {
                 QuestionCard(sessionID: session.id, prompt: question) { response in
                     agent.answer(sessionID: session.id, response: response)
@@ -251,10 +294,9 @@ struct AgentSessionRow: View {
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
-        .onAppear {
-            isExpanded = hasDetail && session.phase.requiresAttention
-                && !AgentRowExpansion.userCollapsed.contains(session.id)
-        }
+        // Restored/idle sessions may never emit another event — fetch their detail (ctx badge)
+        // when the row first appears; the manager's cache guards make repeats free.
+        .onAppear { agent.loadTranscriptDetail(for: session.id) }
     }
 
     private func permissionCard(_ request: PermissionRequest) -> some View {
@@ -300,6 +342,181 @@ struct AgentSessionRow: View {
         return request.primaryActionTitle.isEmpty ? "Allow" : request.primaryActionTitle
     }
 
+}
+
+/// Plan-mode review card, shown instead of the generic permission card when Claude calls
+/// `ExitPlanMode`. Mirrors the real CLI plan-approval menu (labels/values verified against the
+/// Claude Code v2.1.198 binary — see spec.md v0.3): the leading "yes" option depends on the
+/// session's mode ("Yes, and use auto mode" for auto sessions, else "Yes, auto-accept edits"),
+/// then "Yes, manually approve edits", an Ultraplan jump-to-terminal escape hatch, and
+/// "No, keep planning" with a first-class feedback field. Each "yes" round-trips
+/// allow + setMode(.session, mode) — the CLI provably applies updatedPermissions from
+/// PermissionRequest hooks. Do NOT use ClaudePermissionUpdate.displayLabel here (its mapping is
+/// inverted vs. the real menu).
+struct PlanReviewCard: View {
+    let session: AgentSession
+    let request: PermissionRequest
+    @ObservedObject private var agent = AgentBridgeManager.shared
+
+    @State private var planText: String?
+    @State private var planLoaded = false
+    @State private var resolving = false
+    @State private var showFeedback = false
+    @State private var feedback = ""
+    @FocusState private var feedbackFocused: Bool
+
+    private struct PlanChoice {
+        let label: String
+        let mode: ClaudePermissionMode
+        let prominent: Bool
+    }
+
+    /// CLI-mirrored "yes" options: the first (prominent) entry matches what the terminal shows
+    /// first for this session's current mode; mutually exclusive auto variants, like the CLI.
+    private var choices: [PlanChoice] {
+        let first: PlanChoice = session.claudeMetadata?.permissionMode == .auto
+            ? PlanChoice(label: "Yes, and use auto mode", mode: .auto, prominent: true)
+            : PlanChoice(label: "Yes, auto-accept edits", mode: .acceptEdits, prominent: true)
+        return [first, PlanChoice(label: "Yes, manually approve edits", mode: .default, prominent: false)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: "list.clipboard").font(.caption).foregroundStyle(.purple)
+                Text("Claude finished planning").font(.caption).bold()
+            }
+
+            planBody
+
+            if resolving {
+                Text("Sent — waiting for Claude…").font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+
+            ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in
+                planButton(choice)
+            }
+
+            if agent.canJump(session) {
+                Button {
+                    agent.jump(sessionID: session.id)
+                } label: {
+                    Label("Refine with Ultraplan — continue in terminal", systemImage: "arrow.uturn.forward.square")
+                        .font(.system(size: 9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderless).tint(.secondary).controlSize(.small)
+                .help("Ultraplan runs in the terminal/cloud — it can't be started from a hook")
+            }
+
+            keepPlanningSection
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.14)))
+        .disabled(resolving)
+        .task(id: request.id) {
+            // Primary source: the hook payload's tool_input.plan, carried on the request via the
+            // documented Vendor patch — the transcript is NOT flushed while the hook blocks, so
+            // the tail-read below only helps for stale/re-created cards.
+            if let plan = request.planText, !plan.isEmpty {
+                planText = plan
+                planLoaded = true
+                return
+            }
+            guard let path = session.claudeMetadata?.transcriptPath else { planLoaded = true; return }
+            let toolUseID = request.toolUseID
+            planText = await Task.detached(priority: .userInitiated) {
+                PlanTextLoader.loadPlan(transcriptPath: path, toolUseID: toolUseID)
+            }.value
+            planLoaded = true
+        }
+        // Same non-key-panel dance as QuestionCard: the feedback field needs the notch to be key.
+        .background { if showFeedback { NotchFreeformKeyMaker() } }
+        .onChange(of: showFeedback) { _, active in
+            NotepadNotchFocus.allowsNotchKey = active
+            SharingStateManager.shared.preventNotchClose = active
+            if active { feedbackFocused = true }
+        }
+        .onDisappear {
+            if showFeedback {
+                NotepadNotchFocus.allowsNotchKey = false
+                SharingStateManager.shared.preventNotchClose = false
+            }
+        }
+    }
+
+    @ViewBuilder private var planBody: some View {
+        if let plan = planText {
+            ScrollView(.vertical) {
+                Text(plan)
+                    .font(.system(size: 10))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxHeight: 160)
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.4)))
+        } else if !planLoaded {
+            Text("Loading plan…").font(.caption2).foregroundStyle(.tertiary)
+        } else if !request.summary.isEmpty {
+            // Transcript unavailable — fall back to the engine's summary line.
+            Text(request.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
+        }
+    }
+
+    private func planButton(_ choice: PlanChoice) -> some View {
+        Button {
+            resolving = true
+            agent.resolve(
+                sessionID: session.id,
+                action: .allowWithUpdates([.setMode(destination: .session, mode: choice.mode)])
+            )
+        } label: {
+            Text(choice.label)
+                .font(.caption2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .tint(choice.prominent ? .green : .blue)
+        .controlSize(.small)
+    }
+
+    @ViewBuilder private var keepPlanningSection: some View {
+        if showFeedback {
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Tell Claude what to change", text: $feedback)
+                    .textFieldStyle(.roundedBorder).controlSize(.small)
+                    .focused($feedbackFocused)
+                    .onSubmit { sendKeepPlanning() }
+                HStack(spacing: 8) {
+                    Button("Send & keep planning") { sendKeepPlanning() }
+                        .buttonStyle(.borderedProminent).tint(.orange).controlSize(.small)
+                    Button("Cancel") {
+                        showFeedback = false
+                        feedback = ""
+                    }
+                    .buttonStyle(.borderless).controlSize(.small)
+                }
+            }
+        } else {
+            Button {
+                showFeedback = true
+            } label: {
+                Text("No, keep planning…")
+                    .font(.caption2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered).tint(.red).controlSize(.small)
+            .help("Claude stays in plan mode; optionally tell it what to change")
+        }
+    }
+
+    private func sendKeepPlanning() {
+        resolving = true
+        showFeedback = false
+        agent.keepPlanning(sessionID: session.id, feedback: feedback)
+    }
 }
 
 /// Interactive answer card for Claude's AskUserQuestion. Renders EVERY question (not just the first),
@@ -590,7 +807,8 @@ extension AgentSession {
         }
     }
 
-    /// Compact identity context: branch · terminal · friendly model · non-default permission mode.
+    /// Compact identity context: branch · terminal · friendly model · non-default permission mode
+    /// · non-fresh startup source.
     var identityChips: [String] {
         var chips: [String] = []
         if let branch = spotlightWorktreeBranch { chips.append(branch) }
@@ -599,7 +817,19 @@ extension AgentSession {
         if let mode = claudeMetadata?.permissionMode, let label = Self.permissionModeLabel(mode) {
             chips.append(label)
         }
+        if let source = claudeMetadata?.startupSource, let label = Self.startupSourceLabel(source) {
+            chips.append(label)
+        }
         return chips
+    }
+
+    static func startupSourceLabel(_ source: ClaudeSessionStartSource) -> String? {
+        switch source {
+        case .startup: return nil          // a fresh session is the norm — not worth a chip
+        case .resume: return "Resumed"
+        case .clear: return "Cleared"
+        case .compact: return "Compacted"
+        }
     }
 
     /// (done, total) of the session's task checklist, when it has one.
@@ -609,12 +839,21 @@ extension AgentSession {
         return (tasks.filter { $0.status == .completed }.count, tasks.count)
     }
 
+    /// "N agents researching" — subagents currently running (no summary yet). Glance chip so a
+    /// session blocked on research/workflow subagents doesn't read as frozen.
+    var subagentSummary: String? {
+        let active = claudeMetadata?.activeSubagents.filter { $0.summary == nil }.count ?? 0
+        guard active > 0 else { return nil }
+        return active == 1 ? "1 agent researching" : "\(active) agents researching"
+    }
+
     static func friendlyModelName(_ raw: String) -> String {
         let lowered = raw.lowercased()
         if lowered.contains("opus") { return "Opus" }
         if lowered.contains("sonnet") { return "Sonnet" }
         if lowered.contains("haiku") { return "Haiku" }
-        if lowered.contains("fable") { return "Fable" }
+        if lowered.contains("fable") { return "Fable 5" }
+        if lowered.contains("mythos") { return "Mythos 5" }
         return raw
     }
 
@@ -794,68 +1033,75 @@ struct AgentSettings: View {
             }
 
             Section {
-                Defaults.Toggle(key: .agentNotificationsEnabled) { Text("Pop the notch on agent events") }
-                Defaults.Toggle(key: .agentAutoOpenNotch) { Text("Auto-open the notch (off = sound + indicator only)") }
-                Defaults.Toggle(key: .agentNotifyOnCompletion) { Text("Notify when a session finishes") }
-                Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal or the Claude app is already focused") }
-                Stepper(value: $agentNudgeBlockedMinutes, in: 0...120, step: 5) {
-                    Text(agentNudgeBlockedMinutes == 0
-                         ? "Nudge when blocked on you: off"
-                         : "Nudge when blocked on you for \(agentNudgeBlockedMinutes) min")
+                Defaults.Toggle(key: .agentNotificationsEnabled) { Text("Open the notch on agent events") }
+                Group {
+                    Defaults.Toggle(key: .agentAutoOpenNotch) { Text("Auto-open the notch (off = sound + indicator only)") }
+                    Defaults.Toggle(key: .agentNotifyOnCompletion) { Text("Notify when a session finishes") }
+                    Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal or the Claude app is already focused") }
+                    Stepper(value: $agentNudgeBlockedMinutes, in: 0...120, step: 5) {
+                        Text(agentNudgeBlockedMinutes == 0
+                             ? "Nudge when blocked on you: off"
+                             : "Nudge when blocked on you for \(agentNudgeBlockedMinutes) min")
+                    }
+                    Stepper(value: $agentNudgeRunningMinutes, in: 0...240, step: 15) {
+                        Text(agentNudgeRunningMinutes == 0
+                             ? "Nudge when a turn runs long: off"
+                             : "Nudge when a turn runs longer than \(agentNudgeRunningMinutes) min")
+                    }
                 }
-                Stepper(value: $agentNudgeRunningMinutes, in: 0...240, step: 15) {
-                    Text(agentNudgeRunningMinutes == 0
-                         ? "Nudge when a turn runs long: off"
-                         : "Nudge when a turn runs longer than \(agentNudgeRunningMinutes) min")
-                }
+                .disabled(!agentNotificationsEnabled)
             } header: {
                 Text("Notifications")
             } footer: {
                 Text("Permission and question prompts stay until you answer them; completion notices and nudges auto-dismiss after 10 seconds. Each nudge fires once per wait. Snoozed chats never pop.")
             }
-            .disabled(!agentNotificationsEnabled)
 
             Section {
                 Defaults.Toggle(key: .agentSoundEnabled) { Text("Play a sound when a session needs you") }
-                Defaults.Toggle(key: .agentSoundMuted) { Text("Mute") }
-                Picker("Needs you", selection: $agentSoundName) {
-                    ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
-                        Text(name).tag(name)
+                Group {
+                    Defaults.Toggle(key: .agentSoundMuted) { Text("Mute") }
+                    Picker("Needs you", selection: $agentSoundName) {
+                        ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
+                            Text(name).tag(name)
+                        }
                     }
-                }
-                .onChange(of: agentSoundName) { _, name in AgentNotificationSound.play(name) }
-                Picker("Finished (your turn)", selection: $agentCompletionSoundName) {
-                    ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
-                        Text(name).tag(name)
+                    .onChange(of: agentSoundName) { _, name in AgentNotificationSound.play(name) }
+                    Button("Preview") { AgentNotificationSound.play(agentSoundName) }
+                    Picker("Finished (your turn)", selection: $agentCompletionSoundName) {
+                        ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
+                            Text(name).tag(name)
+                        }
                     }
+                    .onChange(of: agentCompletionSoundName) { _, name in AgentNotificationSound.play(name) }
                 }
-                .onChange(of: agentCompletionSoundName) { _, name in AgentNotificationSound.play(name) }
+                .disabled(!agentSoundEnabled)
             } header: {
                 Text("Sound")
             } footer: {
                 Text("Uses a macOS system sound from /System/Library/Sounds.")
             }
-            .disabled(!agentSoundEnabled)
 
             Section {
                 Defaults.Toggle(key: .agentUsageEnabled) { Text("Show Claude usage (5h / 7d quotas)") }
-                HStack {
-                    Text("Statusline")
-                    Spacer()
-                    usageStatusLabel
+                Group {
+                    HStack {
+                        Text("Statusline")
+                        Spacer()
+                        usageStatusLabel
+                    }
+                    HStack {
+                        Button("Install statusline") { usage.installIfNeeded() }
+                        Button("Remove statusline") { usage.uninstall() }
+                        Spacer()
+                        Button("Refresh") { usage.refreshStatus() }
+                    }
                 }
-                HStack {
-                    Button("Install") { usage.installIfNeeded() }
-                    Button("Remove") { usage.uninstall() }
-                    Spacer()
-                    Button("Refresh") { usage.refreshStatus() }
-                }
+                .disabled(!agentUsageEnabled)
             } header: {
                 Text("Usage")
             } footer: {
                 Text("Adds a managed statusLine entry to Claude Code's settings.json that records your remaining quota. If you already have a custom statusline, NotchNerd wraps it so it keeps working. Reversible.")
             }
-            .disabled(!agentUsageEnabled)
         }
         .formStyle(.grouped)
         .navigationTitle("Agent")
