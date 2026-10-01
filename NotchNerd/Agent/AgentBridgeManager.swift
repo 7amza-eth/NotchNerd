@@ -179,7 +179,18 @@ final class AgentBridgeManager: ObservableObject {
         GrokBotMonitor.shared.stop()
         persistDebounce?.cancel(); persistDebounce = nil
         bridgeClient.disconnect()
-        bridgeServer.stop()
+        // BridgeServer.stop() does a `queue.sync` onto the bridge queue. If that queue is stuck in
+        // `writeAll` to an observer whose socket buffer is full (it spins on EAGAIN forever), the
+        // sync never returns — seen as Quit hanging with the notch frozen (sampled: main thread in
+        // applicationWillTerminate → stop() → _dispatch_sync_f_slow). Stop it off the main thread and
+        // stop waiting after a second; on quit the process exits anyway.
+        let server = bridgeServer
+        let stopped = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            server.stop()
+            stopped.signal()
+        }
+        _ = stopped.wait(timeout: .now() + 1)
         isBridgeReady = false
         hasStarted = false
     }

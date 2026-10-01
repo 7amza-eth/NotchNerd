@@ -567,7 +567,8 @@ struct ContentView: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 12))
                             .foregroundStyle(.orange)
-                            .symbolEffect(.pulse, options: .repeating)
+                            // Brief pulse on change, not `.repeating` (see AgentActiveIndicator note).
+                            .symbolEffect(.pulse, options: .repeat(2), value: agent.attentionCount)
                         Text("\(agent.attentionCount)").font(.caption).bold().foregroundStyle(.white)
                         Text(agent.attentionCount == 1 ? "needs you" : "need you")
                             .font(.caption2).foregroundStyle(.secondary)
@@ -580,7 +581,7 @@ struct ContentView: View {
                     Image(systemName: "sparkles")
                         .font(.system(size: 12))
                         .foregroundStyle(.purple)
-                        .symbolEffect(.pulse, options: .repeating)
+                        .symbolEffect(.pulse, options: .repeat(2), value: agent.workingCount)
                         .frame(
                             width: max(0, vm.effectiveClosedNotchHeight - 12),
                             height: max(0, vm.effectiveClosedNotchHeight - 12)

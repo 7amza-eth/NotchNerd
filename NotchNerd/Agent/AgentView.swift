@@ -897,7 +897,7 @@ struct AgentClosedIndicator: View {
         HStack(spacing: 0) {
             Image(systemName: "sparkles")
                 .foregroundStyle(.purple)
-                .symbolEffect(.pulse, options: .repeating)
+                .symbolEffect(.pulse, options: .repeat(2), value: count)   // see AgentActiveIndicator note
                 .frame(width: sparkleSlot, alignment: .trailing)
                 .padding(.trailing, 6)
 
@@ -933,11 +933,14 @@ struct AgentActiveIndicator: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left flank: pulsing sparkle hugging the notch — purple while working, green when idle/active.
+            // Left flank: sparkle hugging the notch — purple while working, green when idle/active.
+            // Closed-notch animations pulse briefly when the state changes instead of looping forever: an endless
+            // `.repeating` pulse forces a window-server-synchronized redraw of the notch window every frame —
+            // measured ~20% CPU and main-thread stalls that made hover-to-open miss (0.4% CPU, 8/8 opens without).
             Image(systemName: "sparkles")
                 .font(.system(size: 12))
                 .foregroundStyle(isWorking ? .purple : .green)
-                .symbolEffect(.pulse, options: .repeating, isActive: isWorking)
+                .symbolEffect(.pulse, options: .repeat(2), value: working)
                 .frame(width: side, alignment: .center)
                 .padding(.trailing, 3)
 
@@ -954,7 +957,7 @@ struct AgentActiveIndicator: View {
                 } else {
                     AnimatedStatusDot(
                         color: isWorking ? AgentStatusPalette.running : AgentStatusPalette.completed,
-                        pulsing: isWorking
+                        pulsing: false   // static: an endless pulse here redraws the notch every frame
                     )
                     if count > 1 {
                         Text("\(count)")
