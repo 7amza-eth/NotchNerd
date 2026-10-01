@@ -32,11 +32,12 @@ enum AgentNotificationSound {
         sound.play()
     }
 
-    /// Plays the user's selected sound, honoring the enabled + mute gates.
-    /// No-op unless `agentSoundEnabled && !agentSoundMuted`.
-    static func playNotification() {
+    /// Plays the sound for this kind of notice, honoring the enabled + mute gates: the "finished, your
+    /// turn" sound for completions, the "needs you" sound for approvals/questions/nudges — so you can
+    /// tell them apart without looking. No-op unless `agentSoundEnabled && !agentSoundMuted`.
+    static func playNotification(for kind: AgentNotification.Kind) {
         guard Defaults[.agentSoundEnabled], !Defaults[.agentSoundMuted] else { return }
-        let name = Defaults[.agentSoundName]
+        let name = kind == .completion ? Defaults[.agentCompletionSoundName] : Defaults[.agentSoundName]
         play(name.isEmpty ? fallbackSoundName : name)
     }
 }

@@ -371,6 +371,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        KeyboardShortcuts.onKeyDown(for: .toggleAgentTab) {
+            guard Defaults[.agentEnabled] else { return }
+            NotificationCenter.default.post(name: .agentTabToggleRequested, object: nil)
+        }
+
+        KeyboardShortcuts.onKeyDown(for: .jumpToNextWaitingAgent) {
+            guard Defaults[.agentEnabled] else { return }
+            Task { @MainActor in AgentBridgeManager.shared.jumpToNextWaiting() }
+        }
+
         KeyboardShortcuts.onKeyDown(for: .toggleNotchOpen) { [weak self] in
             Task { [weak self] in
                 guard let self = self else { return }

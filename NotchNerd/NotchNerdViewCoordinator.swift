@@ -218,7 +218,7 @@ class NotchNerdViewCoordinator: ObservableObject {
         if let current = agentNotification, current.sessionID != note.sessionID,
            AgentNotchHover.isPointerInside { return }
 
-        AgentNotificationSound.playNotification()   // self-gated on agentSoundEnabled / muted
+        AgentNotificationSound.playNotification(for: note.kind)   // self-gated on agentSoundEnabled / muted
 
         agentNotification = note
         // Do NOT switch currentView here — that would hijack an already-open notch's tab (e.g. yank
@@ -412,6 +412,8 @@ class NotchNerdViewCoordinator: ObservableObject {
 extension Notification.Name {
     static let agentNotificationOpenRequested = Notification.Name("agentNotificationOpenRequested")
     static let agentNotificationCloseRequested = Notification.Name("agentNotificationCloseRequested")
+    /// Keyboard shortcut: open the notch on the Agent tab (or close it if it's already showing).
+    static let agentTabToggleRequested = Notification.Name("agentTabToggleRequested")
 }
 
 /// Set by ContentView.handleHover so the coordinator can defer auto-collapse / preserve on hover.

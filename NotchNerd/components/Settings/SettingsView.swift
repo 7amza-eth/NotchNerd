@@ -1742,6 +1742,17 @@ struct Shortcuts: View {
             Section {
                 KeyboardShortcuts.Recorder("Toggle Notch Open:", name: .toggleNotchOpen)
             }
+            Section {
+                KeyboardShortcuts.Recorder("Show Agent tab:", name: .toggleAgentTab)
+                KeyboardShortcuts.Recorder("Jump to next waiting chat:", name: .jumpToNextWaitingAgent)
+            } header: {
+                Text("Claude Code")
+            } footer: {
+                Text("Jump cycles through chats waiting on you (blocked first, then finished) and brings each one's terminal or the Claude app forward.")
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
         }
         .accentColor(.effectiveAccent)
         .navigationTitle("Shortcuts")

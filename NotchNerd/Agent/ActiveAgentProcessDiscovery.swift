@@ -18,6 +18,10 @@ struct ActiveAgentProcessDiscovery {
         var transcriptPath: String?
         var tmuxTarget: String?
         var tmuxSocketPath: String?
+        /// From Claude Code's own `~/.claude/sessions/<pid>.json`: the chat's title (the desktop sidebar
+        /// name / `/rename`) and its `busy`/`idle` status.
+        var sessionName: String?
+        var claudeStatus: String?
 
         init(
             tool: AgentTool,
@@ -301,7 +305,9 @@ struct ActiveAgentProcessDiscovery {
         let transcriptPath = lsofOutput.flatMap {
             bestClaudeTranscriptPath(in: $0, workingDirectory: workingDirectory)
         }
-        let sessionID = transcriptPath.flatMap(firstUUID(in:))
+        let record = claudeSessionRecord(pid: process.pid)
+        let sessionID = record?.sessionID
+            ?? transcriptPath.flatMap(firstUUID(in:))
             ?? claudeSessionID(from: process.command)
 
         guard workingDirectory != nil || sessionID != nil else {
@@ -316,6 +322,8 @@ struct ActiveAgentProcessDiscovery {
             terminalApp: terminalApp(for: process, processesByPID: processesByPID),
             transcriptPath: transcriptPath
         )
+        snapshot.sessionName = record?.name
+        snapshot.claudeStatus = record?.status
 
         // If terminalApp is nil and we have a TTY, try to resolve tmux info
         if snapshot.terminalApp == nil, let agentTTY = process.terminalTTY {
@@ -337,18 +345,53 @@ struct ActiveAgentProcessDiscovery {
     /// processes can brush the 0.2s lsof timeout, and a timeout here would read as "process gone")
     /// plus a `--resume=<id>` session id when the app passes one.
     private func claudeDesktopSnapshot(for process: RunningProcess) -> ProcessSnapshot? {
-        let workingDirectory = commandRunner("/usr/sbin/lsof", ["-a", "-p", process.pid, "-d", "cwd", "-Fn"])
-            .flatMap(workingDirectory(from:))
-        let sessionID = claudeSessionID(from: process.command)
+        let record = claudeSessionRecord(pid: process.pid)
+        let workingDirectory = record?.cwd
+            ?? commandRunner("/usr/sbin/lsof", ["-a", "-p", process.pid, "-d", "cwd", "-Fn"])
+                .flatMap(workingDirectory(from:))
+        let sessionID = record?.sessionID ?? claudeSessionID(from: process.command)
         guard workingDirectory != nil || sessionID != nil else {
             return nil
         }
-        return ProcessSnapshot(
+        var snapshot = ProcessSnapshot(
             tool: .claudeCode,
             sessionID: sessionID,
             workingDirectory: workingDirectory,
             terminalTTY: nil,
             terminalApp: "Claude"
+        )
+        snapshot.sessionName = record?.name
+        snapshot.claudeStatus = record?.status
+        return snapshot
+    }
+
+    struct ClaudeSessionRecord {
+        var sessionID: String
+        var cwd: String?
+        var name: String?
+        var status: String?
+    }
+
+    /// Claude Code (≥ 2.1) keeps `~/.claude/sessions/<pid>.json` for every running process —
+    /// `{pid, sessionId, cwd, entrypoint, name, status, …}` — updated on /clear and renames. It's the
+    /// exact pid → session-id map, so no TTY/cwd guessing is needed when it's present. Files for dead
+    /// pids linger, which is harmless: we only look up pids `ps` just reported as live `claude`.
+    private func claudeSessionRecord(pid: String) -> ClaudeSessionRecord? {
+        let url = ClaudeConfigDirectory.resolved()
+            .appendingPathComponent("sessions", isDirectory: true)
+            .appendingPathComponent("\(pid).json")
+        guard let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (object["pid"] as? Int).map(String.init) == pid,
+              let sessionID = (object["sessionId"] as? String).flatMap(firstUUID(in:)) else {
+            return nil
+        }
+        let name = (object["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ClaudeSessionRecord(
+            sessionID: sessionID,
+            cwd: object["cwd"] as? String,
+            name: name?.isEmpty == false ? name : nil,
+            status: object["status"] as? String
         )
     }
 

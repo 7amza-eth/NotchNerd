@@ -212,6 +212,17 @@ extension Defaults.Keys {
     static let agentNotifyOnCompletion = Key<Bool>("agentNotifyOnCompletion", default: true)
     static let agentSuppressWhenFrontmost = Key<Bool>("agentSuppressFrontmost", default: true)
 
+    // Agent — snoozed sessions: id → the session's `updatedAt` when snoozed. A session reappears once
+    // it runs again or asks for something after that point.
+    static let agentSnoozedSessions = Key<[String: Date]>("agentSnoozedSessions", default: [:])
+    // Agent — "stuck" nudges (minutes; 0 = off): blocked on an approval/question, or running, that long.
+    static let agentNudgeBlockedMinutes = Key<Int>("agentNudgeBlockedMinutes", default: 10)
+    static let agentNudgeRunningMinutes = Key<Int>("agentNudgeRunningMinutes", default: 30)
+    // Agent — separate sound for "finished, your turn" (agentSoundName stays the "needs you" sound).
+    static let agentCompletionSoundName = Key<String>("agentCompletionSoundName", default: "Glass")
+    // Agent — unsent AskUserQuestion answers (JSON, see `QuestionDrafts`), kept across notch close/quit.
+    static let agentQuestionDrafts = Key<Data>("agentQuestionDrafts", default: Data())
+
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)
 

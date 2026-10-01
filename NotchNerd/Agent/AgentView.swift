@@ -29,6 +29,7 @@ struct AgentView: View {
                         ForEach(agent.sessions) { session in
                             AgentSessionRow(session: session)
                         }
+                        snoozedFooter
                     }
                     .padding(.bottom, 4)
                 }
@@ -51,15 +52,28 @@ struct AgentView: View {
         }
     }
 
-    /// Total / waiting on you / running.
+    /// Total / waiting on you (split: blocked on a prompt vs. your turn to reply) / running.
     private var overviewRow: some View {
         let counts = AgentSessionOverview(sessions: agent.sessions)
         return HStack(spacing: 10) {
             overviewMetric(counts.total, "total", .white.opacity(0.55))
-            if counts.waiting > 0 { overviewMetric(counts.waiting, "waiting", AgentStatusPalette.waiting) }
+            if counts.waiting > 0 {
+                overviewMetric(counts.waiting, "waiting", AgentStatusPalette.waiting)
+                    .help("Waiting on you: blocked on an approval or question, or finished and waiting for your reply")
+                Text(waitingBreakdown(counts))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
             if counts.running > 0 { overviewMetric(counts.running, "running", AgentStatusPalette.running) }
             Spacer(minLength: 0)
         }
+    }
+
+    private func waitingBreakdown(_ counts: AgentSessionOverview) -> String {
+        var parts: [String] = []
+        if counts.needsYou > 0 { parts.append("\(counts.needsYou) need\(counts.needsYou == 1 ? "s" : "") you") }
+        if counts.yourTurn > 0 { parts.append("\(counts.yourTurn) your turn") }
+        return "(" + parts.joined(separator: " · ") + ")"
     }
 
     private func overviewMetric(_ count: Int, _ label: String, _ tint: Color) -> some View {
@@ -87,11 +101,23 @@ struct AgentView: View {
         }
     }
 
+    @ViewBuilder private var snoozedFooter: some View {
+        if agent.snoozedCount > 0 {
+            Button { agent.unsnoozeAll() } label: {
+                Label("\(agent.snoozedCount) snoozed · Show all", systemImage: "moon.zzz")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Snoozed chats come back on their own when they run again or ask you something")
+        }
+    }
+
     private var emptyState: some View {
         VStack(spacing: 4) {
             Spacer(minLength: 0)
             Image(systemName: "moon.zzz").font(.title3).foregroundStyle(.secondary)
             Text("No active Claude Code sessions").font(.caption).foregroundStyle(.secondary)
+            snoozedFooter
             if !agent.isBridgeReady && !agent.lastStatusMessage.isEmpty {
                 Text(agent.lastStatusMessage).font(.caption2).foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -153,6 +179,12 @@ struct AgentSessionRow: View {
                     .buttonStyle(.plain)
                     .help(isExpanded ? "Hide subagents and tasks" : "Show subagents and tasks")
                 }
+                Button { agent.snooze(sessionID: session.id) } label: {
+                    Image(systemName: "moon.zzz")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Snooze — hide until it runs again or asks you something")
                 if agent.canJump(session) {
                     Button { agent.jump(sessionID: session.id) } label: {
                         Image(systemName: "arrow.uturn.forward.square")
@@ -180,8 +212,18 @@ struct AgentSessionRow: View {
             if let request = session.permissionRequest, session.phase == .waitingForApproval {
                 permissionCard(request)
             } else if let question = session.questionPrompt, session.phase == .waitingForAnswer {
-                QuestionCard(prompt: question) { response in
+                QuestionCard(sessionID: session.id, prompt: question) { response in
                     agent.answer(sessionID: session.id, response: response)
+                }
+            }
+            // Desktop chats get the same prompt in the Claude app too (the PermissionRequest hook races
+            // the app's own UI) — whichever is answered first wins and the other one clears.
+            if session.phase.requiresAttention, agent.isDesktopSession(session.id) {
+                HStack(spacing: 4) {
+                    Text("Also showing in the Claude app — answer in either place.")
+                        .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    Button("Open Claude") { agent.jump(sessionID: session.id) }
+                        .buttonStyle(.plain).font(.system(size: 9, weight: .semibold)).foregroundStyle(.purple)
                 }
             }
         }
@@ -243,8 +285,14 @@ struct AgentSessionRow: View {
 /// "Other" answer, then submits all answers together via a single Submit. Mirrors the engine
 /// round-trip's per-question `answers` dict + preview annotations.
 struct QuestionCard: View {
+    let sessionID: String
     let prompt: QuestionPrompt
     let onSubmit: (QuestionPromptResponse) -> Void
+
+    /// Draft key: this session + this exact set of questions (a new question set starts fresh).
+    private var draftKey: String {
+        ([sessionID, prompt.title] + prompt.questions.map(\.question)).joined(separator: "\u{1F}")
+    }
 
     @State private var selected: [Int: Set<String>] = [:]   // question index → selected option labels
     @State private var freeform: [Int: String] = [:]        // question index → typed "Other" text
@@ -295,6 +343,14 @@ struct QuestionCard: View {
             NotepadNotchFocus.allowsNotchKey = false
             SharingStateManager.shared.preventNotchClose = false
         }
+        // Keep half-finished answers when the notch closes (or NotchNerd quits) — restored on reopen.
+        .onAppear {
+            guard let draft = QuestionDrafts.load(draftKey) else { return }
+            selected = draft.selected
+            freeform = draft.freeform
+        }
+        .onChange(of: selected) { _, _ in QuestionDrafts.save(draftKey, selected: selected, freeform: freeform) }
+        .onChange(of: freeform) { _, _ in QuestionDrafts.save(draftKey, selected: selected, freeform: freeform) }
     }
 
     @ViewBuilder
@@ -419,7 +475,48 @@ struct QuestionCard: View {
                 annotations[question.question] = QuestionAnswerAnnotation(preview: preview)
             }
         }
+        QuestionDrafts.clear(draftKey)
         onSubmit(QuestionPromptResponse(answers: answers, annotations: annotations))
+    }
+}
+
+/// Unsent AskUserQuestion answers, persisted in Defaults so they survive the notch closing and app
+/// restarts. Keyed by `QuestionCard.draftKey`; capped to the most recent few.
+enum QuestionDrafts {
+    struct Draft: Codable {
+        var selected: [Int: Set<String>]
+        var freeform: [Int: String]
+        var savedAt: Date
+    }
+
+    private static let maxDrafts = 20
+
+    static func load(_ key: String) -> Draft? {
+        all()[key]
+    }
+
+    static func save(_ key: String, selected: [Int: Set<String>], freeform: [Int: String]) {
+        var drafts = all()
+        if selected.values.allSatisfy(\.isEmpty) && freeform.values.allSatisfy(\.isEmpty) {
+            drafts[key] = nil
+        } else {
+            drafts[key] = Draft(selected: selected, freeform: freeform, savedAt: .now)
+        }
+        if drafts.count > maxDrafts {
+            let keep = drafts.sorted { $0.value.savedAt > $1.value.savedAt }.prefix(maxDrafts)
+            drafts = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
+        }
+        Defaults[.agentQuestionDrafts] = (try? JSONEncoder().encode(drafts)) ?? Data()
+    }
+
+    static func clear(_ key: String) {
+        var drafts = all()
+        guard drafts.removeValue(forKey: key) != nil else { return }
+        Defaults[.agentQuestionDrafts] = (try? JSONEncoder().encode(drafts)) ?? Data()
+    }
+
+    private static func all() -> [String: Draft] {
+        (try? JSONDecoder().decode([String: Draft].self, from: Defaults[.agentQuestionDrafts])) ?? [:]
     }
 }
 
@@ -565,6 +662,8 @@ struct AgentClosedIndicator: View {
 struct AgentActiveIndicator: View {
     let working: Int
     let live: Int
+    /// Finished sessions waiting on your reply — shown as a green count on the right flank.
+    var yourTurn: Int = 0
     let notchWidth: CGFloat
     let side: CGFloat
 
@@ -583,18 +682,27 @@ struct AgentActiveIndicator: View {
 
             Rectangle().fill(.black).frame(width: notchWidth)
 
-            // Right flank: status dot (+ count when more than one session). No word label keeps it tight.
+            // Right flank: "your turn" count (green) when any chat is waiting on your reply — the left
+            // sparkle still says whether something is working. Otherwise the working/live dot + count.
             HStack(spacing: 3) {
-                AnimatedStatusDot(
-                    color: isWorking ? AgentStatusPalette.running : AgentStatusPalette.completed,
-                    pulsing: isWorking
-                )
-                if count > 1 {
-                    Text("\(count)")
+                if yourTurn > 0 {
+                    AnimatedStatusDot(color: AgentStatusPalette.completed, pulsing: false)
+                    Text("\(yourTurn)")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
+                } else {
+                    AnimatedStatusDot(
+                        color: isWorking ? AgentStatusPalette.running : AgentStatusPalette.completed,
+                        pulsing: isWorking
+                    )
+                    if count > 1 {
+                        Text("\(count)")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+            .help(yourTurn > 0 ? "\(yourTurn) waiting for your reply" : "")
             .frame(width: side, alignment: .center)
             .padding(.leading, 3)
         }
@@ -611,6 +719,9 @@ struct AgentSettings: View {
     @Default(.agentSoundName) var agentSoundName
     @Default(.agentUsageEnabled) var agentUsageEnabled
     @Default(.agentNotificationsEnabled) var agentNotificationsEnabled
+    @Default(.agentCompletionSoundName) var agentCompletionSoundName
+    @Default(.agentNudgeBlockedMinutes) var agentNudgeBlockedMinutes
+    @Default(.agentNudgeRunningMinutes) var agentNudgeRunningMinutes
 
     var body: some View {
         Form {
@@ -664,23 +775,38 @@ struct AgentSettings: View {
                 Defaults.Toggle(key: .agentAutoOpenNotch) { Text("Auto-open the notch (off = sound + indicator only)") }
                 Defaults.Toggle(key: .agentNotifyOnCompletion) { Text("Notify when a session finishes") }
                 Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal or the Claude app is already focused") }
+                Stepper(value: $agentNudgeBlockedMinutes, in: 0...120, step: 5) {
+                    Text(agentNudgeBlockedMinutes == 0
+                         ? "Nudge when blocked on you: off"
+                         : "Nudge when blocked on you for \(agentNudgeBlockedMinutes) min")
+                }
+                Stepper(value: $agentNudgeRunningMinutes, in: 0...240, step: 15) {
+                    Text(agentNudgeRunningMinutes == 0
+                         ? "Nudge when a turn runs long: off"
+                         : "Nudge when a turn runs longer than \(agentNudgeRunningMinutes) min")
+                }
             } header: {
                 Text("Notifications")
             } footer: {
-                Text("Permission and question prompts stay until you answer them; completion notices auto-dismiss after 10 seconds.")
+                Text("Permission and question prompts stay until you answer them; completion notices and nudges auto-dismiss after 10 seconds. Each nudge fires once per wait. Snoozed chats never pop.")
             }
             .disabled(!agentNotificationsEnabled)
 
             Section {
                 Defaults.Toggle(key: .agentSoundEnabled) { Text("Play a sound when a session needs you") }
                 Defaults.Toggle(key: .agentSoundMuted) { Text("Mute") }
-                Picker("Sound", selection: $agentSoundName) {
+                Picker("Needs you", selection: $agentSoundName) {
                     ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
                         Text(name).tag(name)
                     }
                 }
                 .onChange(of: agentSoundName) { _, name in AgentNotificationSound.play(name) }
-                Button("Preview") { AgentNotificationSound.play(agentSoundName) }
+                Picker("Finished (your turn)", selection: $agentCompletionSoundName) {
+                    ForEach(AgentNotificationSound.availableSounds(), id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .onChange(of: agentCompletionSoundName) { _, name in AgentNotificationSound.play(name) }
             } header: {
                 Text("Sound")
             } footer: {

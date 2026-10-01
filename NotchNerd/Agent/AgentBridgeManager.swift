@@ -38,11 +38,12 @@ enum HookInstallState: Equatable {
 /// A discrete "this session wants your attention" signal — the notification auto-pop trigger.
 /// Mirrors Open Island's `IslandSurface.notificationSurface(for:)`.
 struct AgentNotification: Equatable {
-    enum Kind { case permission, question, completion }
+    /// `nudge` = a session has been blocked on you (or running) longer than the configured threshold.
+    enum Kind { case permission, question, completion, nudge }
     let sessionID: String
     let kind: Kind
-    /// Completion notices auto-collapse; permission/question persist until resolved.
-    var autoDismisses: Bool { kind == .completion }
+    /// Completion notices and nudges auto-collapse; permission/question persist until resolved.
+    var autoDismisses: Bool { kind == .completion || kind == .nudge }
 }
 
 @MainActor
@@ -59,6 +60,10 @@ final class AgentBridgeManager: ObservableObject {
     /// PERSISTENT closed-notch indicator source (never auto-expires).
     @Published private(set) var attentionCount: Int = 0
     @Published private(set) var liveSessionCount: Int = 0
+    /// Live sessions whose turn finished and are waiting on your reply (not blocked on a prompt).
+    @Published private(set) var yourTurnCount: Int = 0
+    /// Sessions hidden by `snooze(sessionID:)` until they do something new.
+    @Published private(set) var snoozedCount: Int = 0
 
     /// Sessions actively *working right now* = mid-turn (`phase == .running`) with a live process.
     ///
@@ -114,14 +119,16 @@ final class AgentBridgeManager: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var livenessTimer: DispatchSourceTimer?
     private var persistDebounce: Task<Void, Never>?
-    /// `"<cwd>#<process count>"` keys already tried by `recoverIdleDesktopSessions`.
-    private var desktopRecoveryAttempts: Set<String> = []
+    /// Session ids (and `"<cwd>#<count>"` fallback keys) already tried by `recoverUntrackedSessions`.
+    private var recoveryAttempts: Set<String> = []
     /// Sessions currently matched to a Claude desktop app chat process (refreshed every liveness poll).
     private var desktopSessionIDs: Set<String> = []
     /// Chat titles (the Claude app sidebar name, or `/rename`) read from each session's transcript,
     /// plus the transcript mtime they were read at so unchanged files aren't re-read every poll.
     private var chatTitles: [String: String] = [:]
     private var chatTitleStamps: [String: Date] = [:]
+    /// Titles straight from live processes' `~/.claude/sessions/<pid>.json` — preferred over transcripts.
+    private var liveSessionNames: [String: String] = [:]
     /// Monotonic generation guard — defeats reconnect storms.
     private var connectionGeneration = 0
     private var reconnectDelay = AgentBridgeManager.reconnectBaseDelay
@@ -302,23 +309,124 @@ final class AgentBridgeManager: ObservableObject {
         // show only what's currently running — it drops /clear'd session-ids (superseded → force-ended
         // by the TTY match), dead processes, and the stale registry/transcript history that the engine
         // otherwise keeps in `state.sessions` forever. The closed-notch counts already use this gate.
-        let visible = state.sessions.filter(\.isVisibleInIsland)
+        let live = state.sessions.filter(\.isVisibleInIsland)
+        let visible = live.filter { !isSnoozed($0) }
+        snoozedCount = live.count - visible.count
         // Order by what's waiting on you, preserving recency within each group: blocked on an
         // approval/answer first, then finished turns awaiting your reply, then ones still running.
         let needsAttention = visible.filter { $0.phase.requiresAttention }
         let finished = visible.filter { $0.phase == .completed }
         let running = visible.filter { $0.phase == .running }
         sessions = (needsAttention + finished + running).map(presented)
-        actionableSession = state.activeActionableSession.map(presented)
-        attentionCount = state.attentionCount
-        liveSessionCount = state.liveSessionCount
+        actionableSession = needsAttention.first.map(presented)
+        attentionCount = needsAttention.count
+        yourTurnCount = finished.count
+        liveSessionCount = visible.count
+    }
+
+    // MARK: - Snooze
+
+    /// Hide a session (from the list, counts and pops) until it runs again or asks for something.
+    func snooze(sessionID: String) {
+        guard let session = state.session(id: sessionID) else { return }
+        Defaults[.agentSnoozedSessions][sessionID] = session.updatedAt
+        republish()
+        notificationDismissPublisher.send(sessionID)
+    }
+
+    func unsnoozeAll() {
+        Defaults[.agentSnoozedSessions] = [:]
+        republish()
+    }
+
+    /// Snoozed until the session does something new: a later event that has it running or blocked on
+    /// you. (A later event that leaves it idle — e.g. Claude Code's idle reminder — keeps it snoozed.)
+    private func isSnoozed(_ session: AgentSession) -> Bool {
+        guard let snoozedAt = Defaults[.agentSnoozedSessions][session.id] else { return false }
+        let didSomethingNew = session.updatedAt > snoozedAt
+            && (session.phase == .running || session.phase.requiresAttention)
+        if didSomethingNew {
+            Defaults[.agentSnoozedSessions][session.id] = nil
+            return false
+        }
+        return true
+    }
+
+    /// Drop snoozes for sessions that are gone, so the stored map doesn't grow forever.
+    private func pruneSnoozes() {
+        let snoozed = Defaults[.agentSnoozedSessions]
+        guard !snoozed.isEmpty else { return }
+        let live = Set(state.sessions.filter(\.isVisibleInIsland).map(\.id))
+        let kept = snoozed.filter { live.contains($0.key) }
+        if kept.count != snoozed.count { Defaults[.agentSnoozedSessions] = kept }
+    }
+
+    // MARK: - Stuck nudges
+
+    /// When each running session's current turn started (cleared when it stops running).
+    private var runningSince: [String: Date] = [:]
+    /// Nudges already sent, keyed by session + the episode they cover, so each fires once.
+    private var sentNudges: Set<String> = []
+
+    /// One pop when a session has been blocked on you for `agentNudgeBlockedMinutes`, or running for
+    /// `agentNudgeRunningMinutes` (0 disables either). Snoozed sessions aren't in `sessions`, so they
+    /// never nudge.
+    private func checkNudges(now: Date = .now) {
+        let blockedMinutes = Defaults[.agentNudgeBlockedMinutes]
+        let runningMinutes = Defaults[.agentNudgeRunningMinutes]
+        var stillRunning: Set<String> = []
+        for session in sessions {
+            if session.phase == .running {
+                stillRunning.insert(session.id)
+                let since = runningSince[session.id] ?? now
+                runningSince[session.id] = since
+                let key = "\(session.id)#running#\(since.timeIntervalSince1970)"
+                if runningMinutes > 0, now.timeIntervalSince(since) >= Double(runningMinutes) * 60,
+                   sentNudges.insert(key).inserted {
+                    sendNudge(for: session.id)
+                }
+            } else if session.phase.requiresAttention {
+                let key = "\(session.id)#blocked#\(session.updatedAt.timeIntervalSince1970)"
+                if blockedMinutes > 0, now.timeIntervalSince(session.updatedAt) >= Double(blockedMinutes) * 60,
+                   sentNudges.insert(key).inserted {
+                    sendNudge(for: session.id)
+                }
+            }
+        }
+        runningSince = runningSince.filter { stillRunning.contains($0.key) }
+    }
+
+    private func sendNudge(for sessionID: String) {
+        guard Defaults[.agentNotificationsEnabled] else { return }
+        notificationPublisher.send(AgentNotification(sessionID: sessionID, kind: .nudge))
+    }
+
+    // MARK: - Keyboard: jump through waiting sessions
+
+    private var lastJumpedSessionID: String?
+
+    /// Jump to the next session waiting on you (blocked first, then finished), cycling on repeat presses.
+    func jumpToNextWaiting() {
+        let waiting = sessions.filter { $0.phase != .running && canJump($0) }
+        guard !waiting.isEmpty else {
+            lastStatusMessage = "No Claude sessions are waiting on you."
+            return
+        }
+        let next: AgentSession
+        if let last = lastJumpedSessionID, let index = waiting.firstIndex(where: { $0.id == last }) {
+            next = waiting[(index + 1) % waiting.count]
+        } else {
+            next = waiting[0]
+        }
+        lastJumpedSessionID = next.id
+        jump(sessionID: next.id)
     }
 
     private func presented(_ session: AgentSession) -> AgentSession {
         var session = Self.debranded(session)
         // "App store pages localization · Zeteo-News" instead of "Claude · Zeteo-News", so several
         // chats in one repo are distinguishable.
-        if let title = chatTitles[session.id] {
+        if let title = liveSessionNames[session.id] ?? chatTitles[session.id] {
             let workspace = session.jumpTarget?.workspaceName ?? ""
             session.title = workspace.isEmpty ? title : "\(title) · \(workspace)"
         }
@@ -577,17 +685,20 @@ final class AgentBridgeManager: ObservableObject {
             let snapshots = ActiveAgentProcessDiscovery().discover()  // shells out to ps/lsof (off-actor)
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                await self.recoverIdleDesktopSessions(from: snapshots)
+                await self.recoverUntrackedSessions(from: snapshots)
+                let namesChanged = self.updateLiveSessionNames(from: snapshots)
                 let previousDesktopIDs = self.desktopSessionIDs
                 let aliveClaudeIDs = self.aliveClaudeSessionIDs(from: snapshots)
                 let changed = self.state.markProcessLiveness(aliveSessionIDs: aliveClaudeIDs)
                 let titlesChanged = await self.refreshChatTitles()
+                self.pruneSnoozes()
                 // Also refresh while a session is running so the time-based `workingCount` updates
                 // (the "Claude working" indicator turns off ~recency-window after events stop).
-                if !changed.isEmpty || titlesChanged || self.desktopSessionIDs != previousDesktopIDs
+                if !changed.isEmpty || titlesChanged || namesChanged || self.desktopSessionIDs != previousDesktopIDs
                     || self.state.sessions.contains(where: { $0.phase == .running }) {
                     self.republish()
                 }
+                self.checkNudges()
             }
         }
         timer.resume()
@@ -659,19 +770,18 @@ final class AgentBridgeManager: ObservableObject {
     /// never keep them alive — without this, every desktop chat was force-ended ~6s after each hook
     /// event (empty Agent tab, wrong waiting/total counts, notification pops onto an empty notch).
     ///
-    /// Match them by working directory instead: each live terminal-less `claude` process in a cwd
-    /// keeps one TTY-less session in that cwd alive, most-recently-updated first. Capping by process
-    /// count is what stops the old cwd-overlap problem (stale transcripts/cleared ids in the same repo
-    /// riding along): a repo with two open chats keeps exactly its two newest sessions.
+    /// Exact first: Claude Code's `~/.claude/sessions/<pid>.json` names each process's session id, so a
+    /// desktop process that has one keeps exactly that session alive. Only for processes without a
+    /// record (older Claude Code) fall back to working directory: each such process keeps one TTY-less
+    /// session in its cwd alive, newest first — the cap stops stale same-repo transcripts riding along.
     private func aliveDesktopSessionIDs(
         from claudeSnaps: [ActiveAgentProcessDiscovery.ProcessSnapshot],
         authoritativeIDs: Set<String>
     ) -> Set<String> {
-        // Processes that advertise a session id are matched exactly; only the rest are counted by cwd.
-        let trackedIDs = Set(state.sessions.map(\.id))
+        let desktopSnaps = claudeSnaps.filter { $0.terminalTTY == nil }
+        let exactIDs = Set(desktopSnaps.compactMap(\.sessionID))
         var slotsByCwd: [String: Int] = [:]
-        for snap in claudeSnaps where snap.terminalTTY == nil {
-            if let id = snap.sessionID, trackedIDs.contains(id) { continue }
+        for snap in desktopSnaps where snap.sessionID == nil {
             guard let cwd = snap.workingDirectory.map(Self.normalizedPath) else { continue }
             slotsByCwd[cwd, default: 0] += 1
         }
@@ -680,7 +790,8 @@ final class AgentBridgeManager: ObservableObject {
         var candidatesByCwd: [String: [AgentSession]] = [:]
         for session in state.sessions
         where session.tool == .claudeCode && !session.isSessionEnded && session.jumpTarget?.terminalTTY == nil {
-            if authoritativeIDs.contains(session.id) { alive.insert(session.id); continue }
+            if exactIDs.contains(session.id) { alive.insert(session.id); continue }
+            if authoritativeIDs.contains(session.id) { continue }   // a terminal process owns it
             guard let cwd = session.jumpTarget?.workingDirectory.map(Self.normalizedPath),
                   slotsByCwd[cwd] != nil else { continue }
             candidatesByCwd[cwd, default: []].append(session)
@@ -692,36 +803,67 @@ final class AgentBridgeManager: ObservableObject {
         return alive
     }
 
-    /// Desktop chats that are open but idle (e.g. waiting on your reply) fire no hooks after NotchNerd
-    /// launches, and are usually older than the 15-min startup transcript window — so they were never
-    /// tracked at all. For each cwd hosting more desktop `claude` processes than tracked sessions, load
-    /// that project's newest transcripts (`~/.claude/projects/<cwd with non-alphanumerics → "-">`).
-    /// Attempted once per cwd per process count, so this costs nothing on steady-state polls.
-    private func recoverIdleDesktopSessions(from snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]) async {
+    /// Chats that are open but idle (e.g. waiting on your reply) fire no hooks after NotchNerd launches
+    /// and are usually older than the 15-min startup transcript window, so they were never tracked.
+    /// For every live `claude` whose session id we know but aren't tracking, load that session from its
+    /// project's transcripts (`~/.claude/projects/<cwd, non-alphanumerics → "-">/`), or — if the
+    /// transcript isn't found — synthesize a minimal entry from the process's session record. Each id
+    /// is attempted once, so steady-state polls cost nothing.
+    private func recoverUntrackedSessions(from snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]) async {
+        let claudeSnaps = snapshots.filter { $0.tool == .claudeCode }
+        var wantedByCwd: [String: [ActiveAgentProcessDiscovery.ProcessSnapshot]] = [:]
+        for snap in claudeSnaps {
+            guard let id = snap.sessionID, let cwd = snap.workingDirectory,
+                  state.session(id: id) == nil, !recoveryAttempts.contains(id) else { continue }
+            recoveryAttempts.insert(id)
+            wantedByCwd[Self.normalizedPath(cwd), default: []].append(snap)
+        }
+
+        var added = false
+        for (cwd, wanted) in wantedByCwd {
+            let discovered = await Self.discoverTranscripts(inProjectAt: cwd, maxFiles: wanted.count + 8)
+            let byID = Dictionary(discovered.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for snap in wanted {
+                guard let id = snap.sessionID, state.session(id: id) == nil else { continue }
+                let recovered = byID[id]
+                var jumpTarget = recovered?.jumpTarget ?? JumpTarget(
+                    terminalApp: "Unknown",
+                    workspaceName: WorkspaceNameResolver.workspaceName(for: cwd),
+                    paneTitle: "Claude \(id.prefix(8))",
+                    workingDirectory: cwd
+                )
+                // The transcript knows nothing about the host; the live process does.
+                if let tty = snap.terminalTTY {
+                    jumpTarget.terminalTTY = tty
+                    if let app = snap.terminalApp { jumpTarget.terminalApp = app }
+                }
+                state.apply(.sessionStarted(SessionStarted(
+                    sessionID: id,
+                    title: recovered?.title ?? "Claude · \(jumpTarget.workspaceName)",
+                    tool: .claudeCode,
+                    origin: .live,
+                    initialPhase: snap.claudeStatus == "busy" ? .running : .completed,
+                    summary: recovered?.summary ?? "Open Claude session in \(jumpTarget.workspaceName).",
+                    timestamp: recovered?.updatedAt ?? .now,
+                    jumpTarget: jumpTarget,
+                    claudeMetadata: recovered?.claudeMetadata
+                )))
+                added = true
+            }
+        }
+
+        // Older Claude Code without per-pid records: per-cwd newest-transcript fallback for desktop chats.
         var slotsByCwd: [String: Int] = [:]
-        for snap in snapshots where snap.tool == .claudeCode && snap.terminalTTY == nil {
+        for snap in claudeSnaps where snap.terminalTTY == nil && snap.sessionID == nil {
             guard let cwd = snap.workingDirectory.map(Self.normalizedPath) else { continue }
             slotsByCwd[cwd, default: 0] += 1
         }
         for (cwd, slots) in slotsByCwd {
             let attemptKey = "\(cwd)#\(slots)"
-            guard !desktopRecoveryAttempts.contains(attemptKey) else { continue }
-            let tracked = state.sessions.filter {
-                $0.tool == .claudeCode && !$0.isSessionEnded && $0.jumpTarget?.terminalTTY == nil
-                    && $0.jumpTarget?.workingDirectory.map(Self.normalizedPath) == cwd
-            }.count
-            guard tracked < slots else { continue }
-            desktopRecoveryAttempts.insert(attemptKey)
-
-            let encoded = cwd.replacingOccurrences(of: "[^A-Za-z0-9]", with: "-", options: .regularExpression)
-            let discovery = ClaudeTranscriptDiscovery(
-                rootURL: ClaudeTranscriptDiscovery.defaultRootURL.appendingPathComponent(encoded, isDirectory: true),
-                maxAge: 7 * 86_400,
-                maxFiles: slots
-            )
-            let discovered = await Task.detached(priority: .utility) { discovery.discoverRecentSessions() }.value
-            var added = false
-            for session in discovered where state.session(id: session.id) == nil {
+            guard !recoveryAttempts.contains(attemptKey) else { continue }
+            recoveryAttempts.insert(attemptKey)
+            for session in await Self.discoverTranscripts(inProjectAt: cwd, maxFiles: slots)
+            where state.session(id: session.id) == nil {
                 state.apply(.sessionStarted(SessionStarted(
                     sessionID: session.id,
                     title: session.title,
@@ -735,15 +877,36 @@ final class AgentBridgeManager: ObservableObject {
                 )))
                 added = true
             }
-            if added { republish() }
         }
+        if added { republish() }
+    }
+
+    private static func discoverTranscripts(inProjectAt cwd: String, maxFiles: Int) async -> [AgentSession] {
+        let encoded = cwd.replacingOccurrences(of: "[^A-Za-z0-9]", with: "-", options: .regularExpression)
+        let discovery = ClaudeTranscriptDiscovery(
+            rootURL: ClaudeTranscriptDiscovery.defaultRootURL.appendingPathComponent(encoded, isDirectory: true),
+            maxAge: 30 * 86_400,
+            maxFiles: maxFiles
+        )
+        return await Task.detached(priority: .utility) { discovery.discoverRecentSessions() }.value
+    }
+
+    private func updateLiveSessionNames(from snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]) -> Bool {
+        var names: [String: String] = [:]
+        for snap in snapshots where snap.tool == .claudeCode {
+            if let id = snap.sessionID, let name = snap.sessionName { names[id] = name }
+        }
+        guard names != liveSessionNames else { return false }
+        liveSessionNames = names
+        return true
     }
 
     /// Re-read chat titles for listed sessions whose transcript changed since last poll.
     /// Returns whether any title changed.
     private func refreshChatTitles() async -> Bool {
         let targets = sessions.compactMap { session -> (id: String, path: String)? in
-            session.claudeMetadata?.transcriptPath.map { (session.id, $0) }
+            guard liveSessionNames[session.id] == nil else { return nil }
+            return session.claudeMetadata?.transcriptPath.map { (session.id, $0) }
         }
         guard !targets.isEmpty else { return false }
         let stamps = chatTitleStamps

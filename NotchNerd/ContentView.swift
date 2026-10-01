@@ -222,6 +222,14 @@ struct ContentView: View {
                         coordinator.currentView = .agent
                         doOpen()
                     }
+                    .onReceive(NotificationCenter.default.publisher(for: .agentTabToggleRequested)) { _ in
+                        if vm.notchState == .open && coordinator.currentView == .agent {
+                            vm.close()
+                        } else {
+                            coordinator.currentView = .agent
+                            if vm.notchState == .closed { doOpen() }
+                        }
+                    }
                     .onReceive(NotificationCenter.default.publisher(for: .agentNotificationCloseRequested)) { _ in
                         guard !isHovering, !SharingStateManager.shared.preventNotchClose else { return }
                         vm.close()
@@ -383,6 +391,7 @@ struct ContentView: View {
                           AgentActiveIndicator(
                               working: agent.workingCount,
                               live: agent.liveSessionCount,
+                              yourTurn: agent.yourTurnCount,
                               notchWidth: vm.closedNotchSize.width,
                               side: agentStatusFlankWidth
                           )

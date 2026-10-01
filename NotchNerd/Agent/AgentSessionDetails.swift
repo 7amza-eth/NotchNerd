@@ -173,11 +173,16 @@ struct AnimatedStatusDot: View {
 struct AgentSessionOverview {
     let total: Int
     let waiting: Int
+    /// Of `waiting`: blocked on an approval/question vs. finished and awaiting your reply.
+    let needsYou: Int
+    let yourTurn: Int
     let running: Int
 
     init(sessions: [AgentSession]) {
         total = sessions.count
         running = sessions.filter { $0.phase == .running }.count
-        waiting = total - running
+        needsYou = sessions.filter { $0.phase.requiresAttention }.count
+        yourTurn = sessions.filter { $0.phase == .completed }.count
+        waiting = needsYou + yourTurn
     }
 }
