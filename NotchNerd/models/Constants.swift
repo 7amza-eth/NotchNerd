@@ -222,6 +222,8 @@ extension Defaults.Keys {
     static let agentCompletionSoundName = Key<String>("agentCompletionSoundName", default: "Glass")
     // Agent — unsent AskUserQuestion answers (JSON, see `QuestionDrafts`), kept across notch close/quit.
     static let agentQuestionDrafts = Key<Data>("agentQuestionDrafts", default: Data())
+    // Agent — Grok Bot chip (its Dock badge count) in the Agent tab header.
+    static let agentGrokChipEnabled = Key<Bool>("agentGrokChipEnabled", default: true)
 
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)

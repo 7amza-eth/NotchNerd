@@ -16,6 +16,7 @@ import OpenIslandCore
 struct AgentView: View {
     @ObservedObject private var agent = AgentBridgeManager.shared
     @ObservedObject private var usage = AgentUsageManager.shared
+    @ObservedObject private var grok = GrokBotMonitor.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -44,6 +45,7 @@ struct AgentView: View {
             Image(systemName: "sparkles").foregroundStyle(.purple)
             Text("Claude Code").font(.headline)
             Spacer()
+            if grok.isRunning { grokChip }
             if Defaults[.agentUsageEnabled], let snap = usage.snapshot {
                 if let fiveHour = snap.fiveHour { UsageChip(label: "5h", window: fiveHour) }
                 if let sevenDay = snap.sevenDay { UsageChip(label: "7d", window: sevenDay) }
@@ -83,6 +85,26 @@ struct AgentView: View {
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// Grok Bot's Dock badge (chats that finished or need you); click opens Grok Bot.
+    private var grokChip: some View {
+        Button { grok.open() } label: {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(grok.badge == nil ? Color.white.opacity(0.35) : AgentStatusPalette.waiting)
+                    .frame(width: 5.5, height: 5.5)
+                Text(grok.badge.map { "Grok \($0)" } ?? "Grok")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(Color.white.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .help(grok.badge == nil
+              ? "Grok Bot — nothing waiting. Click to open."
+              : "Grok Bot — \(grok.badge!) chat(s) finished or need you. Click to open.")
     }
 
     @ViewBuilder private var statusChip: some View {
@@ -728,6 +750,7 @@ struct AgentSettings: View {
             Section {
                 Defaults.Toggle(key: .agentEnabled) { Text("Monitor Claude Code sessions") }
                 Defaults.Toggle(key: .agentPanelEnabled) { Text("Show the Agent tab in the notch") }
+                Defaults.Toggle(key: .agentGrokChipEnabled) { Text("Show a Grok Bot chip (its unread count) when Grok Bot is running") }
             } header: {
                 Text("Agent")
             } footer: {

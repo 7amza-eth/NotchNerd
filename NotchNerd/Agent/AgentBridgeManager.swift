@@ -129,6 +129,8 @@ final class AgentBridgeManager: ObservableObject {
     private var chatTitleStamps: [String: Date] = [:]
     /// Titles straight from live processes' `~/.claude/sessions/<pid>.json` — preferred over transcripts.
     private var liveSessionNames: [String: String] = [:]
+    /// Claude desktop app chat ids (`local_…`) by session id, for opening the exact chat.
+    private var desktopHostSessionIDs: [String: String] = [:]
     /// Monotonic generation guard — defeats reconnect storms.
     private var connectionGeneration = 0
     private var reconnectDelay = AgentBridgeManager.reconnectBaseDelay
@@ -152,6 +154,7 @@ final class AgentBridgeManager: ObservableObject {
         discoverTranscriptsOnce()    // startup recovery from ~/.claude/projects
         startLivenessBackstop()
         refreshHookStatus()
+        GrokBotMonitor.shared.start()
 
         if Defaults[.agentAutoInstallHooks], hookInstallState != .installed {
             installHooks()
@@ -164,6 +167,7 @@ final class AgentBridgeManager: ObservableObject {
         bridgeTask?.cancel(); bridgeTask = nil
         reconnectTask?.cancel(); reconnectTask = nil
         livenessTimer?.cancel(); livenessTimer = nil
+        GrokBotMonitor.shared.stop()
         persistDebounce?.cancel(); persistDebounce = nil
         bridgeClient.disconnect()
         bridgeServer.stop()
@@ -367,6 +371,9 @@ final class AgentBridgeManager: ObservableObject {
     private var runningSince: [String: Date] = [:]
     /// Nudges already sent, keyed by session + the episode they cover, so each fires once.
     private var sentNudges: Set<String> = []
+    /// Waits that began before NotchNerd launched aren't nudged — otherwise every relaunch would pop
+    /// (then auto-close) the notch for chats you'd already left blocked.
+    private let nudgeEpoch = Date()
 
     /// One pop when a session has been blocked on you for `agentNudgeBlockedMinutes`, or running for
     /// `agentNudgeRunningMinutes` (0 disables either). Snoozed sessions aren't in `sessions`, so they
@@ -387,7 +394,8 @@ final class AgentBridgeManager: ObservableObject {
                 }
             } else if session.phase.requiresAttention {
                 let key = "\(session.id)#blocked#\(session.updatedAt.timeIntervalSince1970)"
-                if blockedMinutes > 0, now.timeIntervalSince(session.updatedAt) >= Double(blockedMinutes) * 60,
+                if blockedMinutes > 0, session.updatedAt >= nudgeEpoch,
+                   now.timeIntervalSince(session.updatedAt) >= Double(blockedMinutes) * 60,
                    sentNudges.insert(key).inserted {
                     sendNudge(for: session.id)
                 }
@@ -494,8 +502,13 @@ final class AgentBridgeManager: ObservableObject {
     /// Ghostty uses jumpResolving (no-op if already focused, else re-resolves a stale surface id).
     func jump(sessionID: String) {
         if isDesktopSession(sessionID) {
-            // No public deep link to a specific Code-tab chat, so bring the app forward.
-            if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.claudeDesktopBundleID) {
+            // The desktop app's own deep link (also used by its Dock/tray menu) opens the exact chat;
+            // it only accepts its `local_…` chat ids. Without one, just bring the app forward.
+            if let host = desktopHostSessionIDs[sessionID],
+               host.range(of: #"^local_[A-Za-z0-9-]{1,64}$"#, options: .regularExpression) != nil,
+               let url = URL(string: "claude://code/continue?session=\(host)") {
+                NSWorkspace.shared.open(url)
+            } else if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.claudeDesktopBundleID) {
                 NSWorkspace.shared.openApplication(at: app, configuration: .init())
             }
             return
@@ -893,9 +906,12 @@ final class AgentBridgeManager: ObservableObject {
 
     private func updateLiveSessionNames(from snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]) -> Bool {
         var names: [String: String] = [:]
+        var hostIDs: [String: String] = [:]
         for snap in snapshots where snap.tool == .claudeCode {
             if let id = snap.sessionID, let name = snap.sessionName { names[id] = name }
+            if let id = snap.sessionID, let host = snap.hostSessionID { hostIDs[id] = host }
         }
+        desktopHostSessionIDs = hostIDs
         guard names != liveSessionNames else { return false }
         liveSessionNames = names
         return true

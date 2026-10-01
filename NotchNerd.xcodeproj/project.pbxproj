@@ -117,6 +117,7 @@
 		59D8C23C2E589FAA00147B33 /* VolumeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D8C23B2E589FAA00147B33 /* VolumeManager.swift */; };
 		615EC13A975ECB423A5E5329 /* AgentBridgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DBF7837B002A75F1DC3B59 /* AgentBridgeManager.swift */; };
 		643DEBDC400E040846AA790F /* GhosttyJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A1335325669BA8E6668AF6 /* GhosttyJumpService.swift */; };
+		71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */; };
 		7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */; };
 		92AFD0C0E17DB24E008AB87F /* NotepadWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */; };
 		9A0887322C7A693000C160EA /* TabButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887312C7A693000C160EA /* TabButton.swift */; };
@@ -302,6 +303,7 @@
 		601C6725C4CB1BF5E1C99B3F /* UsageChip.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UsageChip.swift; sourceTree = "<group>"; };
 		603CCB82C090912E8305411C /* AgentNotificationSound.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentNotificationSound.swift; sourceTree = "<group>"; };
 		6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TerminalAppJumpService.swift; sourceTree = "<group>"; };
+		624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GrokBotMonitor.swift; sourceTree = "<group>"; };
 		64A1335325669BA8E6668AF6 /* GhosttyJumpService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GhosttyJumpService.swift; sourceTree = "<group>"; };
 		94D0606AAEA2000BEE38757E /* AgentSessionPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentSessionPresentation.swift; sourceTree = "<group>"; };
 		9A0887312C7A693000C160EA /* TabButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabButton.swift; sourceTree = "<group>"; };
@@ -825,6 +827,7 @@
 				5A629446A5E38FC2A7B34B2F /* AgentUsageManager.swift */,
 				601C6725C4CB1BF5E1C99B3F /* UsageChip.swift */,
 				6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */,
+				624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */,
 			);
 			name = Agent;
 			path = Agent;
@@ -1143,6 +1146,7 @@
 				D5287D99FDCD8AC32A17E88D /* AgentUsageManager.swift in Sources */,
 				53CC753A8452134CF905FCBE /* UsageChip.swift in Sources */,
 				D4B34A341EAAC48470D3C113 /* TerminalAppJumpService.swift in Sources */,
+				71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

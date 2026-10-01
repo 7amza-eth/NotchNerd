@@ -22,6 +22,8 @@ struct ActiveAgentProcessDiscovery {
         /// name / `/rename`) and its `busy`/`idle` status.
         var sessionName: String?
         var claudeStatus: String?
+        /// The Claude desktop app's own id for the chat (`local_…`), for `claude://code/continue?session=`.
+        var hostSessionID: String?
 
         init(
             tool: AgentTool,
@@ -362,6 +364,7 @@ struct ActiveAgentProcessDiscovery {
         )
         snapshot.sessionName = record?.name
         snapshot.claudeStatus = record?.status
+        snapshot.hostSessionID = record?.hostSessionID
         return snapshot
     }
 
@@ -370,6 +373,7 @@ struct ActiveAgentProcessDiscovery {
         var cwd: String?
         var name: String?
         var status: String?
+        var hostSessionID: String?
     }
 
     /// Claude Code (≥ 2.1) keeps `~/.claude/sessions/<pid>.json` for every running process —
@@ -391,7 +395,8 @@ struct ActiveAgentProcessDiscovery {
             sessionID: sessionID,
             cwd: object["cwd"] as? String,
             name: name?.isEmpty == false ? name : nil,
-            status: object["status"] as? String
+            status: object["status"] as? String,
+            hostSessionID: object["hostSessionId"] as? String
         )
     }
 
