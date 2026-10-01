@@ -58,6 +58,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var viewModels: [String: NotchNerdViewModel] = [:] // UUID -> NotchNerdViewModel
     var window: NSWindow?
     let vm: NotchNerdViewModel = .init()
+    /// Keeps macOS App Nap off for the app's lifetime (see applicationDidFinishLaunching).
+    private var appNapActivity: NSObjectProtocol?
     @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
     var quickShareService = QuickShareService.shared
     var whatsNewWindow: NSWindow?
@@ -286,6 +288,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A menu-bar (accessory) app with no key window gets App Napped: macOS coalesces its timers
+        // by seconds. The notch is always on screen and must react to the pointer within ~0.3s —
+        // under App Nap the hover-open delay stretched to 2-3s, so it was usually cancelled by the
+        // time it fired and hovering "didn't always open" the notch. Still allows idle system sleep.
+        appNapActivity = ProcessInfo.processInfo.beginActivity(
+            options: .userInitiatedAllowingIdleSystemSleep,
+            reason: "The notch responds to hover and live activity in real time"
+        )
 
         NotificationCenter.default.addObserver(
             self,
