@@ -210,6 +210,8 @@ class NotchNerdViewCoordinator: ObservableObject {
 
     private func presentAgentNotification(_ note: AgentNotification) {
         guard Defaults[.agentNotificationsEnabled] else { return }
+        // Never ding/open for a session the Agent tab won't list — that pops an empty notch.
+        guard AgentBridgeManager.shared.sessions.contains(where: { $0.id == note.sessionID }) else { return }
         // Suppress if the user is already looking at the session's terminal (best-effort, cheap).
         if isSessionTerminalFrontmost(note.sessionID) { return }
         // Preserve-on-hover: don't replace a different card the pointer is currently inside.
@@ -273,6 +275,10 @@ class NotchNerdViewCoordinator: ObservableObject {
               let target = session.jumpTarget,
               let frontBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else {
             return false
+        }
+        // A Claude desktop app chat: you're already in the app, whose sidebar shows the same state.
+        if AgentBridgeManager.shared.isDesktopSession(sessionID) {
+            return frontBundle == AgentBridgeManager.claudeDesktopBundleID
         }
         let app = target.terminalApp.lowercased()
         let isGhostty = app.contains("ghostty") || app.contains("mitchellh")

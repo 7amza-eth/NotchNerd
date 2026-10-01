@@ -67,6 +67,18 @@ struct ActiveAgentProcessDiscovery {
         var claimedKeys: Set<String> = []
 
         for process in processes {
+            // The Claude desktop app (Code tab) runs one terminal-less `claude` per open chat. These
+            // have no TTY, so they're claimed per process (two chats can share a cwd) and matched to
+            // sessions by working directory in `AgentBridgeManager.aliveClaudeSessionIDs`.
+            if process.terminalTTY == nil, isClaudeDesktopProcess(command: process.command) {
+                guard let snapshot = claudeDesktopSnapshot(for: process),
+                      claimedKeys.insert("claude-desktop:\(snapshot.sessionID ?? process.pid)").inserted else {
+                    continue
+                }
+                snapshots.append(snapshot)
+                continue
+            }
+
             guard process.terminalTTY != nil else {
                 continue
             }
@@ -319,6 +331,25 @@ struct ActiveAgentProcessDiscovery {
         }
 
         return snapshot
+    }
+
+    /// Desktop-app chat process: only the cwd (a cheap `-d cwd` lsof — the full fd listing of these
+    /// processes can brush the 0.2s lsof timeout, and a timeout here would read as "process gone")
+    /// plus a `--resume=<id>` session id when the app passes one.
+    private func claudeDesktopSnapshot(for process: RunningProcess) -> ProcessSnapshot? {
+        let workingDirectory = commandRunner("/usr/sbin/lsof", ["-a", "-p", process.pid, "-d", "cwd", "-Fn"])
+            .flatMap(workingDirectory(from:))
+        let sessionID = claudeSessionID(from: process.command)
+        guard workingDirectory != nil || sessionID != nil else {
+            return nil
+        }
+        return ProcessSnapshot(
+            tool: .claudeCode,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            terminalTTY: nil,
+            terminalApp: "Claude"
+        )
     }
 
     private func bestClaudeTranscriptPath(in lsofOutput: String, workingDirectory: String?) -> String? {
@@ -690,6 +721,16 @@ struct ActiveAgentProcessDiscovery {
 
         return firstToken == "claude"
             || firstToken.hasSuffix("/claude")
+    }
+
+    /// The desktop app's bundled CLI, e.g.
+    /// `~/Library/Application Support/Claude/claude-code/<ver>/claude.app/Contents/MacOS/claude …`.
+    /// Excludes its `Helpers/disclaimer` wrapper parent, whose argv embeds the same path.
+    private func isClaudeDesktopProcess(command: String) -> Bool {
+        let lowered = command.lowercased()
+        return lowered.contains("/claude/claude-code/")
+            && lowered.contains("/contents/macos/claude")
+            && !lowered.contains("/helpers/disclaimer")
     }
 
     private static func commandOutput(executablePath: String, arguments: [String]) -> String? {

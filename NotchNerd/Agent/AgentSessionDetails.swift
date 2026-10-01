@@ -168,24 +168,16 @@ struct AnimatedStatusDot: View {
     }
 }
 
-/// Session counts for the Agent tab overview row. `done`/`idle` split is
-/// time-relative, so build it inside a `TimelineView`.
+/// Session counts for the Agent tab overview row. Every listed session is live, so anything not
+/// mid-turn is waiting on you — blocked on an approval/question, or finished and awaiting your reply.
 struct AgentSessionOverview {
     let total: Int
     let waiting: Int
     let running: Int
-    let done: Int
-    let idle: Int
 
-    init(sessions: [AgentSession], at date: Date) {
+    init(sessions: [AgentSession]) {
         total = sessions.count
-        waiting = sessions.filter { $0.phase.requiresAttention }.count
         running = sessions.filter { $0.phase == .running }.count
-        let completed = sessions.filter { $0.phase == .completed }
-        let idleCount = completed.filter {
-            $0.isStaleCompletedForIsland(at: date) || $0.islandPresence(at: date) == .inactive
-        }.count
-        idle = idleCount
-        done = completed.count - idleCount
+        waiting = total - running
     }
 }

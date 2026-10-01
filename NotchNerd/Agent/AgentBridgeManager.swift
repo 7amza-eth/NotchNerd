@@ -114,6 +114,14 @@ final class AgentBridgeManager: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var livenessTimer: DispatchSourceTimer?
     private var persistDebounce: Task<Void, Never>?
+    /// `"<cwd>#<process count>"` keys already tried by `recoverIdleDesktopSessions`.
+    private var desktopRecoveryAttempts: Set<String> = []
+    /// Sessions currently matched to a Claude desktop app chat process (refreshed every liveness poll).
+    private var desktopSessionIDs: Set<String> = []
+    /// Chat titles (the Claude app sidebar name, or `/rename`) read from each session's transcript,
+    /// plus the transcript mtime they were read at so unchanged files aren't re-read every poll.
+    private var chatTitles: [String: String] = [:]
+    private var chatTitleStamps: [String: Date] = [:]
     /// Monotonic generation guard — defeats reconnect storms.
     private var connectionGeneration = 0
     private var reconnectDelay = AgentBridgeManager.reconnectBaseDelay
@@ -295,14 +303,30 @@ final class AgentBridgeManager: ObservableObject {
         // by the TTY match), dead processes, and the stale registry/transcript history that the engine
         // otherwise keeps in `state.sessions` forever. The closed-notch counts already use this gate.
         let visible = state.sessions.filter(\.isVisibleInIsland)
-        // Pin sessions that need you (approval/answer) to the top, preserving recency order within each
-        // group, so an actionable session is never buried under newer running noise.
+        // Order by what's waiting on you, preserving recency within each group: blocked on an
+        // approval/answer first, then finished turns awaiting your reply, then ones still running.
         let needsAttention = visible.filter { $0.phase.requiresAttention }
-        let others = visible.filter { !$0.phase.requiresAttention }
-        sessions = (needsAttention + others).map(Self.debranded)
-        actionableSession = state.activeActionableSession.map(Self.debranded)
+        let finished = visible.filter { $0.phase == .completed }
+        let running = visible.filter { $0.phase == .running }
+        sessions = (needsAttention + finished + running).map(presented)
+        actionableSession = state.activeActionableSession.map(presented)
         attentionCount = state.attentionCount
         liveSessionCount = state.liveSessionCount
+    }
+
+    private func presented(_ session: AgentSession) -> AgentSession {
+        var session = Self.debranded(session)
+        // "App store pages localization · Zeteo-News" instead of "Claude · Zeteo-News", so several
+        // chats in one repo are distinguishable.
+        if let title = chatTitles[session.id] {
+            let workspace = session.jumpTarget?.workspaceName ?? ""
+            session.title = workspace.isEmpty ? title : "\(title) · \(workspace)"
+        }
+        // Desktop chats have no terminal, so the hook records terminalApp "Unknown" — name the host.
+        if desktopSessionIDs.contains(session.id), session.jumpTarget?.terminalApp == "Unknown" {
+            session.jumpTarget?.terminalApp = "Claude"
+        }
+        return session
     }
 
     /// The vendored engine emits some user-visible summaries still branded "Open Island" (e.g. the
@@ -361,6 +385,13 @@ final class AgentBridgeManager: ObservableObject {
     /// Bring the session's terminal to the foreground (Ghostty or macOS Terminal.app).
     /// Ghostty uses jumpResolving (no-op if already focused, else re-resolves a stale surface id).
     func jump(sessionID: String) {
+        if isDesktopSession(sessionID) {
+            // No public deep link to a specific Code-tab chat, so bring the app forward.
+            if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.claudeDesktopBundleID) {
+                NSWorkspace.shared.openApplication(at: app, configuration: .init())
+            }
+            return
+        }
         guard let session = state.session(id: sessionID), let target = session.jumpTarget else { return }
         let appName = AgentTerminalJump.appName(for: target)
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -374,8 +405,15 @@ final class AgentBridgeManager: ObservableObject {
     }
 
     func canJump(_ session: AgentSession) -> Bool {
-        AgentTerminalJump.canJump(to: session.jumpTarget)
+        isDesktopSession(session.id) || AgentTerminalJump.canJump(to: session.jumpTarget)
     }
+
+    /// True when the session is a Claude desktop app (Code tab) chat rather than a terminal `claude`.
+    func isDesktopSession(_ sessionID: String) -> Bool {
+        desktopSessionIDs.contains(sessionID)
+    }
+
+    static let claudeDesktopBundleID = "com.anthropic.claudefordesktop"
 
     private func send(_ command: BridgeCommand) {
         Task { [weak self] in
@@ -539,11 +577,15 @@ final class AgentBridgeManager: ObservableObject {
             let snapshots = ActiveAgentProcessDiscovery().discover()  // shells out to ps/lsof (off-actor)
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                await self.recoverIdleDesktopSessions(from: snapshots)
+                let previousDesktopIDs = self.desktopSessionIDs
                 let aliveClaudeIDs = self.aliveClaudeSessionIDs(from: snapshots)
                 let changed = self.state.markProcessLiveness(aliveSessionIDs: aliveClaudeIDs)
+                let titlesChanged = await self.refreshChatTitles()
                 // Also refresh while a session is running so the time-based `workingCount` updates
                 // (the "Claude working" indicator turns off ~recency-window after events stop).
-                if !changed.isEmpty || self.state.sessions.contains(where: { $0.phase == .running }) {
+                if !changed.isEmpty || titlesChanged || self.desktopSessionIDs != previousDesktopIDs
+                    || self.state.sessions.contains(where: { $0.phase == .running }) {
                     self.republish()
                 }
             }
@@ -572,7 +614,7 @@ final class AgentBridgeManager: ObservableObject {
         from snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]
     ) -> Set<String> {
         let claudeSnaps = snapshots.filter { $0.tool == .claudeCode }
-        guard !claudeSnaps.isEmpty else { return [] }
+        guard !claudeSnaps.isEmpty else { desktopSessionIDs = []; return [] }
 
         let aliveTTYs = Set(claudeSnaps.compactMap(\.terminalTTY))
         let aliveSessionIDs = Set(claudeSnaps.compactMap(\.sessionID))   // rarely available, but definitive
@@ -607,7 +649,147 @@ final class AgentBridgeManager: ObservableObject {
             if wins { byTerminal[key] = candidate }
         }
 
-        return Set(byTerminal.values.map(\.id))
+        var alive = Set(byTerminal.values.map(\.id))
+        desktopSessionIDs = aliveDesktopSessionIDs(from: claudeSnaps, authoritativeIDs: aliveSessionIDs)
+        alive.formUnion(desktopSessionIDs)
+        return alive
+    }
+
+    /// Claude desktop app (Code tab) chats run `claude` with no terminal, so the TTY match above can
+    /// never keep them alive — without this, every desktop chat was force-ended ~6s after each hook
+    /// event (empty Agent tab, wrong waiting/total counts, notification pops onto an empty notch).
+    ///
+    /// Match them by working directory instead: each live terminal-less `claude` process in a cwd
+    /// keeps one TTY-less session in that cwd alive, most-recently-updated first. Capping by process
+    /// count is what stops the old cwd-overlap problem (stale transcripts/cleared ids in the same repo
+    /// riding along): a repo with two open chats keeps exactly its two newest sessions.
+    private func aliveDesktopSessionIDs(
+        from claudeSnaps: [ActiveAgentProcessDiscovery.ProcessSnapshot],
+        authoritativeIDs: Set<String>
+    ) -> Set<String> {
+        // Processes that advertise a session id are matched exactly; only the rest are counted by cwd.
+        let trackedIDs = Set(state.sessions.map(\.id))
+        var slotsByCwd: [String: Int] = [:]
+        for snap in claudeSnaps where snap.terminalTTY == nil {
+            if let id = snap.sessionID, trackedIDs.contains(id) { continue }
+            guard let cwd = snap.workingDirectory.map(Self.normalizedPath) else { continue }
+            slotsByCwd[cwd, default: 0] += 1
+        }
+
+        var alive: Set<String> = []
+        var candidatesByCwd: [String: [AgentSession]] = [:]
+        for session in state.sessions
+        where session.tool == .claudeCode && !session.isSessionEnded && session.jumpTarget?.terminalTTY == nil {
+            if authoritativeIDs.contains(session.id) { alive.insert(session.id); continue }
+            guard let cwd = session.jumpTarget?.workingDirectory.map(Self.normalizedPath),
+                  slotsByCwd[cwd] != nil else { continue }
+            candidatesByCwd[cwd, default: []].append(session)
+        }
+        for (cwd, candidates) in candidatesByCwd {
+            let newest = candidates.sorted { $0.updatedAt > $1.updatedAt }.prefix(slotsByCwd[cwd] ?? 0)
+            alive.formUnion(newest.map(\.id))
+        }
+        return alive
+    }
+
+    /// Desktop chats that are open but idle (e.g. waiting on your reply) fire no hooks after NotchNerd
+    /// launches, and are usually older than the 15-min startup transcript window — so they were never
+    /// tracked at all. For each cwd hosting more desktop `claude` processes than tracked sessions, load
+    /// that project's newest transcripts (`~/.claude/projects/<cwd with non-alphanumerics → "-">`).
+    /// Attempted once per cwd per process count, so this costs nothing on steady-state polls.
+    private func recoverIdleDesktopSessions(from snapshots: [ActiveAgentProcessDiscovery.ProcessSnapshot]) async {
+        var slotsByCwd: [String: Int] = [:]
+        for snap in snapshots where snap.tool == .claudeCode && snap.terminalTTY == nil {
+            guard let cwd = snap.workingDirectory.map(Self.normalizedPath) else { continue }
+            slotsByCwd[cwd, default: 0] += 1
+        }
+        for (cwd, slots) in slotsByCwd {
+            let attemptKey = "\(cwd)#\(slots)"
+            guard !desktopRecoveryAttempts.contains(attemptKey) else { continue }
+            let tracked = state.sessions.filter {
+                $0.tool == .claudeCode && !$0.isSessionEnded && $0.jumpTarget?.terminalTTY == nil
+                    && $0.jumpTarget?.workingDirectory.map(Self.normalizedPath) == cwd
+            }.count
+            guard tracked < slots else { continue }
+            desktopRecoveryAttempts.insert(attemptKey)
+
+            let encoded = cwd.replacingOccurrences(of: "[^A-Za-z0-9]", with: "-", options: .regularExpression)
+            let discovery = ClaudeTranscriptDiscovery(
+                rootURL: ClaudeTranscriptDiscovery.defaultRootURL.appendingPathComponent(encoded, isDirectory: true),
+                maxAge: 7 * 86_400,
+                maxFiles: slots
+            )
+            let discovered = await Task.detached(priority: .utility) { discovery.discoverRecentSessions() }.value
+            var added = false
+            for session in discovered where state.session(id: session.id) == nil {
+                state.apply(.sessionStarted(SessionStarted(
+                    sessionID: session.id,
+                    title: session.title,
+                    tool: .claudeCode,
+                    origin: .live,
+                    initialPhase: .completed,
+                    summary: session.summary,
+                    timestamp: session.updatedAt,
+                    jumpTarget: session.jumpTarget,
+                    claudeMetadata: session.claudeMetadata
+                )))
+                added = true
+            }
+            if added { republish() }
+        }
+    }
+
+    /// Re-read chat titles for listed sessions whose transcript changed since last poll.
+    /// Returns whether any title changed.
+    private func refreshChatTitles() async -> Bool {
+        let targets = sessions.compactMap { session -> (id: String, path: String)? in
+            session.claudeMetadata?.transcriptPath.map { (session.id, $0) }
+        }
+        guard !targets.isEmpty else { return false }
+        let stamps = chatTitleStamps
+        let results = await Task.detached(priority: .utility) {
+            targets.compactMap { target -> (id: String, stamp: Date, title: String?)? in
+                guard let attributes = try? FileManager.default.attributesOfItem(atPath: target.path),
+                      let stamp = attributes[.modificationDate] as? Date,
+                      stamps[target.id] != stamp else { return nil }
+                return (target.id, stamp, Self.latestCustomTitle(inTranscriptAt: target.path))
+            }
+        }.value
+
+        var changed = false
+        for result in results {
+            chatTitleStamps[result.id] = result.stamp
+            if let title = result.title, chatTitles[result.id] != title {
+                chatTitles[result.id] = title
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    /// The newest `{"type":"custom-title","customTitle":…}` entry. Claude Code re-appends it every turn,
+    /// so the transcript's tail is enough — and keeps multi-hundred-MB transcripts cheap to read.
+    nonisolated private static func latestCustomTitle(inTranscriptAt path: String) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        let tailBytes: UInt64 = 512 * 1_024
+        guard let size = try? handle.seekToEnd() else { return nil }
+        try? handle.seek(toOffset: size > tailBytes ? size - tailBytes : 0)
+        guard let data = try? handle.readToEnd() else { return nil }
+
+        for line in String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline).reversed()
+        where line.contains("\"custom-title\"") {
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  object["type"] as? String == "custom-title",
+                  let title = (object["customTitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !title.isEmpty else { continue }
+            return title
+        }
+        return nil
+    }
+
+    private static func normalizedPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
     }
 
     // MARK: - Registry persistence (debounced)

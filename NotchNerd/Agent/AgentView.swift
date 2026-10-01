@@ -51,19 +51,14 @@ struct AgentView: View {
         }
     }
 
-    /// Total / waiting / running / done / idle, recomputed every 30s so the
-    /// time-relative done/idle split stays current.
+    /// Total / waiting on you / running.
     private var overviewRow: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { ctx in
-            let counts = AgentSessionOverview(sessions: agent.sessions, at: ctx.date)
-            HStack(spacing: 10) {
-                overviewMetric(counts.total, "total", .white.opacity(0.55))
-                if counts.waiting > 0 { overviewMetric(counts.waiting, "waiting", AgentStatusPalette.waiting) }
-                if counts.running > 0 { overviewMetric(counts.running, "running", AgentStatusPalette.running) }
-                if counts.done > 0 { overviewMetric(counts.done, "done", AgentStatusPalette.completed) }
-                if counts.idle > 0 { overviewMetric(counts.idle, "idle", AgentStatusPalette.idle) }
-                Spacer(minLength: 0)
-            }
+        let counts = AgentSessionOverview(sessions: agent.sessions)
+        return HStack(spacing: 10) {
+            overviewMetric(counts.total, "total", .white.opacity(0.55))
+            if counts.waiting > 0 { overviewMetric(counts.waiting, "waiting", AgentStatusPalette.waiting) }
+            if counts.running > 0 { overviewMetric(counts.running, "running", AgentStatusPalette.running) }
+            Spacer(minLength: 0)
         }
     }
 
@@ -126,6 +121,8 @@ struct AgentSessionRow: View {
                 )
                 Text(session.title.isEmpty ? "Claude Code" : session.title)
                     .font(.subheadline).lineLimit(1)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if agent.canJump(session) { agent.jump(sessionID: session.id) } }
                 Spacer(minLength: 4)
                 if let progress = session.taskProgress {
                     Label("\(progress.done)/\(progress.total)", systemImage: "checklist")
@@ -161,7 +158,7 @@ struct AgentSessionRow: View {
                         Image(systemName: "arrow.uturn.forward.square")
                     }
                     .buttonStyle(.plain)
-                    .help("Jump to the terminal")
+                    .help(agent.isDesktopSession(session.id) ? "Open the Claude app" : "Jump to the terminal")
                 }
             }
             // Identity context — branch · terminal · model · mode — so same-repo sessions are distinct.
@@ -666,7 +663,7 @@ struct AgentSettings: View {
                 Defaults.Toggle(key: .agentNotificationsEnabled) { Text("Pop the notch on agent events") }
                 Defaults.Toggle(key: .agentAutoOpenNotch) { Text("Auto-open the notch (off = sound + indicator only)") }
                 Defaults.Toggle(key: .agentNotifyOnCompletion) { Text("Notify when a session finishes") }
-                Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal is already focused") }
+                Defaults.Toggle(key: .agentSuppressWhenFrontmost) { Text("Don't pop if the session's terminal or the Claude app is already focused") }
             } header: {
                 Text("Notifications")
             } footer: {
