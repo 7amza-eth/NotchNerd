@@ -673,7 +673,10 @@ struct ContentView: View {
                 guard !Task.isCancelled else { return }
                 
                 await MainActor.run {
-                    guard self.vm.notchState == .closed,
+                    // Re-check here, not just after the sleep: a hover change can cancel this task
+                    // after it passed the check above but before this hop to the main actor ran.
+                    guard !Task.isCancelled,
+                          self.vm.notchState == .closed,
                           self.isHovering,
                           !self.coordinator.sneakPeek.show else { return }
                     
@@ -686,6 +689,10 @@ struct ContentView: View {
                 guard !Task.isCancelled else { return }
                 
                 await MainActor.run {
+                    // A quick exit→re-enter cancels this task, but if it was already queued here it
+                    // would clear `isHovering` *after* the re-enter set it — the pending hover-open
+                    // then sees "not hovering" and the notch stays shut until you leave and re-enter.
+                    guard !Task.isCancelled else { return }
                     withAnimation(animationSpring) {
                         self.isHovering = false
                     }
