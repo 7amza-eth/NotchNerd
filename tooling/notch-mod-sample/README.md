@@ -31,7 +31,7 @@ Tally has both. Its tab counts up and down; its logic shows the count in the clo
   "id": "tally",
   "name": "Tally",
   "version": "1.1.0",
-  "minAppVersion": "0.3.4",
+  "minAppVersion": "0.3.5",
   "author": "MK Builds",
   "description": "A sample notch mod.",
   "main": "main.js",
