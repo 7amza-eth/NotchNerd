@@ -39,10 +39,55 @@ struct TabSelectionView: View {
         }
         return result
     }
+    /// The header gives the tabs only the space left of the physical notch (NotchNerdHeader). Mod tabs
+    /// can push past it and slide under the notch, so pick the first layout that fits: normal spacing,
+    /// then tighter, then the built-in tabs plus one menu holding the mod tabs.
     var body: some View {
+        let all = displayedTabs
+        let builtIn = all.filter { if case .mod = $0.view { return false } else { return true } }
+        let mods = all.filter { if case .mod = $0.view { return true } else { return false } }
+        ViewThatFits(in: .horizontal) {
+            tabBar(all, padding: 15)
+            tabBar(all, padding: 10)
+            tabBar(all, padding: 6)
+            if !mods.isEmpty {
+                HStack(spacing: 2) {
+                    tabBar(builtIn, padding: 6)
+                    modMenu(mods)
+                }
+            }
+        }
+    }
+
+    /// Mod tabs folded into one button; it shows the open mod's icon while one is selected.
+    private func modMenu(_ mods: [TabModel]) -> some View {
+        let selected = mods.first { $0.view == coordinator.currentView }
+        return Menu {
+            ForEach(mods) { tab in
+                Button {
+                    withAnimation(.smooth) { coordinator.currentView = tab.view }
+                } label: {
+                    Label(tab.label, systemImage: tab.icon)
+                }
+            }
+        } label: {
+            Image(systemName: selected?.icon ?? "puzzlepiece.extension")
+                .padding(.horizontal, 6)
+                .frame(height: 26)
+                .foregroundStyle(selected != nil ? .white : .gray)
+                .background(Capsule().fill(selected != nil ? Color(nsColor: .secondarySystemFill) : .clear))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Mod tabs")
+    }
+
+    private func tabBar(_ shown: [TabModel], padding: CGFloat) -> some View {
         HStack(spacing: 0) {
-            ForEach(displayedTabs) { tab in
-                    TabButton(label: tab.label, icon: tab.icon, selected: coordinator.currentView == tab.view) {
+            ForEach(shown) { tab in
+                    TabButton(label: tab.label, icon: tab.icon, selected: coordinator.currentView == tab.view,
+                              horizontalPadding: padding) {
                         withAnimation(.smooth) {
                             coordinator.currentView = tab.view
                         }
