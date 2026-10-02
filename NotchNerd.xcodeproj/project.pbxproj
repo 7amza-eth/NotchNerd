@@ -120,12 +120,15 @@
 		5917FD112E57891600E87F1C /* MediaKeyInterceptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5917FD102E57891600E87F1C /* MediaKeyInterceptor.swift */; };
 		5955950D2E900ED800C66711 /* ApplicationRelauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */; };
 		59D8C23C2E589FAA00147B33 /* VolumeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D8C23B2E589FAA00147B33 /* VolumeManager.swift */; };
+		5DEFEB3F657EFAF2EC50BCA1 /* ModCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AFCD29F43E3EFA6629578A3 /* ModCatalog.swift */; };
 		615EC13A975ECB423A5E5329 /* AgentBridgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DBF7837B002A75F1DC3B59 /* AgentBridgeManager.swift */; };
 		643DEBDC400E040846AA790F /* GhosttyJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A1335325669BA8E6668AF6 /* GhosttyJumpService.swift */; };
 		64F2126E830969FF9EB4D366 /* WorkflowAgentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */; };
+		69BF5F91BEC383D6036AAB34 /* ClaudeCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */; };
 		71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */; };
 		7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */; };
 		92AFD0C0E17DB24E008AB87F /* NotepadWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */; };
+		960EFDD51C2E88B7320516E3 /* ModsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2888C5285E2BE249A17F7EED /* ModsSettingsView.swift */; };
 		9A0887322C7A693000C160EA /* TabButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887312C7A693000C160EA /* TabButton.swift */; };
 		9A0887352C7AFF8E00C160EA /* TabSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887342C7AFF8E00C160EA /* TabSelectionView.swift */; };
 		9A987A0D2C73CA66005CA465 /* ShelfView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A987A032C73CA66005CA465 /* ShelfView.swift */; };
@@ -302,7 +305,9 @@
 		14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Button+Bouncing.swift"; sourceTree = "<group>"; };
 		14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DataTypes+Extensions.swift"; sourceTree = "<group>"; };
 		1A6BC260493C09339D235B27 /* PlanTextLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanTextLoader.swift; sourceTree = "<group>"; };
+		2888C5285E2BE249A17F7EED /* ModsSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModsSettingsView.swift; sourceTree = "<group>"; };
 		2EBBF33B3096E613DD622035 /* NotepadView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadView.swift; sourceTree = "<group>"; };
+		3AFCD29F43E3EFA6629578A3 /* ModCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModCatalog.swift; sourceTree = "<group>"; };
 		3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadTabView.swift; sourceTree = "<group>"; };
 		430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowAgentReader.swift; sourceTree = "<group>"; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
@@ -319,6 +324,7 @@
 		7538835A1F722032A387A1CC /* AgentMonitorOnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentMonitorOnboardingView.swift; sourceTree = "<group>"; };
 		7B822991BC603F48F7F30F11 /* FeatureTourView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeatureTourView.swift; sourceTree = "<group>"; };
 		94D0606AAEA2000BEE38757E /* AgentSessionPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentSessionPresentation.swift; sourceTree = "<group>"; };
+		9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeCLI.swift; sourceTree = "<group>"; };
 		9A0887312C7A693000C160EA /* TabButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabButton.swift; sourceTree = "<group>"; };
 		9A0887342C7AFF8E00C160EA /* TabSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabSelectionView.swift; sourceTree = "<group>"; };
 		9A987A032C73CA66005CA465 /* ShelfView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfView.swift; sourceTree = "<group>"; };
@@ -657,6 +663,7 @@
 				11CC44A12CEE614100C7244B /* NotchNerdViewCoordinator.swift */,
 				C0883F44AB4FEE2309C4F61D /* Agent */,
 				C2A04E0A971E79551C2F789E /* Notepad */,
+				3CFF14CDCCEF65B1348D0CEB /* Mods */,
 			);
 			path = NotchNerd;
 			sourceTree = "<group>";
@@ -709,6 +716,17 @@
 				1153BD902D986DB300979FB0 /* PlaybackState.swift */,
 			);
 			path = models;
+			sourceTree = "<group>";
+		};
+		3CFF14CDCCEF65B1348D0CEB /* Mods */ = {
+			isa = PBXGroup;
+			children = (
+				9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */,
+				3AFCD29F43E3EFA6629578A3 /* ModCatalog.swift */,
+				2888C5285E2BE249A17F7EED /* ModsSettingsView.swift */,
+			);
+			name = Mods;
+			path = Mods;
 			sourceTree = "<group>";
 		};
 		9A0887332C7AFF7E00C160EA /* Tabs */ = {
@@ -1179,6 +1197,9 @@
 				1E7DB3D57CA1D0BE41B0E8F4 /* ClaudeTranscriptReader.swift in Sources */,
 				64F2126E830969FF9EB4D366 /* WorkflowAgentReader.swift in Sources */,
 				BF52E90305AF5F26B60F35A9 /* AgentReplyChannel.swift in Sources */,
+				69BF5F91BEC383D6036AAB34 /* ClaudeCLI.swift in Sources */,
+				5DEFEB3F657EFAF2EC50BCA1 /* ModCatalog.swift in Sources */,
+				960EFDD51C2E88B7320516E3 /* ModsSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
