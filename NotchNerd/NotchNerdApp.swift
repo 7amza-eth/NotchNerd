@@ -482,6 +482,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Restore the always-open notepad if it was visible last session.
         NotepadWindowController.shared.restoreIfNeeded()
+        // Apply notepad writes queued by other processes (the Claude Code mod).
+        NotesStore.shared.startInbox()
 
         // Replay the feature tour on demand (menu-bar "Feature Tour" + Settings "Replay feature tour").
         NotificationCenter.default.addObserver(

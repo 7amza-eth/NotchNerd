@@ -119,6 +119,7 @@ NotchNerd/                          repo root
 │  ├─ open-vibe-island/             full Open Island clone (~141 Swift files) — re-pull source
 │  └─ _hooks_research.md            Claude Code hooks brief (point-in-time, vs Claude Code v2.1.186)
 ├─ tooling/
+│  ├─ claude-code-mod/              Claude Code mod: notepad tools + /notch (writes via Notepad/inbox)
 │  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
@@ -328,6 +329,23 @@ Three surfaces over one shared `NotesStore.shared`:
 bodies excluded via CodingKeys) + `notes/<uuid>.md` (plain-text body). Debounced autosave (0.6s);
 `flush()` from `applicationWillTerminate`. Title derives from the first non-empty line; deleting
 the last note auto-creates a new one (never empty). Assumes the app is unsandboxed.
+
+**Notepad inbox (writes from other processes).** Nothing outside the app writes `notes/` or
+`index.json` (it would race the debounced autosave and be overwritten). Instead a writer drops
+`inbox/<ms>-<rand>.json` = `{ version: 1, op: "append"|"new", noteID, text, title, source }`;
+`NotesStore.startInbox()` (called from `AppDelegate` launch) applies the backlog, then watches the
+folder with a `DispatchSource` and applies each request through `updateBody`/`newNote`/`rename`
+(so it shows live and autosaves normally), then deletes the file. Appends never change the open
+note; an append whose note was deleted becomes a new note. A file that won't decode is retried for
+10s (the writer can't rename atomically), then moved to `inbox/rejected/`, never deleted.
+
+**Claude Code mod (`tooling/claude-code-mod/`).** A Claude Code plugin of function hooks (mods,
+early-access API, Claude Code ≥ 2.1.286) that gives the model `notepad_list` / `notepad_read` /
+`notepad_append` / `notepad_new` (listed as `mcp__notchnerd__*`) plus `/notch [text]`. Reads come
+straight off disk (≤0.6s stale); writes go through the inbox and wait ~1.5s for the app to delete
+the file, reporting "queued" if NotchNerd isn't running. Load it with
+`claude --plugin-dir tooling/claude-code-mod`; `claude plugin validate tooling/claude-code-mod`
+checks it. Not yet installed from Settings.
 
 ### XPC helper
 

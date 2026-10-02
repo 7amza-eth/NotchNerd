@@ -19,6 +19,12 @@
 //  timestamps. A note's title is derived from its first non-empty line unless
 //  the user has set an explicit title.
 //
+//  Other processes never write notes/ or index.json directly (they'd race the
+//  debounced autosave). They drop a request into Notepad/inbox/*.json instead
+//  (today: the NotchNerd Claude Code mod in tooling/claude-code-mod/), which
+//  the running app applies through the normal mutations and then deletes.
+//  Anything queued while the app was down is applied at the next launch.
+//
 
 import Combine
 import Foundation
@@ -92,6 +98,7 @@ final class NotesStore: ObservableObject {
         return base.appendingPathComponent("NotchNerd/Notepad", isDirectory: true)
     }
     private var notesDir: URL { rootDir.appendingPathComponent("notes", isDirectory: true) }
+    private var inboxDir: URL { rootDir.appendingPathComponent("inbox", isDirectory: true) }
     private var indexURL: URL { rootDir.appendingPathComponent("index.json") }
     private func bodyURL(for id: UUID) -> URL {
         notesDir.appendingPathComponent("\(id.uuidString).md")
@@ -212,6 +219,102 @@ final class NotesStore: ObservableObject {
         pendingSaves.removeAll()
         indexSaveWork?.cancel()
         writeIndex()
+    }
+
+    // MARK: Inbox (writes from other processes)
+
+    /// One request in Notepad/inbox/. `op` is "append" (to `noteID`) or "new".
+    private struct InboxRequest: Decodable {
+        let version: Int
+        let op: String
+        let noteID: UUID?
+        let text: String
+        let title: String?
+    }
+
+    private var inboxSource: DispatchSourceFileSystemObject?
+    private var inboxScanWork: DispatchWorkItem?
+    /// First time an unreadable request was seen. The writer can't rename into
+    /// place atomically, so a half-written file is retried briefly first.
+    private var inboxUnreadableSince: [String: Date] = [:]
+    private let inboxUnreadableGrace: TimeInterval = 10
+
+    /// Call once at launch: applies anything queued while the app was down,
+    /// then watches the inbox for new requests.
+    func startInbox() {
+        guard inboxSource == nil else { return }
+        try? fm.createDirectory(at: inboxDir, withIntermediateDirectories: true)
+        let fd = open(inboxDir.path, O_EVTONLY)
+        if fd >= 0 {
+            let source = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: fd, eventMask: .write, queue: .main)
+            source.setEventHandler { [weak self] in
+                Task { @MainActor in self?.scheduleInboxScan() }
+            }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            inboxSource = source
+        }
+        scheduleInboxScan()
+    }
+
+    private func scheduleInboxScan(after delay: TimeInterval = 0.15) {
+        inboxScanWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in self.processInbox() }
+        }
+        inboxScanWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func processInbox() {
+        guard let files = try? fm.contentsOfDirectory(at: inboxDir, includingPropertiesForKeys: nil) else { return }
+        var needsRetry = false
+        // Names start with a millisecond timestamp, so name order is arrival order.
+        for url in files.filter({ $0.pathExtension == "json" })
+            .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let name = url.lastPathComponent
+            guard let data = try? Data(contentsOf: url),
+                  let request = try? JSONDecoder().decode(InboxRequest.self, from: data),
+                  request.version == 1 else {
+                let since = inboxUnreadableSince[name] ?? Date()
+                inboxUnreadableSince[name] = since
+                if Date().timeIntervalSince(since) < inboxUnreadableGrace {
+                    needsRetry = true
+                } else {
+                    // Set it aside rather than delete someone's text.
+                    let rejected = inboxDir.appendingPathComponent("rejected", isDirectory: true)
+                    try? fm.createDirectory(at: rejected, withIntermediateDirectories: true)
+                    try? fm.moveItem(at: url, to: rejected.appendingPathComponent(name))
+                    inboxUnreadableSince[name] = nil
+                }
+                continue
+            }
+            apply(request)
+            try? fm.removeItem(at: url)
+            inboxUnreadableSince[name] = nil
+        }
+        if needsRetry { scheduleInboxScan(after: 1) }
+    }
+
+    private func apply(_ request: InboxRequest) {
+        if request.op == "append", let id = request.noteID,
+           let note = notes.first(where: { $0.id == id }) {
+            // Appends never change which note is open.
+            updateBody(Self.appending(request.text, to: note.body), for: id)
+            return
+        }
+        // "new", or an append whose note was deleted meanwhile: keep the text
+        // in a fresh note rather than drop it.
+        let note = newNote()
+        updateBody(request.text, for: note.id)
+        if let title = request.title, !title.isEmpty { rename(note.id, to: title) }
+    }
+
+    private static func appending(_ text: String, to body: String) -> String {
+        if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return text }
+        return body + (body.hasSuffix("\n") ? "" : "\n") + text
     }
 }
 

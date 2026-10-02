@@ -1,0 +1,7 @@
+{
+  "name": "notchnerd",
+  "version": "0.1.0",
+  "description": "Lets Claude read and add to the NotchNerd notch notepad, plus /notch to jot a line into it.",
+  "author": { "name": "Mohamed Ibrahim" },
+  "license": "GPL-3.0-or-later"
+}
