@@ -232,6 +232,11 @@ extension Defaults.Keys {
     // Settings → Mods lists community mods (not by MK Builds) only after opting in, like Obsidian's
     // Restricted mode: they run code as the user and are only automatically checked before listing.
     static let modsShowCommunity = Key<Bool>("modsShowCommunity", default: false)
+    // Notch mods that are turned on (ids), and developer folders loaded with "Load mod from folder…".
+    static let notchModsEnabled = Key<[String]>("notchModsEnabled", default: [])
+    static let notchModDevelopmentFolders = Key<[String]>("notchModDevelopmentFolders", default: [])
+    // The mod whose closed-notch chip shows; "" = the first enabled mod that has one.
+    static let notchModChipID = Key<String>("notchModChipID", default: "")
 
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)

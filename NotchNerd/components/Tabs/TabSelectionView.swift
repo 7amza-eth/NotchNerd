@@ -24,11 +24,19 @@ struct TabSelectionView: View {
     @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
     @Default(.agentPanelEnabled) var agentPanelEnabled
     @Default(.notepadTabEnabled) var notepadTabEnabled
+    @Default(.notchModsEnabled) var notchModsEnabled
+    @ObservedObject var notchMods = NotchModStore.shared
     @Namespace var animation
     private var displayedTabs: [TabModel] {
         var result = tabs
         if agentPanelEnabled { result.append(TabModel(label: "Agent", icon: "sparkles", view: .agent)) }
         if notepadTabEnabled { result.append(TabModel(label: "Notes", icon: "note.text", view: .notepad)) }
+        _ = notchModsEnabled   // re-render when mods are turned on or off
+        for mod in notchMods.enabledTabMods {
+            let icon = mod.manifest.surfaces.tab?.icon.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil ? $0 : nil }
+            result.append(TabModel(label: mod.manifest.surfaces.tab?.title ?? mod.manifest.name,
+                                   icon: icon ?? "puzzlepiece.extension", view: .mod(mod.id)))
+        }
         return result
     }
     var body: some View {

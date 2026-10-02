@@ -40,7 +40,7 @@ On top of that base, NotchNerd adds two new surfaces:
 | UI | SwiftUI hosted in AppKit `NSPanel`s; `MenuBarExtra` scene; SwiftUIIntrospect. |
 | Min OS | **macOS 14.0 (Sonoma)** (`MACOSX_DEPLOYMENT_TARGET = 14.0`, `platforms: [.macOS(.v14)]`). |
 | Toolchain | **Full Xcode required** (not just Command Line Tools). `xcode-select -p` → `/Applications/Xcode.app/Contents/Developer`. A run-script build phase shells out to `swift build`. |
-| Version | `MARKETING_VERSION = 0.3.4`, `CURRENT_PROJECT_VERSION = 304` — local dev-build values; the release workflow overrides both from the git tag (build = `major*10000 + minor*100 + patch`). |
+| Version | `MARKETING_VERSION = 0.3.5`, `CURRENT_PROJECT_VERSION = 305` — local dev-build values; the release workflow overrides both from the git tag (build = `major*10000 + minor*100 + patch`). |
 | License | **GNU GPL v3** (both boring.notch and Open Island are GPL v3 → merged work is GPL v3). |
 | Bundle IDs | App `eth.7amza.notchnerd`; XPC helper `eth.7amza.notchnerd.XPCHelper`. |
 
@@ -82,10 +82,19 @@ NotchNerd/                          repo root
 │  │  ├─ ActiveAgentProcessDiscovery.swift  ps/lsof/tmux liveness probe
 │  │  ├─ GhosttyJumpService.swift   osascript jump into a Ghostty pane (focus short-circuit + re-resolution)
 │  │  └─ TerminalAppJumpService.swift  Terminal.app jump + `enum AgentTerminalJump` dispatcher (canJump/jump/appName)
-│  ├─ Mods/                         Settings → Mods: the community mod directory (NEW)
+│  ├─ Mods/                         Settings → Mods: the community mod directory + notch mods (NEW)
 │  │  ├─ ClaudeCLI.swift            finds + runs the `claude` CLI from a GUI app (PATH, login-shell fallback)
 │  │  ├─ ModCatalog.swift           ModCatalogStore: reads the mkbuilds4/mods registry, installs via the CLI
-│  │  └─ ModsSettingsView.swift     the tab: official / opt-in community / removed sections, search
+│  │  ├─ ModsSettingsView.swift     the tab: official / opt-in community / removed sections, search
+│  │  ├─ NotchModManifest.swift     notch-mod.json (id, surfaces.tab, permissions, minAppVersion) + validation
+│  │  ├─ NotchModStore.swift        finds notch mods (Mods/<id>/ + developer folders), enabled ids, live reload
+│  │  ├─ NotchModWebView.swift      sandboxed WKWebView + notchmod:// scheme handler (own files, CSP)
+│  │  ├─ NotchModBridge.swift       `window.notch` API (info/close/openURL/log/storage) + per-mod storage
+│  │  ├─ NotchModTabView.swift      a mod's tab in the open notch (`NotchViews.mod(id)`)
+│  │  ├─ NotchModAPI.swift          the one dispatcher for `notch.*` (page + logic), permissions, NotchModEvents
+│  │  ├─ NotchModRuntime.swift      logic: one JavaScriptCore VM per mod on its own queue, timers, 2 s run limit
+│  │  ├─ NotchModChips.swift        closed-notch chip + notify() notices (NotchModChipCenter, NotchModClosedChip)
+│  │  └─ NotchModsSection.swift     Settings → Mods → Notch mods (toggle, permissions, errors, chip picker)
 │  ├─ Notepad/                      always-open notepad (NEW)
 │  │  ├─ NotepadWindowController.swift  floating panel singleton; CGS-space float strategy
 │  │  ├─ NotepadPanel.swift         nonactivating, canBecomeKey NSPanel
@@ -125,6 +134,7 @@ NotchNerd/                          repo root
 │  └─ _hooks_research.md            Claude Code hooks brief (point-in-time, vs Claude Code v2.1.186)
 ├─ tooling/
 │  ├─ claude-code-mod/              Claude Code mod: notepad tools + /notch + reply-from-notch loop
+│  ├─ notch-mod-sample/             "Tally": the template notch mod (tab + logic + chip) + notchnerd.d.ts types
 │  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
@@ -372,6 +382,78 @@ default OFF, like Obsidian's Restricted mode). A mod also loaded as `name@inline
 `NOTCHNERD_MODS_REGISTRY` (env; raw-URL prefix or local folder) points the app at another registry
 for testing. To test installs without touching your real Claude config, launch the Debug build with
 `open -n --env CLAUDE_CONFIG_DIR=<scratch dir> …`.
+
+**Notch mods (`NotchNerd/Mods/NotchMod*.swift`; template `tooling/notch-mod-sample/`).** Mods that
+change NotchNerd itself, on Obsidian's model: an author ships `notch-mod.json` + web files (HTML, JS,
+CSS) as GitHub release assets, listed in the same `mkbuilds4/mods` registry, run sandboxed with
+declared permissions. *Built (step 1):* the **tab surface**. `NotchViews.mod(id)` adds the tab to
+`TabSelectionView` (icon = SF Symbol, falls back to `puzzlepiece.extension`) and `ContentView`;
+`openSize(for:)` uses the manifest height clamped to 120–320 (fits `windowSize`). The page runs in a
+WKWebView that exists **only while the tab is on screen** (SwiftUI tears it down when the notch closes;
+measured: the WebContent + Networking processes exit, ~33 MB while open). Sandbox:
+`notchmod://<id>/…` served by `NotchModSchemeHandler` from the mod's folder only (`..`/symlink escapes
+→ 404), with a CSP header the mod can't loosen: own files, no inline `<script>` (inline styles ok),
+`connect-src`/`img-src` only the `network:<host>` permissions, no frames/forms/objects;
+non-persistent data store; navigations never leave the mod (clicked http(s) links open in the browser).
+`window.notch` (frozen, injected at document start; `NotchModBridge`, a `WKScriptMessageHandlerWithReply`
+that only answers the mod's own main frame): `info`, `close`, `openURL` (http/s), `log` (os_log
+category `mod.<id>`), `storage.get/set/remove/keys` → `ModData/<id>/data.json` (1 MB cap; kept apart
+from the code so reinstall/edit keeps it). `"keyboard": true` reuses the Notes-tab focus pattern
+(`NotepadNotchFocus.allowsNotchKey` + `preventNotchClose`; swipe-up still closes). Mods load from
+`Application Support/NotchNerd/Mods/<id>/` (where installs will land) and from developer folders
+(Settings → Mods → "Load mod from folder…", `Defaults[.notchModDevelopmentFolders]`), which win on id
+clashes, skip the `minAppVersion` check, are Web-Inspector-inspectable, and **live-reload**: a 1 s
+mtime check runs only while that dev mod's tab is on screen. Enabled ids: `Defaults[.notchModsEnabled]`.
+Verified in the real app with a sandbox probe mod (14/14: bridge present + frozen, storage round trip,
+inline script blocked, undeclared host blocked even with `no-cors`, declared host allowed, other mod's
+scheme/`file:`/path escape blocked, unknown bridge method rejected, live reload).
+
+*Built (step 2): logic runtime, closed chip, notify, read APIs* (decided: split runtime). A manifest's
+`"main"` runs in **JavaScriptCore** while the mod is on (`NotchModRuntimeManager`, started from
+`AppDelegate`, follows `notchModsEnabled` + store reloads): one `JSVirtualMachine` per mod on its own
+serial queue (never the main thread), no web process. The prelude installs `notch`, `setTimeout`/
+`setInterval` (DispatchSourceTimers; intervals ≥1 s, ≤100 timers), `console`, then deletes the native
+bridge from the global scope. Calls go `JSON` → main actor → `NotchModAPI.call` → resolve/reject back on
+the queue. **Runaway guard:** `JSContextGroupSetExecutionTimeLimit` (exported by JavaScriptCore but not
+in the public headers, so `dlsym`'d; WebKit uses it) ends any single run past 2 s and the engine stops
+itself (cancels timers, reports "Stopped…" in Settings, stays stopped until its files change or it's
+toggled); a main-thread watchdog (busy >5 s) is the fallback if the symbol is ever missing. **One API,
+two surfaces:** `NotchModAPI` serves the page bridge and the runtime alike (shared `clientCore` JS),
+checks permissions per call, and keeps one `NotchModStorage` per mod (page and logic share it; changes
+fire a `storage` event). `close`/`openURL` are page-only (need a person looking). **Events**
+(`NotchModEvents`): `notch.on(event)` subscribes; a source (Combine on `MusicManager` track fields,
+`CalendarManager.$events`, `AgentBridgeManager.objectWillChange`, `NotesStore.$notes`) is watched only
+while someone's subscribed, sends the current state immediately, then ≤1/s, always ending on the latest.
+`agent.read` exposes counts + session id/title/tool/phase/updated only (no summaries, prompts, paths);
+`notes.write` goes through `NotesStore` directly (we're in-app) and never changes the open note.
+**Closed chip** (`NotchModChipCenter`; needs `"surfaces": { "closed": { "maxWidth" } }`): declarative
+`{ icon (SF Symbol), text ≤24, tint (named or #hex) }`, drawn natively by `NotchModClosedChip` with the
+`AgentClosedIndicator` layout (icon wing left, text wing right, notch shifted). `ContentView.modChipShowing`
+gates it for `NotchLayout()`, `computedChinWidth` **and** `closedNotchHOffset`: below needs-you /
+battery / inline HUD / music / Claude **working**, above Claude **active** (you nearly always have live
+sessions; below "active" it would never show) and the face. One at a time: Settings picker
+(`Defaults[.notchModChipID]`), else first enabled mod with one. **`notify`** (needs `"notify"`) = a 2–8 s
+notice chip that also shows over Claude "working"; ≤1 per mod per 10 s (returns false when skipped).
+Settings lists each mod's permissions in plain words and its last error (uncaught exceptions,
+`notch.log.error`). Developer folders now live-reload tab **and** logic: a 1 s mtime check while any
+enabled dev mod exists. Tally (the sample) shows the split: tab counts, logic mirrors the count as a chip.
+Verified in the real app with probe mods: 20/20 runtime checks (notch frozen, native hidden, no fetch,
+storage + storage event, timeout fires, interval clamped to ~1 s, agent event arrives immediately without
+summaries, media/calendar/notes getters, notes.write denied without permission, close/openURL denied in
+logic, bad icon rejected, chip set, notify shown then rate-limited); a `for(;;){}` mod was stopped
+(app CPU 1.5% after, not 100%) and Settings showed "Stopped…"; uncaught errors appear in Settings.
+
+*Next steps:*
+3. **Distribution.** Registry entries gain `"kind": "claude" | "notch" | "both"`; `build.yml` also
+   writes `notch-mods.json` with each release asset's URL + **sha256** (the app refuses mismatches).
+   Install dialog lists permissions (re-approve on permission growth); `versions.json` maps mod version
+   → `minAppVersion` like Obsidian's; community notch mods behind the same opt-in; a mod in
+   `community-mods-removed.json` is **disabled automatically**. Granted permissions recorded per mod.
+4. **Claude ⇄ notch bundles.** `bus` permission: `Mods/<id>/bus/{inbox,outbox}` (the Notepad-inbox
+   pattern) between a notch mod and its Claude Code half (`claudeMod` in the manifest); one card
+   installs both. First target: prayer-times' timetable tab + "Asr 4:18" chip.
+No native code, shell commands or file access outside the mod's folder, ever (xbar-style script
+mods were considered and dropped: they'd bypass every permission).
 
 **Reply from the notch (`AgentReplyChannel`, Settings → Agent → "Reply to sessions from the notch",
 `Defaults[.agentReplyEnabled]`, default OFF).** Hooks can't inject a prompt; the mod can

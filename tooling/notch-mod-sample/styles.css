@@ -1,0 +1,52 @@
+/* NotchNerd already sets a transparent background, white text and the system font. */
+
+body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 6px 12px 8px;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+
+output {
+  min-width: 3ch;
+  text-align: center;
+  font-size: 56px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+button:hover { background: rgba(255, 255, 255, 0.18); }
+button:active { background: rgba(255, 255, 255, 0.26); }
+
+#up, #down {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+#reset { padding: 3px 10px; font-size: 11px; }
