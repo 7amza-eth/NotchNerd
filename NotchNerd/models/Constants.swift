@@ -224,6 +224,9 @@ extension Defaults.Keys {
     static let agentQuestionDrafts = Key<Data>("agentQuestionDrafts", default: Data())
     // Agent — Grok Bot chip (its Dock badge count) in the Agent tab header.
     static let agentGrokChipEnabled = Key<Bool>("agentGrokChipEnabled", default: true)
+    // Agent — reply to a session from the notch (needs the Claude Code mod; see AgentReplyChannel).
+    // Off by default: with it on, NotchNerd can start turns, not only observe them.
+    static let agentReplyEnabled = Key<Bool>("agentReplyEnabled", default: false)
 
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)

@@ -76,6 +76,7 @@ NotchNerd/                          repo root
 │  │  ├─ ClaudeTranscriptReader.swift  off-main transcript parse → timeline/files/turns/tokens/ctx/plan
 │  │  ├─ PlanTextLoader.swift       tail-read ExitPlanMode plan markdown for the plan-review card
 │  │  ├─ AgentNotificationSound.swift  NSSound system-sound alerts (Defaults-bound)
+│  │  ├─ AgentReplyChannel.swift    reply from the notch: mod presence + outbox (needs the Claude Code mod)
 │  │  ├─ AgentUsageManager.swift    statusline-wrapper install + ClaudeUsageLoader polling (5h/7d)
 │  │  ├─ UsageChip.swift            usage chip view for the Agent tab header
 │  │  ├─ ActiveAgentProcessDiscovery.swift  ps/lsof/tmux liveness probe
@@ -119,7 +120,7 @@ NotchNerd/                          repo root
 │  ├─ open-vibe-island/             full Open Island clone (~141 Swift files) — re-pull source
 │  └─ _hooks_research.md            Claude Code hooks brief (point-in-time, vs Claude Code v2.1.186)
 ├─ tooling/
-│  ├─ claude-code-mod/              Claude Code mod: notepad tools + /notch (writes via Notepad/inbox)
+│  ├─ claude-code-mod/              Claude Code mod: notepad tools + /notch + reply-from-notch loop
 │  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
@@ -346,6 +347,22 @@ straight off disk (≤0.6s stale); writes go through the inbox and wait ~1.5s fo
 the file, reporting "queued" if NotchNerd isn't running. Load it with
 `claude --plugin-dir tooling/claude-code-mod`; `claude plugin validate tooling/claude-code-mod`
 checks it. Not yet installed from Settings.
+
+**Reply from the notch (`AgentReplyChannel`, Settings → Agent → "Reply to sessions from the notch",
+`Defaults[.agentReplyEnabled]`, default OFF).** Hooks can't inject a prompt; the mod can
+(`$.prompt.submit({ text, asUser: true })`, queued until the session is idle). They meet under
+`~/Library/Application Support/NotchNerd/Agent/`: the mod rewrites `mod-sessions/<sessionId>.json`
+(`{ sessionId, cwd, surface, updatedAt, ended? }`) every 20s and marks it `ended` on `session.end` /
+after a `/clear` (new id, no `session.start`); the app treats one modified <60s ago and not ended as
+"listening" and only then shows **Reply / Continue** (finished session) or **Follow up** (running)
+in `AgentSessionRow` — never over a pending approval/question. Sending writes
+`outbox/<sessionId>/<ms>-<rand>.tmp` → atomic rename to `.json`; the mod polls its own folder every
+1s, `rm`s each reply *before* submitting (no double-send on reload) and does not await the submit
+(it resolves only when the turn starts, which would stall the heartbeat). The app shows
+Sending… → Sent / "Waiting for Claude Code to pick it up". Presence polling runs only while the
+Agent tab is on screen; replies stranded >1 day are pruned once per launch. The composer reuses the
+QuestionCard key-focus dance (`NotchFreeformKeyMaker` + `allowsNotchKey` + `preventNotchClose`,
+Esc cancels). Session ids are validated (`^[A-Za-z0-9][A-Za-z0-9._-]*$`) on both sides.
 
 ### XPC helper
 

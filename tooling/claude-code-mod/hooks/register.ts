@@ -1,7 +1,7 @@
-// NotchNerd notepad bridge for Claude Code.
+// NotchNerd bridge for Claude Code.
 //
-// Gives the model four tools over the always-open notch notepad and adds
-// `/notch [text]`. Reads go straight to NotchNerd's on-disk store; writes are
+// Notepad: gives the model four tools over the always-open notch notepad and
+// adds `/notch [text]`. Reads go straight to NotchNerd's on-disk store; writes are
 // dropped into its inbox folder as small JSON requests, which the running app
 // applies through NotesStore (so they never race its debounced autosave and
 // show up live in the notch). If NotchNerd is not running, the request waits
@@ -11,6 +11,16 @@
 //     index.json        ordered note metadata + selectedID
 //     notes/<UUID>.md   one body per note
 //     inbox/*.json      { version, op: "append" | "new", noteID, text, title, source }
+//
+// Reply from the notch: NotchNerd (Settings → Agent → Reply from the notch)
+// writes what you type in the notch for a session to its outbox; this mod polls
+// its own session's folder, removes each reply and submits it as your prompt
+// (queued until the session is idle). A presence file tells NotchNerd which
+// sessions have a mod listening, so it only offers Reply where it will arrive.
+//
+//   ~/Library/Application Support/NotchNerd/Agent/
+//     mod-sessions/<sessionId>.json       { sessionId, cwd, surface, updatedAt, ended? }
+//     outbox/<sessionId>/<ms>-<rand>.json { version: 1, text }
 
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -143,6 +153,99 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
+// Reply polling. Each tick is three host calls (id, clock, list), so a
+// second keeps a reply snappy without real cost; presence is refreshed far
+// less often and NotchNerd treats one older than a minute as gone.
+const REPLY_POLL_MS = 1_000
+const PRESENCE_EVERY_MS = 20_000
+
+type Presence = {
+  sessionId: string
+  cwd: string
+  surface: string | null
+  updatedAt: number
+  ended?: true
+}
+
+async function agentRoot($: EngineInterface): Promise<string | undefined> {
+  const home = await $.env.get('HOME')
+  return home ? `${home}/Library/Application Support/NotchNerd/Agent` : undefined
+}
+
+// Claude Code session ids are UUIDs; refuse anything that could leave the folder.
+const isSafeID = (id: string) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)
+
+async function writePresence($: EngineInterface, root: string, presence: Presence): Promise<void> {
+  if (!isSafeID(presence.sessionId)) return
+  await $.fs.write(`${root}/mod-sessions/${presence.sessionId}.json`, JSON.stringify(presence))
+}
+
+// Starts the reply loop for this session: lives until the module reloads or
+// the process exits. Never throws; a failed tick is retried on the next.
+function startReplyLoop($: EngineInterface, cwd: string, surface: string | null): void {
+  let isBusy = false
+  let presenceID: string | undefined
+  let presenceAt = 0
+
+  const tick = async () => {
+    if (isBusy) return
+    isBusy = true
+    try {
+      const root = await agentRoot($)
+      if (!root) return
+      const id = await $.session.id()
+      if (!isSafeID(id)) return
+      const now = await $.clock.now()
+      if (id !== presenceID || now - presenceAt >= PRESENCE_EVERY_MS) {
+        // A /clear goes on under a new id without a session.start: retire the old one.
+        if (presenceID && presenceID !== id) {
+          await writePresence($, root, { sessionId: presenceID, cwd, surface, updatedAt: now, ended: true })
+        }
+        await writePresence($, root, { sessionId: id, cwd, surface, updatedAt: now })
+        presenceID = id
+        presenceAt = now
+      }
+
+      const dir = `${root}/outbox/${id}`
+      const entries = await $.fs.list(dir).catch(() => [])
+      const replies = entries
+        .filter(entry => entry.kind === 'file' && entry.name.endsWith('.json'))
+        .map(entry => entry.name)
+        .sort()
+      for (const name of replies) {
+        const path = `${dir}/${name}`
+        const raw = await $.fs.read(path).catch(() => undefined)
+        // Take it off the queue before submitting, so a reload mid-way can't send it twice.
+        const removed = await $.process.run(['/bin/rm', '-f', path]).catch(() => undefined)
+        if (removed?.exitCode !== 0) continue
+        let text = ''
+        try {
+          const reply = JSON.parse(raw ?? '') as { text?: unknown }
+          text = typeof reply.text === 'string' ? reply.text.trim() : ''
+        } catch {
+          $.ui.toast('NotchNerd: skipped a reply it could not read.')
+        }
+        if (text === '') continue
+        // Resolves only once the turn starts, so it is not awaited: a long turn
+        // must not stall the presence refresh above.
+        void $.prompt.submit({ text, asUser: true }).then(
+          result => {
+            if (result.drop !== undefined) $.ui.toast(`NotchNerd reply not sent: ${result.drop}`)
+          },
+          () => $.ui.toast('NotchNerd reply could not be submitted.'),
+        )
+      }
+    } catch {
+      // Host call failed (file system busy, session ending): next tick retries.
+    } finally {
+      isBusy = false
+    }
+  }
+
+  $.clock.every(REPLY_POLL_MS, () => void tick())
+  void tick()
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.tool.register({
@@ -205,6 +308,21 @@ export const register: Register = on => {
       argumentHint: '[text]',
       immediate: true,
     })
+    startReplyLoop($, e.cwd, e.surface)
+    return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    const root = await agentRoot($)
+    if (root) {
+      await writePresence($, root, {
+        sessionId: e.sessionId,
+        cwd: await $.session.cwd(),
+        surface: null,
+        updatedAt: await $.clock.now(),
+        ended: true,
+      }).catch(() => undefined)
+    }
     return next(e)
   })
 

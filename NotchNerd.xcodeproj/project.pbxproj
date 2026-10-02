@@ -122,8 +122,8 @@
 		59D8C23C2E589FAA00147B33 /* VolumeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D8C23B2E589FAA00147B33 /* VolumeManager.swift */; };
 		615EC13A975ECB423A5E5329 /* AgentBridgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DBF7837B002A75F1DC3B59 /* AgentBridgeManager.swift */; };
 		643DEBDC400E040846AA790F /* GhosttyJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A1335325669BA8E6668AF6 /* GhosttyJumpService.swift */; };
-		71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */; };
 		64F2126E830969FF9EB4D366 /* WorkflowAgentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */; };
+		71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */; };
 		7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */; };
 		92AFD0C0E17DB24E008AB87F /* NotepadWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */; };
 		9A0887322C7A693000C160EA /* TabButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887312C7A693000C160EA /* TabButton.swift */; };
@@ -160,6 +160,7 @@
 		B1F0A0022E60000100000001 /* BrightnessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0A0012E60000100000001 /* BrightnessManager.swift */; };
 		B1F747F92EC7E94000F841DB /* LottieView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F747F82EC7E94000F841DB /* LottieView.swift */; };
 		B1FEB4992C7686630066EBBC /* PanGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1FEB4982C7686630066EBBC /* PanGesture.swift */; };
+		BF52E90305AF5F26B60F35A9 /* AgentReplyChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56645EAC0345B21ADE649072 /* AgentReplyChannel.swift */; };
 		D4B34A341EAAC48470D3C113 /* TerminalAppJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */; };
 		D5287D99FDCD8AC32A17E88D /* AgentUsageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A629446A5E38FC2A7B34B2F /* AgentUsageManager.swift */; };
 		D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */; };
@@ -305,6 +306,7 @@
 		3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadTabView.swift; sourceTree = "<group>"; };
 		430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowAgentReader.swift; sourceTree = "<group>"; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
+		56645EAC0345B21ADE649072 /* AgentReplyChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentReplyChannel.swift; sourceTree = "<group>"; };
 		5917FD102E57891600E87F1C /* MediaKeyInterceptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaKeyInterceptor.swift; sourceTree = "<group>"; };
 		5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationRelauncher.swift; sourceTree = "<group>"; };
 		59D8C23B2E589FAA00147B33 /* VolumeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeManager.swift; sourceTree = "<group>"; };
@@ -849,6 +851,7 @@
 				BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */,
 				C498DDEF5564D00E8400B9F1 /* ClaudeTranscriptReader.swift */,
 				430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */,
+				56645EAC0345B21ADE649072 /* AgentReplyChannel.swift */,
 			);
 			name = Agent;
 			path = Agent;
@@ -1175,6 +1178,7 @@
 				D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */,
 				1E7DB3D57CA1D0BE41B0E8F4 /* ClaudeTranscriptReader.swift in Sources */,
 				64F2126E830969FF9EB4D366 /* WorkflowAgentReader.swift in Sources */,
+				BF52E90305AF5F26B60F35A9 /* AgentReplyChannel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

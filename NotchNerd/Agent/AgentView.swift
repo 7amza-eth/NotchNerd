@@ -17,6 +17,7 @@ struct AgentView: View {
     @ObservedObject private var agent = AgentBridgeManager.shared
     @ObservedObject private var usage = AgentUsageManager.shared
     @ObservedObject private var grok = GrokBotMonitor.shared
+    @Default(.agentReplyEnabled) private var replyEnabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -38,6 +39,16 @@ struct AgentView: View {
         }
         .padding(.horizontal, 6)
         .foregroundStyle(.white)
+        // Which sessions can take a reply — polled only while this tab is on screen.
+        .task(id: replyEnabled) {
+            let replies = AgentReplyChannel.shared
+            replies.refresh()
+            guard replyEnabled else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                replies.refresh()
+            }
+        }
     }
 
     private var header: some View {
@@ -153,6 +164,8 @@ struct AgentView: View {
 struct AgentSessionRow: View {
     let session: AgentSession
     @ObservedObject private var agent = AgentBridgeManager.shared
+    @ObservedObject private var replies = AgentReplyChannel.shared
+    @Default(.agentReplyEnabled) private var replyEnabled
 
     /// Manager-owned so expansion survives row-view teardown (notch reopen / tab switch).
     private var isExpanded: Bool { agent.expandedSessionIDs.contains(session.id) }
@@ -280,6 +293,11 @@ struct AgentSessionRow: View {
                 QuestionCard(sessionID: session.id, prompt: question) { response in
                     agent.answer(sessionID: session.id, response: response)
                 }
+            }
+            // Reply from the notch — only where the Claude Code mod is listening, and never over a
+            // pending approval/question (those have their own cards).
+            if replyEnabled, !session.phase.requiresAttention, replies.isConnected(session.id) {
+                ReplyComposer(session: session)
             }
             // Desktop chats get the same prompt in the Claude app too (the PermissionRequest hook races
             // the app's own UI) — whichever is answered first wins and the other one clears.
@@ -759,6 +777,111 @@ enum QuestionDrafts {
     }
 }
 
+/// Reply from the notch: sends text into the session as the user's next prompt through the Claude Code
+/// mod (AgentReplyChannel). On a finished session it starts the next turn; on a running one it is
+/// queued until that turn ends. "Continue" is the one-tap reply.
+struct ReplyComposer: View {
+    let session: AgentSession
+    @ObservedObject private var replies = AgentReplyChannel.shared
+    @State private var isComposing = false
+    @State private var draft = ""
+    @FocusState private var isFocused: Bool
+
+    private var isRunning: Bool { session.phase == .running }
+    private var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if isComposing {
+                TextField(isRunning ? "Queue a follow-up for when Claude finishes" : "Reply to Claude",
+                          text: $draft)
+                    .textFieldStyle(.roundedBorder).controlSize(.small)
+                    .focused($isFocused)
+                    .onSubmit(send)
+                    .onExitCommand(perform: cancel)
+                HStack(spacing: 8) {
+                    Button(isRunning ? "Queue" : "Send", action: send)
+                        .buttonStyle(.borderedProminent).tint(.purple).controlSize(.small)
+                        .disabled(!canSend)
+                    Button("Cancel", action: cancel)
+                        .buttonStyle(.borderless).controlSize(.small)
+                    Spacer(minLength: 0)
+                    deliveryLabel
+                }
+            } else {
+                HStack(spacing: 6) {
+                    Button {
+                        draft = replies.drafts[session.id] ?? ""
+                        isComposing = true
+                    } label: {
+                        Label(isRunning ? "Follow up" : "Reply", systemImage: "arrowshape.turn.up.left")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .help(isRunning
+                          ? "Queue a message for when this turn ends"
+                          : "Send Claude your next message from the notch")
+                    if !isRunning {
+                        Button {
+                            replies.send("continue", to: session.id)
+                        } label: {
+                            Text("Continue").font(.caption2)
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .help("Reply \"continue\"")
+                    }
+                    Spacer(minLength: 0)
+                    deliveryLabel
+                }
+            }
+        }
+        // Same non-key-panel dance as QuestionCard: the field needs the notch to be key, and the
+        // notch must not close under the user while they type.
+        .background { if isComposing { NotchFreeformKeyMaker() } }
+        .onChange(of: isComposing) { _, active in
+            NotepadNotchFocus.allowsNotchKey = active
+            SharingStateManager.shared.preventNotchClose = active
+            if active { isFocused = true }
+        }
+        .onChange(of: draft) { _, text in replies.drafts[session.id] = text }
+        .onDisappear {
+            if isComposing {
+                NotepadNotchFocus.allowsNotchKey = false
+                SharingStateManager.shared.preventNotchClose = false
+            }
+        }
+    }
+
+    @ViewBuilder private var deliveryLabel: some View {
+        switch replies.delivery[session.id] {
+        case .sending:
+            Text("Sending…").font(.system(size: 9)).foregroundStyle(.secondary)
+        case .delivered:
+            Label("Sent", systemImage: "checkmark").font(.system(size: 9)).foregroundStyle(.green)
+        case .waiting:
+            Text("Waiting for Claude Code to pick it up")
+                .font(.system(size: 9)).foregroundStyle(.orange)
+                .help("The reply stays queued and is sent when this session's NotchNerd mod next checks in")
+        case let .failed(message):
+            Text("Couldn't send").font(.system(size: 9)).foregroundStyle(.red).help(message)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func send() {
+        guard canSend else { return }
+        replies.send(draft, to: session.id)
+        draft = ""
+        isComposing = false
+    }
+
+    private func cancel() {
+        replies.drafts[session.id] = draft
+        isComposing = false
+    }
+}
+
 /// Makes the hosting notch window key while a freeform answer field is shown, so it can take keyboard
 /// input (the notch panel is otherwise non-key / click-through). Mirrors the Notes tab's NotchKeyMaker.
 private struct NotchFreeformKeyMaker: NSViewRepresentable {
@@ -986,6 +1109,8 @@ struct AgentSettings: View {
     @Default(.agentCompletionSoundName) var agentCompletionSoundName
     @Default(.agentNudgeBlockedMinutes) var agentNudgeBlockedMinutes
     @Default(.agentNudgeRunningMinutes) var agentNudgeRunningMinutes
+    @Default(.agentReplyEnabled) var agentReplyEnabled
+    @ObservedObject private var replies = AgentReplyChannel.shared
 
     var body: some View {
         Form {
@@ -1033,6 +1158,23 @@ struct AgentSettings: View {
                 Text("Claude Code hooks")
             } footer: {
                 Text("Adds managed entries to ~/.claude/settings.json so NotchNerd can show live session status and let you approve/deny permission prompts from the notch. Your settings are backed up first; fully reversible.")
+            }
+
+            Section {
+                Defaults.Toggle(key: .agentReplyEnabled) { Text("Reply to sessions from the notch") }
+                if agentReplyEnabled {
+                    HStack {
+                        Text("Sessions listening")
+                        Spacer()
+                        Text("\(replies.connectedSessionIDs.count)").foregroundStyle(.secondary)
+                        Button("Refresh") { replies.refresh() }
+                    }
+                    .onAppear { replies.refresh() }
+                }
+            } header: {
+                Text("Reply from the notch")
+            } footer: {
+                Text("Adds Reply and Continue to finished sessions (and Follow up to running ones), sent as your next prompt. Needs the NotchNerd Claude Code mod in each session — tooling/claude-code-mod in the NotchNerd repo, loaded with CLAUDE_CODE_PLUGIN_DIRS. With this on, NotchNerd can start turns in your sessions, not only watch them.")
             }
 
             Section {
