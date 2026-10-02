@@ -91,7 +91,10 @@ NotchNerd/                          repo root
 │  │  ├─ NotchModWebView.swift      sandboxed WKWebView + notchmod:// scheme handler (own files, CSP)
 │  │  ├─ NotchModBridge.swift       `window.notch` API (info/close/openURL/log/storage) + per-mod storage
 │  │  ├─ NotchModTabView.swift      a mod's tab in the open notch (`NotchViews.mod(id)`)
-│  │  └─ NotchModsSection.swift     Settings → Mods → Notch mods (toggle, reload, Load mod from folder…)
+│  │  ├─ NotchModAPI.swift          the one dispatcher for `notch.*` (page + logic), permissions, NotchModEvents
+│  │  ├─ NotchModRuntime.swift      logic: one JavaScriptCore VM per mod on its own queue, timers, 2 s run limit
+│  │  ├─ NotchModChips.swift        closed-notch chip + notify() notices (NotchModChipCenter, NotchModClosedChip)
+│  │  └─ NotchModsSection.swift     Settings → Mods → Notch mods (toggle, permissions, errors, chip picker)
 │  ├─ Notepad/                      always-open notepad (NEW)
 │  │  ├─ NotepadWindowController.swift  floating panel singleton; CGS-space float strategy
 │  │  ├─ NotepadPanel.swift         nonactivating, canBecomeKey NSPanel
@@ -131,7 +134,7 @@ NotchNerd/                          repo root
 │  └─ _hooks_research.md            Claude Code hooks brief (point-in-time, vs Claude Code v2.1.186)
 ├─ tooling/
 │  ├─ claude-code-mod/              Claude Code mod: notepad tools + /notch + reply-from-notch loop
-│  ├─ notch-mod-sample/             "Tally": the template notch mod + notchnerd.d.ts types for `window.notch`
+│  ├─ notch-mod-sample/             "Tally": the template notch mod (tab + logic + chip) + notchnerd.d.ts types
 │  └─ scripts/                      setup-dev-signing.sh (stable TCC identity) + add_agent_files.rb (xcodeproj add)
 ├─ mediaremote-adapter/             MediaRemoteAdapter.framework + perl adapter (now-playing)
 ├─ Configuration/dmg/               DMG packaging (create_dmg.sh)
@@ -405,16 +408,42 @@ Verified in the real app with a sandbox probe mod (14/14: bridge present + froze
 inline script blocked, undeclared host blocked even with `no-cors`, declared host allowed, other mod's
 scheme/`file:`/path escape blocked, unknown bridge method rejected, live reload).
 
-*Next steps (decided: split runtime; per-host network for community mods):*
-2. **Logic runtime + closed chip.** `main.js` runs in one JavaScriptCore context per enabled mod (no
-   web process; timers polyfilled from Swift); the open tab's `view.html` stays in WKWebView. The
-   closed-notch chip is declarative (`notch.closed.set({ icon, text, tint })`) and drawn natively in
-   one slot of `ContentView.NotchLayout()` **and** `computedChinWidth` (keep the two in step), below
-   agent "needs you" / battery / HUD / music, above the idle face; one mod chip at a time, user picks.
-   Plus `notify` (pops only from `.closed`, like agent pops) and read APIs behind permissions:
-   `media.read` (`MusicManager`), `calendar.read` (`CalendarManager`), `agent.read`
-   (`AgentBridgeManager`), `notes.read`/`notes.write` (writes via the Notepad inbox). Events pushed only
-   to subscribers, ≤1/s.
+*Built (step 2): logic runtime, closed chip, notify, read APIs* (decided: split runtime). A manifest's
+`"main"` runs in **JavaScriptCore** while the mod is on (`NotchModRuntimeManager`, started from
+`AppDelegate`, follows `notchModsEnabled` + store reloads): one `JSVirtualMachine` per mod on its own
+serial queue (never the main thread), no web process. The prelude installs `notch`, `setTimeout`/
+`setInterval` (DispatchSourceTimers; intervals ≥1 s, ≤100 timers), `console`, then deletes the native
+bridge from the global scope. Calls go `JSON` → main actor → `NotchModAPI.call` → resolve/reject back on
+the queue. **Runaway guard:** `JSContextGroupSetExecutionTimeLimit` (exported by JavaScriptCore but not
+in the public headers, so `dlsym`'d; WebKit uses it) ends any single run past 2 s and the engine stops
+itself (cancels timers, reports "Stopped…" in Settings, stays stopped until its files change or it's
+toggled); a main-thread watchdog (busy >5 s) is the fallback if the symbol is ever missing. **One API,
+two surfaces:** `NotchModAPI` serves the page bridge and the runtime alike (shared `clientCore` JS),
+checks permissions per call, and keeps one `NotchModStorage` per mod (page and logic share it; changes
+fire a `storage` event). `close`/`openURL` are page-only (need a person looking). **Events**
+(`NotchModEvents`): `notch.on(event)` subscribes; a source (Combine on `MusicManager` track fields,
+`CalendarManager.$events`, `AgentBridgeManager.objectWillChange`, `NotesStore.$notes`) is watched only
+while someone's subscribed, sends the current state immediately, then ≤1/s, always ending on the latest.
+`agent.read` exposes counts + session id/title/tool/phase/updated only (no summaries, prompts, paths);
+`notes.write` goes through `NotesStore` directly (we're in-app) and never changes the open note.
+**Closed chip** (`NotchModChipCenter`; needs `"surfaces": { "closed": { "maxWidth" } }`): declarative
+`{ icon (SF Symbol), text ≤24, tint (named or #hex) }`, drawn natively by `NotchModClosedChip` with the
+`AgentClosedIndicator` layout (icon wing left, text wing right, notch shifted). `ContentView.modChipShowing`
+gates it for `NotchLayout()`, `computedChinWidth` **and** `closedNotchHOffset`: below needs-you /
+battery / inline HUD / music / Claude **working**, above Claude **active** (you nearly always have live
+sessions; below "active" it would never show) and the face. One at a time: Settings picker
+(`Defaults[.notchModChipID]`), else first enabled mod with one. **`notify`** (needs `"notify"`) = a 2–8 s
+notice chip that also shows over Claude "working"; ≤1 per mod per 10 s (returns false when skipped).
+Settings lists each mod's permissions in plain words and its last error (uncaught exceptions,
+`notch.log.error`). Developer folders now live-reload tab **and** logic: a 1 s mtime check while any
+enabled dev mod exists. Tally (the sample) shows the split: tab counts, logic mirrors the count as a chip.
+Verified in the real app with probe mods: 20/20 runtime checks (notch frozen, native hidden, no fetch,
+storage + storage event, timeout fires, interval clamped to ~1 s, agent event arrives immediately without
+summaries, media/calendar/notes getters, notes.write denied without permission, close/openURL denied in
+logic, bad icon rejected, chip set, notify shown then rate-limited); a `for(;;){}` mod was stopped
+(app CPU 1.5% after, not 100%) and Settings showed "Stopped…"; uncaught errors appear in Settings.
+
+*Next steps:*
 3. **Distribution.** Registry entries gain `"kind": "claude" | "notch" | "both"`; `build.yml` also
    writes `notch-mods.json` with each release asset's URL + **sha256** (the app refuses mismatches).
    Install dialog lists permissions (re-approve on permission growth); `versions.json` maps mod version

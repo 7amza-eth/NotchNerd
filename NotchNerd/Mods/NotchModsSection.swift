@@ -12,11 +12,25 @@ import SwiftUI
 struct NotchModsSection: View {
     @ObservedObject private var store = NotchModStore.shared
     @Default(.notchModsEnabled) private var enabledIDs
+    @Default(.notchModChipID) private var chipID
+
+    /// Enabled mods that may show a closed-notch chip.
+    private var chipMods: [NotchMod] {
+        store.mods.filter { enabledIDs.contains($0.id) && $0.manifest.surfaces.closed != nil }
+    }
 
     var body: some View {
         Section {
             ForEach(store.mods) { mod in
                 NotchModRow(mod: mod, isEnabled: enabledIDs.contains(mod.id))
+            }
+            if chipMods.count > 1 {
+                Picker("Closed notch shows", selection: $chipID) {
+                    Text("First mod with something to show").tag("")
+                    ForEach(chipMods) { mod in
+                        Text(mod.manifest.name).tag(mod.id)
+                    }
+                }
             }
             ForEach(store.loadErrors) { problem in
                 HStack(alignment: .firstTextBaseline) {
@@ -45,7 +59,7 @@ struct NotchModsSection: View {
         } header: {
             Text("Notch mods")
         } footer: {
-            Text("Notch mods add tabs to the notch. They run in a sandbox: their own files, the network hosts they declare, and nothing else on your Mac. A mod loaded from a folder reloads as you edit it; inspect it with Safari → Develop → NotchNerd.")
+            Text("Notch mods add tabs and a status chip to the notch. They run in a sandbox: their own files, the network hosts they declare, and only the data you see listed under each one. A mod loaded from a folder reloads as you edit it; inspect its tab with Safari → Develop → NotchNerd, and see its logs in Console.app under mod.<id>.")
         }
     }
 }
@@ -54,6 +68,7 @@ private struct NotchModRow: View {
     let mod: NotchMod
     let isEnabled: Bool
     @ObservedObject private var store = NotchModStore.shared
+    @ObservedObject private var runtimes = NotchModRuntimeManager.shared
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -79,10 +94,23 @@ private struct NotchModRow: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                ForEach(mod.manifest.declaredPermissions, id: \.self) { permission in
+                    Label(permission.summary, systemImage: "checkmark.shield")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if !mod.manifest.networkHosts.isEmpty {
                     Label("Connects to \(mod.manifest.networkHosts.joined(separator: ", "))", systemImage: "network")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                if isEnabled, let error = runtimes.errors[mod.id] {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if !store.isCompatible(mod), let needed = mod.manifest.minAppVersion {
                     Label("Needs NotchNerd \(needed) or later", systemImage: "exclamationmark.triangle.fill")

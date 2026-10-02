@@ -1,22 +1,28 @@
 # Tally: a sample notch mod
 
-A notch mod adds a tab to NotchNerd's notch. It's a small web page that NotchNerd runs in a sandbox. Start a new mod by copying this folder.
+A notch mod changes NotchNerd's notch. It can have two parts, and NotchNerd runs both in a sandbox:
+
+- **A tab**: a small web page (HTML, JS, CSS) shown as a tab in the open notch. It runs only while the tab is on screen.
+- **Logic**: one plain JavaScript file that runs the whole time the mod is on, even with the notch closed. It can show a **chip** in the closed notch and **notifications**, and react to what's playing, your calendar, your Claude Code sessions and your notepad, if the mod has permission.
+
+Tally has both. Its tab counts up and down; its logic shows the count in the closed notch. Start a new mod by copying this folder.
 
 ## Try it
 
 1. In NotchNerd, open **Settings → Mods → Notch mods** and click **Load mod from folder…**.
 2. Choose this folder. Tally is turned on and a **Tally** tab appears in the notch.
-3. Edit `view.js` or `styles.css`. While the tab is open it reloads on its own.
-4. To debug, open Safari → **Develop** → NotchNerd → *Tally* for the Web Inspector. (Turn on Safari → Settings → Advanced → "Show features for web developers" first.)
+3. Tap **+** a few times and close the notch: the count shows beside it.
+4. Edit any file. The mod reloads on its own, tab and logic.
+5. Debugging: the tab page opens in Safari → **Develop** → NotchNerd → *Tally* (turn on Safari → Settings → Advanced → "Show features for web developers" first). Logic errors show under the mod in Settings, and `notch.log` goes to Console.app (category `mod.tally`).
 
 ## Files
 
 | File | What it is |
 | --- | --- |
-| `notch-mod.json` | The manifest: id, name, version, what it adds to the notch, and its permissions. |
-| `view.html` | The tab's page. Link your scripts and styles as separate files. |
-| `view.js`, `styles.css` | The page's script and style. Name them anything. |
-| `notchnerd.d.ts` | Types for `window.notch`, for editor completion. |
+| `notch-mod.json` | The manifest: id, name, version, what the mod adds to the notch, and its permissions. |
+| `view.html`, `view.js`, `styles.css` | The tab's page. Scripts and styles must be separate files. |
+| `main.js` | The logic. |
+| `notchnerd.d.ts` | Types for `notch`, for editor completion. |
 
 ## The manifest
 
@@ -24,42 +30,63 @@ A notch mod adds a tab to NotchNerd's notch. It's a small web page that NotchNer
 {
   "id": "tally",
   "name": "Tally",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minAppVersion": "0.3.4",
   "author": "MK Builds",
   "description": "A sample notch mod.",
+  "main": "main.js",
   "surfaces": {
-    "tab": { "title": "Tally", "icon": "plusminus.circle", "height": 170, "keyboard": false, "view": "view.html" }
+    "tab": { "title": "Tally", "icon": "plusminus.circle", "height": 170, "keyboard": false, "view": "view.html" },
+    "closed": { "maxWidth": 40 }
   },
-  "permissions": ["storage", "network:api.example.com"]
+  "permissions": ["media.read", "notify", "network:api.example.com"]
 }
 ```
 
 - `id`: lowercase words joined by hyphens. Must match your entry in the mod directory.
-- `surfaces.tab.icon`: any [SF Symbol](https://developer.apple.com/sf-symbols/) name.
-- `surfaces.tab.height`: 120 to 320 points.
-- `surfaces.tab.keyboard`: set `true` if the tab has text fields. The notch then takes key focus and stays open while the tab shows.
-- `permissions`: `network:<host>` lets the page reach that host over https; `*.example.com` covers subdomains. Nothing else on the network is reachable.
+- `main`: the logic file. Leave it out for a tab-only mod.
+- `surfaces.tab`: leave it out for a mod without a tab. `icon` is any [SF Symbol](https://developer.apple.com/sf-symbols/) name; `height` is 120 to 320 points; set `keyboard` to `true` if the tab has text fields.
+- `surfaces.closed`: lets the mod show a chip in the closed notch. `maxWidth` is the width of its text, 30 to 120 points.
+- `permissions`:
+
+| Permission | Lets the mod |
+| --- | --- |
+| `media.read` | See what's playing (`notch.media`, the `media` event). |
+| `calendar.read` | See calendar events (`notch.calendar`, `calendar`). |
+| `agent.read` | See Claude Code sessions: counts, titles and status, never transcripts (`notch.agent`, `agent`). |
+| `notes.read` | List and read notepad notes (`notch.notes.list/read`, `notes`). |
+| `notes.write` | Add to notes or make new ones (`notch.notes.append/create`). |
+| `notify` | Show a notification chip (`notch.notify`). |
+| `network:<host>` | Reach that host over https from the tab page. `*.example.com` covers subdomains. |
+
+## The closed notch
+
+The chip is a symbol on the left of the notch and a few words on the right, drawn by NotchNerd in its own style. It gives way to the things that matter more: a Claude session that needs you, battery and volume, music, and Claude working. It shows over Claude's calm "active" indicator. A **notification** (`notch.notify`) shows for a few seconds even while Claude is working, at most once every 10 seconds per mod. If more than one mod has a chip, the user picks which shows in Settings.
 
 ## The sandbox
 
-- The page loads only its own files. No inline `<script>`: put scripts in files. Inline styles are fine.
-- No network except the hosts you declare. No access to your Mac's files.
-- Web links the user clicks open in their browser. `notch.openURL(url)` does the same from code.
-- Cookies and `localStorage` don't survive. Use `notch.storage` to keep data.
-- The page exists only while its tab is on screen; NotchNerd closes it when the notch closes. Save anything you need with `notch.storage`.
+- **Tab page:** loads only its own files. No inline `<script>`, but inline styles are fine. No network except declared hosts. Clicked web links open in the browser. Cookies and `localStorage` don't last; use `notch.storage`.
+- **Logic:** plain JavaScript, with no DOM, no `fetch` and no modules. It gets `notch`, `setTimeout`/`setInterval` (intervals at least one second apart, at most 100 timers) and `console`. A single run that takes over 2 seconds stops the mod; it shows as stopped in Settings until you fix it.
+- **Nothing else:** no files outside the mod's folder, no shell, no native code.
 
 ## The API
 
-See `notchnerd.d.ts`. In short:
+The full list is in `notchnerd.d.ts`. Everything returns a promise.
 
 ```js
-const info = await notch.info();               // { id, version, appVersion, development }
-await notch.storage.set('count', 3);           // any JSON value, up to 1 MB per mod
+await notch.storage.set('count', 3);          // any JSON, 1 MB per mod, shared by tab and logic
 const count = await notch.storage.get('count');
-notch.openURL('https://example.com');
-notch.close();
-notch.log('hello');                            // Console.app, category mod.<id>
+
+notch.closed.set({ icon: 'timer', text: '24:59', tint: 'orange' });
+notch.notify({ icon: 'bell', text: 'Break time', seconds: 5 });   // needs "notify"
+
+const off = notch.on('media', (media) => {     // needs "media.read"; fires now, then on change
+  notch.closed.set({ icon: media.playing ? 'play.fill' : 'pause.fill', text: media.artist });
+});
+off();                                          // stop listening
+
+notch.log('hello');                             // Console.app, category mod.<id>
+notch.log.error(new Error('oops'));             // also shown in Settings
 ```
 
-More is coming: a chip in the closed notch, notifications, and read access to now playing, calendar and Claude Code sessions, each behind a permission.
+From the tab page only: `notch.close()` and `notch.openURL(url)`.

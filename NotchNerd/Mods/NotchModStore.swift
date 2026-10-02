@@ -95,6 +95,7 @@ final class NotchModStore: ObservableObject {
         mods = found.values.sorted { $0.manifest.name.localizedCaseInsensitiveCompare($1.manifest.name) == .orderedAscending }
         loadErrors = errors
         leaveTabIfGone()
+        updateWatching()
     }
 
     /// nil when the folder has no manifest at all.
@@ -133,6 +134,7 @@ final class NotchModStore: ObservableObject {
         Defaults[.notchModsEnabled] = ids
         objectWillChange.send()
         leaveTabIfGone()
+        updateWatching()
     }
 
     /// Asks for a folder and loads it as a developer mod, turned on.
@@ -179,34 +181,38 @@ final class NotchModStore: ObservableObject {
     // MARK: Live reload (developer folders only)
 
     private var watchTimer: Timer?
-    private var watchedModID: String?
-    private var lastStamp: Date?
+    private var stamps: [String: Date?] = [:]
 
-    /// While a developer mod's tab is on screen, checks its folder once a second and reloads the
-    /// tab when a file changes. Nothing runs when no developer tab is visible.
-    func startWatching(_ mod: NotchMod) {
-        stopWatching()
-        guard mod.isDevelopment else { return }
-        watchedModID = mod.id
-        lastStamp = Self.latestModification(in: mod.folder)
-        watchTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkWatched() }
+    /// While any developer mod is turned on, checks its folder once a second and reloads it (tab
+    /// page and logic) when a file changes. Nothing runs when no developer mod is on, so installed
+    /// mods never cost a timer.
+    func updateWatching() {
+        let enabled = Set(Defaults[.notchModsEnabled])
+        let watched = mods.filter { $0.isDevelopment && enabled.contains($0.id) }
+        if watched.isEmpty {
+            watchTimer?.invalidate()
+            watchTimer = nil
+            stamps = [:]
+            return
+        }
+        for mod in watched where stamps[mod.id] == nil {
+            stamps[mod.id] = Self.latestModification(in: mod.folder)
+        }
+        if watchTimer == nil {
+            watchTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.checkWatched() }
+            }
         }
     }
 
-    func stopWatching(_ id: String? = nil) {
-        if let id, id != watchedModID { return }
-        watchTimer?.invalidate()
-        watchTimer = nil
-        watchedModID = nil
-    }
-
     private func checkWatched() {
-        guard let id = watchedModID, let mod = mod(id: id) else { return stopWatching() }
-        let stamp = Self.latestModification(in: mod.folder)
-        if stamp != lastStamp {
-            lastStamp = stamp
-            refresh(mod)
+        let enabled = Set(Defaults[.notchModsEnabled])
+        for mod in mods where mod.isDevelopment && enabled.contains(mod.id) {
+            let stamp = Self.latestModification(in: mod.folder)
+            if let previous = stamps[mod.id], previous == stamp { continue }
+            let isFirstLook = stamps[mod.id] == nil
+            stamps[mod.id] = stamp
+            if !isFirstLook { refresh(mod) }
         }
     }
 

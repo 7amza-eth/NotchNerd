@@ -46,6 +46,7 @@ struct NotchModWebView: NSViewRepresentable {
         webView.allowsMagnification = false
         webView.isInspectable = mod.isDevelopment            // Safari → Develop → NotchNerd
         context.coordinator.revision = revision
+        context.coordinator.bridge.webView = webView
         webView.load(URLRequest(url: NotchModSchemeHandler.url(for: mod, path: mod.manifest.tabView)))
         return webView
     }
@@ -54,11 +55,14 @@ struct NotchModWebView: NSViewRepresentable {
         context.coordinator.closeNotch = closeNotch
         if context.coordinator.revision != revision {
             context.coordinator.revision = revision
+            // The reloaded page subscribes again to what it needs.
+            NotchModEvents.shared.unsubscribe(context.coordinator.bridge, mod: mod.id)
             webView.load(URLRequest(url: NotchModSchemeHandler.url(for: mod, path: mod.manifest.tabView)))
         }
     }
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+        coordinator.bridge.detach()
         webView.stopLoading()
         webView.configuration.userContentController.removeAllScriptMessageHandlers()
         webView.navigationDelegate = nil

@@ -24,6 +24,7 @@ struct ContentView: View {
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
     @ObservedObject var agent = AgentBridgeManager.shared
+    @ObservedObject var modChips = NotchModChipCenter.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -83,6 +84,22 @@ struct ContentView: View {
             && !vm.hideOnClosed
     }
 
+    /// A notch mod's chip, when it's what the closed notch shows (NotchModChips.swift). It yields to
+    /// "needs you", battery, inline HUDs, music and Claude "working", and wins over Claude "active".
+    /// NotchLayout(), computedChinWidth and closedNotchHOffset all use this, so they stay in step.
+    private var modChipShowing: (chip: NotchModChip, textWidth: CGFloat)? {
+        // A notify() notice also shows over Claude "working"; a mod's standing chip doesn't.
+        guard vm.notchState == .closed, !vm.hideOnClosed, !musicIsShowing,
+              agent.workingCount == 0 || modChips.notice != nil,
+              agent.attentionCount == 0,
+              !(coordinator.expandingView.type == .battery && coordinator.expandingView.show
+                && Defaults[.showPowerStatusNotifications]),
+              !(coordinator.sneakPeek.show && Defaults[.inlineHUD] && coordinator.sneakPeek.type != .music
+                && coordinator.sneakPeek.type != .battery)
+        else { return nil }
+        return modChips.visible
+    }
+
     private var computedChinWidth: CGFloat {
         var chinWidth: CGFloat = vm.closedNotchSize.width
         // Extra width the closed-notch agent status pills need to flank the hardware notch.
@@ -102,6 +119,8 @@ struct ContentView: View {
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
         {
             chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
+        } else if let modChip = modChipShowing {
+            chinWidth += 2 * (modChip.textWidth + 6)
         } else if agent.liveSessionCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
             chinWidth += statusPadding
         } else if !coordinator.expandingView.show && vm.notchState == .closed
@@ -118,6 +137,10 @@ struct ContentView: View {
     /// notch-width black bridge stays centered on the hardware cutout while the shape expands only on
     /// the wider (text) side. Zero in every other state.
     private var closedNotchHOffset: CGFloat {
+        if let modChip = modChipShowing {
+            // Small icon wing left, text wing right: grow only on the text side.
+            return (modChip.textWidth - NotchModClosedChip.iconSlot) / 2
+        }
         guard vm.notchState == .closed, !vm.hideOnClosed, agent.attentionCount > 0 else { return 0 }
         // "Needs you" expands only on the text side; shift the notch so the cutout stays bridged.
         if musicIsShowing {
@@ -385,6 +408,11 @@ struct ContentView: View {
                           // rides the visualizer slot instead (see MusicLiveActivity), so the two play nice.
                           MusicLiveActivity()
                               .frame(alignment: .center)
+                      } else if let modChip = modChipShowing {
+                          NotchModClosedChip(chip: modChip.chip, notchWidth: vm.closedNotchSize.width,
+                                             textWidth: modChip.textWidth)
+                              .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                              .transition(.opacity)
                       } else if agent.liveSessionCount > 0 && vm.notchState == .closed && !vm.hideOnClosed {
                           // No music is showing — surface Claude's status in the closed notch
                           // ("N working" while cooking, otherwise "N active" for live sessions).

@@ -2,46 +2,30 @@
 //  NotchModBridge.swift
 //  NotchNerd
 //
-//  `window.notch`: the API a notch mod's page gets. Every call arrives here as
-//  { method, args } and returns a promise. Keep this list and tooling/notch-mod-sample/notchnerd.d.ts
-//  in step.
-//
-//    notch.info()                     { id, version, appVersion, development }
-//    notch.close()                    close the notch
-//    notch.openURL(url)               open an http(s) link in the default browser
-//    notch.log(...values)             print to Console.app (and the Web Inspector in developer mode)
-//    notch.storage.get(key)           this mod's saved value, or null
-//    notch.storage.set(key, value)    save any JSON value (1 MB per mod)
-//    notch.storage.remove(key)
-//    notch.storage.keys()
+//  Connects a mod's tab page (WKWebView) to NotchModAPI: calls come in through a
+//  `WKScriptMessageHandlerWithReply` and return as promises; events go out with evaluateJavaScript.
+//  Also holds the JavaScript that builds `window.notch`, shared with the logic runtime, and the
+//  per-mod storage.
 //
 
 import AppKit
 import Foundation
-import os
 import WebKit
 
 @MainActor
-final class NotchModBridge: NSObject, WKScriptMessageHandlerWithReply {
+final class NotchModBridge: NSObject, WKScriptMessageHandlerWithReply, NotchModEventSink {
     static let handlerName = "notch"
-    static let storageLimit = 1_000_000
 
     let mod: NotchMod
     var closeNotch: () -> Void
-    private let storage: NotchModStorage
-    private let log: Logger
+    weak var webView: WKWebView?
 
     init(mod: NotchMod, closeNotch: @escaping () -> Void) {
         self.mod = mod
         self.closeNotch = closeNotch
-        storage = NotchModStorage(modID: mod.id)
-        log = Logger(subsystem: "eth.7amza.notchnerd", category: "mod.\(mod.id)")
     }
 
-    struct Failure: LocalizedError {
-        let message: String
-        var errorDescription: String? { message }
-    }
+    typealias Failure = NotchModAPI.Failure
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
@@ -53,85 +37,109 @@ final class NotchModBridge: NSObject, WKScriptMessageHandlerWithReply {
         }
         let args = body["args"] as? [String: Any] ?? [:]
         do {
-            replyHandler(try handle(method, args), nil)
+            let result = try NotchModAPI.call(method, args, mod: mod, surface: .page, sink: self, closeNotch: closeNotch)
+            replyHandler(result is NSNull ? nil : result, nil)
         } catch {
             replyHandler(nil, error.localizedDescription)
         }
     }
 
-    private func handle(_ method: String, _ args: [String: Any]) throws -> Any? {
-        switch method {
-        case "info":
-            return [
-                "id": mod.id,
-                "version": mod.manifest.version,
-                "appVersion": Bundle.main.releaseVersionNumber ?? "",
-                "development": mod.isDevelopment,
-            ]
-        case "close":
-            closeNotch()
-            return nil
-        case "openURL":
-            guard let string = args["url"] as? String, let url = URL(string: string), Self.isWebURL(url) else {
-                throw Failure(message: "notch.openURL takes an http or https URL.")
-            }
-            NSWorkspace.shared.open(url)
-            return nil
-        case "log":
-            let text = (args["message"] as? String ?? "").prefix(2000)
-            log.info("\(text, privacy: .public)")
-            return nil
-        case "storage.get":
-            return try storage.get(try key(args)) ?? NSNull()
-        case "storage.set":
-            guard let value = args["value"], JSONSerialization.isValidJSONObject([value]) else {
-                throw Failure(message: "notch.storage.set takes a JSON value.")
-            }
-            try storage.set(try key(args), value, limit: Self.storageLimit)
-            return nil
-        case "storage.remove":
-            try storage.remove(try key(args))
-            return nil
-        case "storage.keys":
-            return try storage.keys()
-        default:
-            throw Failure(message: "notch.\(method) isn't available in this version of NotchNerd.")
-        }
+    func deliver(event: String, json: String) {
+        guard let webView else { return }
+        let eventLiteral = NotchModAPI.json(event)
+        webView.evaluateJavaScript("window.__notchEmit && window.__notchEmit(\(eventLiteral), \(NotchModAPI.json(json)))",
+                                   in: nil, in: .page, completionHandler: nil)
     }
 
-    private func key(_ args: [String: Any]) throws -> String {
-        guard let key = args["key"] as? String, !key.isEmpty, key.count <= 200 else {
-            throw Failure(message: "Storage keys are non-empty strings of up to 200 characters.")
-        }
-        return key
+    /// The page is going away: stop its events.
+    func detach() {
+        NotchModEvents.shared.unsubscribe(self, mod: mod.id)
+        webView = nil
     }
 
     nonisolated static func isWebURL(_ url: URL) -> Bool {
         url.scheme == "https" || url.scheme == "http"
     }
 
-    /// Injected at document start. Frozen so the page can't swap out the API it calls.
+    // MARK: JavaScript
+
+    /// Builds `notch` from a `call(method, args) → Promise` function. Shared by the page and the logic
+    /// runtime; defines `notch` and `emit(event, json)` in the enclosing scope.
+    nonisolated static let clientCore = """
+      const listeners = new Map();
+      const fmt = (values) => values.map((v) => {
+        if (typeof v === 'string') return v;
+        // JavaScriptCore's stack leaves out the message, so lead with it.
+        if (v instanceof Error) return `${v.name}: ${v.message}` + (v.stack ? `\\n${v.stack}` : '');
+        try { return JSON.stringify(v); } catch { return String(v); }
+      }).join(' ');
+      const on = (event, callback) => {
+        if (typeof callback !== 'function') throw new TypeError('notch.on(event, callback) needs a function');
+        let set = listeners.get(event);
+        if (!set) {
+          set = new Set();
+          listeners.set(event, set);
+          call('subscribe', { event }).catch((error) => notch.log.error(`notch.on('${event}'): ${error.message}`));
+        }
+        set.add(callback);
+        return () => {
+          set.delete(callback);
+          if (set.size === 0 && listeners.get(event) === set) {
+            listeners.delete(event);
+            call('unsubscribe', { event }).catch(() => {});
+          }
+        };
+      };
+      const emit = (event, json) => {
+        const set = listeners.get(event);
+        if (!set) return;
+        const payload = JSON.parse(json);
+        for (const callback of [...set]) {
+          try { callback(payload); } catch (error) { notch.log.error(error); }
+        }
+      };
+      const log = (...values) => call('log', { message: fmt(values) });
+      log.error = (...values) => call('log', { message: fmt(values), level: 'error' });
+      const notch = Object.freeze({
+        info: () => call('info'),
+        log: Object.freeze(log),
+        close: () => call('close'),
+        openURL: (url) => call('openURL', { url: String(url) }),
+        on,
+        storage: Object.freeze({
+          get: (key) => call('storage.get', { key }),
+          set: (key, value) => call('storage.set', { key, value: value === undefined ? null : value }),
+          remove: (key) => call('storage.remove', { key }),
+          keys: () => call('storage.keys'),
+        }),
+        closed: Object.freeze({
+          set: (chip) => call('closed.set', chip ?? {}),
+          clear: () => call('closed.clear'),
+        }),
+        notify: (notice) => call('notify', notice ?? {}),
+        media: Object.freeze({ get: () => call('media.get') }),
+        calendar: Object.freeze({ events: () => call('calendar.events') }),
+        agent: Object.freeze({ get: () => call('agent.get') }),
+        notes: Object.freeze({
+          list: () => call('notes.list'),
+          read: (id) => call('notes.read', { id }),
+          append: (id, text) => call('notes.append', { id, text }),
+          create: (text, title) => call('notes.create', { text, title }),
+        }),
+      });
+    """
+
+    /// Injected into the tab page at document start. `notch` and `__notchEmit` can't be replaced.
     static let script = """
     (() => {
       const handler = window.webkit.messageHandlers.\(handlerName);
-      const call = (method, args) => handler.postMessage({ method, args: args ?? {} });
-      const storage = Object.freeze({
-        get: (key) => call('storage.get', { key }),
-        set: (key, value) => call('storage.set', { key, value: value === undefined ? null : value }),
-        remove: (key) => call('storage.remove', { key }),
-        keys: () => call('storage.keys'),
-      });
-      const notch = Object.freeze({
-        info: () => call('info'),
-        close: () => call('close'),
-        openURL: (url) => call('openURL', { url: String(url) }),
-        log: (...values) => {
-          console.log(...values);
-          return call('log', { message: values.map((v) => typeof v === 'string' ? v : JSON.stringify(v)).join(' ') });
-        },
-        storage,
-      });
+      const call = (method, args) => {
+        if (method === 'log') (args.level === 'error' ? console.error : console.log)(args.message);
+        return handler.postMessage({ method, args: args ?? {} });
+      };
+    \(clientCore)
       Object.defineProperty(window, 'notch', { value: notch, writable: false, configurable: false });
+      Object.defineProperty(window, '__notchEmit', { value: emit, writable: false, configurable: false });
       const style = document.createElement('style');
       style.textContent = ':root{color-scheme:dark}html,body{margin:0;background:transparent;color:#fff;' +
         'font:13px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-user-select:none;cursor:default}';
@@ -140,13 +148,23 @@ final class NotchModBridge: NSObject, WKScriptMessageHandlerWithReply {
     """
 }
 
-/// One mod's saved data: ModData/<id>/data.json, a JSON object of key → value.
+/// One mod's saved data: ModData/<id>/data.json, a JSON object of key → value. One instance per
+/// mod, shared by its page and its logic.
 @MainActor
 final class NotchModStorage {
+    private static var instances: [String: NotchModStorage] = [:]
+
+    static func `for`(_ modID: String) -> NotchModStorage {
+        if let existing = instances[modID] { return existing }
+        let storage = NotchModStorage(modID: modID)
+        instances[modID] = storage
+        return storage
+    }
+
     private let file: URL
     private var cache: [String: Any]?
 
-    init(modID: String) {
+    private init(modID: String) {
         file = NotchModStore.dataDirectory.appendingPathComponent(modID, isDirectory: true)
             .appendingPathComponent("data.json")
     }
@@ -178,7 +196,7 @@ final class NotchModStorage {
     private func save(_ object: [String: Any], limit: Int) throws {
         let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         guard data.count <= limit else {
-            throw NotchModBridge.Failure(message: "This mod's storage is full (1 MB).")
+            throw NotchModAPI.Failure(message: "This mod's storage is full (1 MB).")
         }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: file, options: .atomic)

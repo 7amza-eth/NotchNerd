@@ -37,7 +37,6 @@ struct NotchModTabView: View {
     }
 
     private func appeared(_ mod: NotchMod) {
-        store.startWatching(mod)
         if mod.manifest.surfaces.tab?.keyboard == true {
             NotepadNotchFocus.allowsNotchKey = true
             SharingStateManager.shared.preventNotchClose = true
@@ -45,7 +44,6 @@ struct NotchModTabView: View {
     }
 
     private func disappeared(_ mod: NotchMod) {
-        store.stopWatching(mod.id)
         if mod.manifest.surfaces.tab?.keyboard == true {
             NotepadNotchFocus.allowsNotchKey = false
             SharingStateManager.shared.preventNotchClose = false

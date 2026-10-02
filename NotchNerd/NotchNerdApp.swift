@@ -484,6 +484,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotepadWindowController.shared.restoreIfNeeded()
         // Apply notepad writes queued by other processes (the Claude Code mod).
         NotesStore.shared.startInbox()
+        // Run the logic of enabled notch mods (no-op when none are on; see Mods/NotchModRuntime.swift).
+        NotchModRuntimeManager.shared.start()
 
         // Replay the feature tour on demand (menu-bar "Feature Tour" + Settings "Replay feature tour").
         NotificationCenter.default.addObserver(
