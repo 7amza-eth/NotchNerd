@@ -40,7 +40,7 @@ On top of that base, NotchNerd adds two new surfaces:
 | UI | SwiftUI hosted in AppKit `NSPanel`s; `MenuBarExtra` scene; SwiftUIIntrospect. |
 | Min OS | **macOS 14.0 (Sonoma)** (`MACOSX_DEPLOYMENT_TARGET = 14.0`, `platforms: [.macOS(.v14)]`). |
 | Toolchain | **Full Xcode required** (not just Command Line Tools). `xcode-select -p` → `/Applications/Xcode.app/Contents/Developer`. A run-script build phase shells out to `swift build`. |
-| Version | `MARKETING_VERSION = 0.2.1`, `CURRENT_PROJECT_VERSION = 271` — local dev-build values; the release workflow overrides both from the git tag (latest release: `v0.2.1`). |
+| Version | `MARKETING_VERSION = 0.3.3`, `CURRENT_PROJECT_VERSION = 303` — local dev-build values; the release workflow overrides both from the git tag (build = `major*10000 + minor*100 + patch`). |
 | License | **GNU GPL v3** (both boring.notch and Open Island are GPL v3 → merged work is GPL v3). |
 | Bundle IDs | App `eth.7amza.notchnerd`; XPC helper `eth.7amza.notchnerd.XPCHelper`. |
 
@@ -544,11 +544,14 @@ of remaining work is **Part II → Roadmap & TODO**.
 - **Settings tabs are enum-driven.** `SettingsTab` (in `SettingsView.swift`) is the single source for
   both the sidebar list and the detail `switch` — add a tab there, not in two places. The selected tab
   persists via `@AppStorage("settingsSelectedTab")`.
-- **Version: local vs release.** `project.pbxproj` `MARKETING_VERSION` (currently `0.2.1`) /
-  `CURRENT_PROJECT_VERSION` (`271`) govern **local dev builds only**; the release workflow overrides both
-  from the git tag (`v0.2.1` → marketing `0.2.1`, build = `github.run_number`). The high local build
-  number keeps dev builds correctly "up to date" against the low release run-numbers — it is **not** the
-  release counter. The workflow forces `make_latest: true`.
+- **Version: local vs release.** Sparkle decides "newer" by `CFBundleVersion` (`CURRENT_PROJECT_VERSION`),
+  **not** the marketing version. Both local and release builds encode it as `major*10000 + minor*100 + patch`
+  (`0.3.3` → `303`), so they compare on one scale: a local `0.3.2` build is offered `0.3.3`, a local build of
+  the current release is "up to date". The release workflow derives it from the tag and warns if
+  `project.pbxproj` disagrees — **bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` together.**
+  (History: until v0.3.3 the release build was `github.run_number` (1–7) while local builds were `271`, so
+  locally built installs never saw updates — "You're up to date … you are running 0.3.2".) The workflow
+  forces `make_latest: true`.
 - **`gh` defaults to `upstream` (boring.notch), not the fork.** Remotes: `origin` = `7amza-eth/NotchNerd`,
   `upstream` = `TheBoredTeam/boring.notch`. Without a default set, `gh release` / `gh run` resolve against
   **upstream** and show boring.notch's `v2.7.x` releases + its Actions — *not* the fork's. Fix:

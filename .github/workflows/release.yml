@@ -43,7 +43,21 @@ jobs:
         id: ver
         run: |
           MARKETING="${TAG#v}"                  # v0.1.0 -> 0.1.0
-          BUILD="${{ github.run_number }}"      # monotonic build number for Sparkle comparisons
+          # Sparkle compares CFBundleVersion, so derive it from the version (0.3.4 -> 304) on the same
+          # scale as the local project's CURRENT_PROJECT_VERSION. Must stay above the old run_number
+          # builds (<= 7) that existing installs carry.
+          if ! [[ "$MARKETING" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Tag $TAG is not vX.Y.Z"; exit 1
+          fi
+          MAJ=${BASH_REMATCH[1]}; MIN=${BASH_REMATCH[2]}; PAT=${BASH_REMATCH[3]}
+          if (( MIN > 99 || PAT > 99 )); then
+            echo "::error::minor/patch must be < 100 for the build-number encoding"; exit 1
+          fi
+          BUILD=$(( MAJ * 10000 + MIN * 100 + PAT ))
+          LOCAL_BUILD=$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' NotchNerd.xcodeproj/project.pbxproj | grep -o '[0-9]*$')
+          if [ "$LOCAL_BUILD" != "$BUILD" ]; then
+            echo "::warning::project.pbxproj CURRENT_PROJECT_VERSION is $LOCAL_BUILD, expected $BUILD for $TAG — bump it so local builds compare correctly"
+          fi
           echo "marketing=$MARKETING" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "Releasing $TAG  (CFBundleShortVersionString=$MARKETING, CFBundleVersion=$BUILD)"
