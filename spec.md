@@ -40,7 +40,7 @@ On top of that base, NotchNerd adds two new surfaces:
 | UI | SwiftUI hosted in AppKit `NSPanel`s; `MenuBarExtra` scene; SwiftUIIntrospect. |
 | Min OS | **macOS 14.0 (Sonoma)** (`MACOSX_DEPLOYMENT_TARGET = 14.0`, `platforms: [.macOS(.v14)]`). |
 | Toolchain | **Full Xcode required** (not just Command Line Tools). `xcode-select -p` → `/Applications/Xcode.app/Contents/Developer`. A run-script build phase shells out to `swift build`. |
-| Version | `MARKETING_VERSION = 0.3.4`, `CURRENT_PROJECT_VERSION = 304` — local dev-build values; the release workflow overrides both from the git tag (build = `major*10000 + minor*100 + patch`). |
+| Version | `MARKETING_VERSION = 0.3.5`, `CURRENT_PROJECT_VERSION = 305` — local dev-build values; the release workflow overrides both from the git tag (build = `major*10000 + minor*100 + patch`). |
 | License | **GNU GPL v3** (both boring.notch and Open Island are GPL v3 → merged work is GPL v3). |
 | Bundle IDs | App `eth.7amza.notchnerd`; XPC helper `eth.7amza.notchnerd.XPCHelper`. |
 
