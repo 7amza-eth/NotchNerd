@@ -1174,7 +1174,7 @@ struct AgentSettings: View {
             } header: {
                 Text("Reply from the notch")
             } footer: {
-                Text("Adds Reply and Continue to finished sessions (and Follow up to running ones), sent as your next prompt. Needs the NotchNerd Claude Code mod in each session — tooling/claude-code-mod in the NotchNerd repo, loaded with CLAUDE_CODE_PLUGIN_DIRS. With this on, NotchNerd can start turns in your sessions, not only watch them.")
+                Text("Adds Reply and Continue to finished sessions (and Follow up to running ones), sent as your next prompt. Needs the notchnerd Claude Code mod (install it from Settings → Mods). With this on, NotchNerd can start turns in your sessions, not only watch them.")
             }
 
             Section {

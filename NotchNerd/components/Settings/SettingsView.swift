@@ -20,7 +20,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     // General group
     case general, appearance
     // Notch features group
-    case media, calendar, shelf, notepad, webcam, huds, battery, agent
+    case media, calendar, shelf, notepad, webcam, huds, battery, agent, mods
     // Advanced group
     case shortcuts, advanced
     // Meta
@@ -38,7 +38,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var group: Group? {
         switch self {
         case .general, .appearance: return .general
-        case .media, .calendar, .shelf, .notepad, .webcam, .huds, .battery, .agent: return .features
+        case .media, .calendar, .shelf, .notepad, .webcam, .huds, .battery, .agent, .mods: return .features
         case .shortcuts, .advanced: return .advanced
         case .about: return nil
         }
@@ -56,6 +56,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .huds: return "HUDs"
         case .battery: return "Battery"
         case .agent: return "Agent"
+        case .mods: return "Mods"
         case .shortcuts: return "Shortcuts"
         case .advanced: return "Advanced"
         case .about: return "About"
@@ -74,6 +75,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .huds: return "dial.medium.fill"
         case .battery: return "battery.100.bolt"
         case .agent: return "sparkles"
+        case .mods: return "puzzlepiece.extension"
         case .shortcuts: return "keyboard"
         case .advanced: return "gearshape.2"
         case .about: return "info.circle"
@@ -152,6 +154,7 @@ struct SettingsView: View {
         case .notepad: NotepadSettings()
         case .webcam: WebcamSettings()
         case .agent: AgentSettings()
+        case .mods: ModsSettings()
         case .shortcuts: Shortcuts()
         case .advanced: Advanced()
         case .about:

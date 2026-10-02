@@ -82,6 +82,10 @@ NotchNerd/                          repo root
 │  │  ├─ ActiveAgentProcessDiscovery.swift  ps/lsof/tmux liveness probe
 │  │  ├─ GhosttyJumpService.swift   osascript jump into a Ghostty pane (focus short-circuit + re-resolution)
 │  │  └─ TerminalAppJumpService.swift  Terminal.app jump + `enum AgentTerminalJump` dispatcher (canJump/jump/appName)
+│  ├─ Mods/                         Settings → Mods: the community mod directory (NEW)
+│  │  ├─ ClaudeCLI.swift            finds + runs the `claude` CLI from a GUI app (PATH, login-shell fallback)
+│  │  ├─ ModCatalog.swift           ModCatalogStore: reads the mkbuilds4/mods registry, installs via the CLI
+│  │  └─ ModsSettingsView.swift     the tab: official / opt-in community / removed sections, search
 │  ├─ Notepad/                      always-open notepad (NEW)
 │  │  ├─ NotepadWindowController.swift  floating panel singleton; CGS-space float strategy
 │  │  ├─ NotepadPanel.swift         nonactivating, canBecomeKey NSPanel
@@ -346,7 +350,28 @@ early-access API, Claude Code ≥ 2.1.286) that gives the model `notepad_list` /
 straight off disk (≤0.6s stale); writes go through the inbox and wait ~1.5s for the app to delete
 the file, reporting "queued" if NotchNerd isn't running. Load it with
 `claude --plugin-dir tooling/claude-code-mod`; `claude plugin validate tooling/claude-code-mod`
-checks it. Not yet installed from Settings.
+checks it. Installed from Settings → Mods (it's listed in the mod directory, pinned to the
+latest NotchNerd release, so mod changes reach users with the next app release).
+
+**Mod directory (Settings → Mods, `NotchNerd/Mods/`).** An open, Obsidian-style directory of Claude
+Code mods in the registry repo **github.com/mkbuilds4/mods**. Authors keep code in their own repos
+and open a PR adding `{id, name, author, description, repo, path?}` to `community-mods.json`; a
+`pull_request_target` bot (`scripts/validate-submission.mjs`, reads the PR's list as data only) checks
+shape, a public repo, a published release, `plugin.json` name == id, README + LICENSE, then a
+maintainer reviews the code. `build.yml` regenerates `.claude-plugin/marketplace.json` (marketplace
+name **`mkbuilds`**) on list changes, releases and nightly, pinning each mod to the commit of its
+latest GitHub release (`<id>-<version>` tags win in multi-mod repos), plus `community-mod-stats.json`
+(stars). `community-mods-removed.json` = `{id, name, reason}`. The app reads those four raw files
+(falls back to Claude Code's local clone offline, and to marketplace.json alone if the list is
+missing) and installs through the CLI: `marketplace add mkbuilds4/mods` (or `update`) → `plugin
+install <id>@mkbuilds --json`; uninstall uses `--keep-data`. **Never `marketplace remove`**: Claude
+Code deletes every plugin's saved options with it. Mods from `mkbuilds4`/`7amza-eth` repos are
+"By MK Builds"; the rest appear only after "Show community mods" (`Defaults[.modsShowCommunity]`,
+default OFF, like Obsidian's Restricted mode). A mod also loaded as `name@inline` (`--plugin-dir` /
+`CLAUDE_CODE_PLUGIN_DIRS`) shows "Loaded from a folder" with no Install, to avoid loading it twice.
+`NOTCHNERD_MODS_REGISTRY` (env; raw-URL prefix or local folder) points the app at another registry
+for testing. To test installs without touching your real Claude config, launch the Debug build with
+`open -n --env CLAUDE_CONFIG_DIR=<scratch dir> …`.
 
 **Reply from the notch (`AgentReplyChannel`, Settings → Agent → "Reply to sessions from the notch",
 `Defaults[.agentReplyEnabled]`, default OFF).** Hooks can't inject a prompt; the mod can

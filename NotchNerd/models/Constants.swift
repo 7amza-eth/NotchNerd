@@ -228,6 +228,11 @@ extension Defaults.Keys {
     // Off by default: with it on, NotchNerd can start turns, not only observe them.
     static let agentReplyEnabled = Key<Bool>("agentReplyEnabled", default: false)
 
+    // MARK: Mods
+    // Settings → Mods lists community mods (not by MK Builds) only after opting in, like Obsidian's
+    // Restricted mode: they run code as the user and are only automatically checked before listing.
+    static let modsShowCommunity = Key<Bool>("modsShowCommunity", default: false)
+
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)
 
