@@ -9,6 +9,27 @@ use warnings;
 use DynaLoader;
 use File::Spec;
 use File::Basename;
+use POSIX ();
+
+# NotchNerd patch (not in upstream MediaRemoteAdapter): parent-death watchdog.
+# With MEDIAREMOTEADAPTER_EXIT_ON_STDIN_EOF set, a forked child blocks reading STDIN and
+# SIGTERMs this process on EOF, i.e. when the launching app closes its end of the pipe or dies
+# (even by crash/SIGKILL). Without it, "stream" only notices a dead parent on its next stdout
+# write (SIGPIPE), so it lingers re-parented to launchd while nothing is playing. Forked before
+# the framework loads so the child never touches CoreFoundation.
+if ($ENV{MEDIAREMOTEADAPTER_EXIT_ON_STDIN_EOF}) {
+  my $adapter_pid = $$;
+  my $watchdog_pid = fork();
+  if (defined $watchdog_pid && $watchdog_pid == 0) {
+    # Don't hold the stdout pipe open, or the app's reader wouldn't see EOF when we're killed.
+    close STDOUT;
+    1 while sysread(STDIN, my $buf, 4096);
+    # Only signal the adapter if it's still our parent (guards against PID reuse).
+    kill 'TERM', $adapter_pid if getppid() == $adapter_pid;
+    POSIX::_exit(0);
+  }
+  close STDIN;
+}
 
 sub print_help() {
   print <<'HELP';

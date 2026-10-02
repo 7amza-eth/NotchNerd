@@ -26,7 +26,12 @@ class MusicManager: ObservableObject {
     private let mediaChecker = MediaChecker()
 
     // Active controller
-    private var activeController: (any MediaControllerProtocol)?
+    private var activeController: (any MediaControllerProtocol)? {
+        didSet {
+            // Stop the outgoing controller so NowPlayingController's perl helper doesn't outlive it.
+            if let oldValue, oldValue !== activeController { oldValue.stop() }
+        }
+    }
 
     // Published properties for UI
     @Published var songTitle: String = "I'm Handsome"

@@ -537,6 +537,17 @@ of remaining work is **Part II → Roadmap & TODO**.
   Open Island / open-vibe-island (Octane0411, commit `1e26dfc`); provenance + the NotchNerd patch-set
   are in `VENDORED-FROM.md`. (Open item: that file lists a few unused deps and omits some actually-linked
   SPM deps — reconcile with `Package.resolved` before a public binary release.)
+- **The now-playing perl helper must be stopped explicitly (inherited bug, fixed 2026-10-01).**
+  `NowPlayingController` spawns `/usr/bin/perl mediaremote-adapter.pl … stream`. Upstream only
+  terminated it in `deinit`, which never ran: the stream task awaited a method on `self`, keeping the
+  controller alive. The helper outlived the app, re-parented to launchd, until its next stdout write
+  hit SIGPIPE, which never comes if nothing is playing. It also leaked one helper per media-source
+  switch. Fix: `MediaControllerProtocol.stop()` is called by `MusicManager.activeController`'s
+  `didSet`, so it runs on replace and at quit via `destroy()`. The helper also gets a stdin pipe plus
+  `MEDIAREMOTEADAPTER_EXIT_ON_STDIN_EOF=1`, and a **small NotchNerd patch to
+  `mediaremote-adapter/mediaremote-adapter.pl`** forks a watchdog that SIGTERMs the adapter on stdin
+  EOF. That covers crashes and SIGKILL too. Re-apply that patch if you re-pull the script from
+  MediaRemoteAdapter.
 - **When listing the tree, exclude** `build/`, `Vendor/OpenIslandEngine/.build`, and
   `Vendor/OpenIslandEngine/build` (large generated artifacts).
 

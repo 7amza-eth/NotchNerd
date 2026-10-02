@@ -26,4 +26,11 @@ protocol MediaControllerProtocol: ObservableObject {
     func setVolume(_ level: Double) async
     func isActive() -> Bool
     func updatePlaybackInfo() async
+    /// Releases external resources (e.g. helper processes) when the controller is dropped.
+    /// Must be explicit: an in-flight async task can keep the controller alive past `nil`-ing it.
+    func stop()
+}
+
+extension MediaControllerProtocol {
+    func stop() {}
 }

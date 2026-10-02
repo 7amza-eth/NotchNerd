@@ -66,6 +66,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     private let MRMediaRemoteSetRepeatModeFunction: @convention(c) (Int) -> Void
 
     private var process: Process?
+    /// Write end of the helper's stdin. Never written to; when it closes (stop() or our own death,
+    /// incl. crash/SIGKILL) the helper's watchdog sees EOF and exits. See mediaremote-adapter.pl.
+    private var stdinPipe: Pipe?
     private var pipeHandler: JSONLinesPipeHandler?
     private var streamTask: Task<Void, Never>?
 
@@ -96,26 +99,26 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         MRMediaRemoteSetRepeatModeFunction = unsafeBitCast(
             MRMediaRemoteSetRepeatModePointer, to: (@convention(c) (Int) -> Void).self)
 
-        Task { await setupNowPlayingObserver() }
+        setupNowPlayingObserver()
     }
 
     deinit {
-        streamTask?.cancel()
-        
-        if let pipeHandler = self.pipeHandler {
-            Task { await pipeHandler.close()
-            }
-        }
-        
-        if let process = self.process {
-            if process.isRunning {
-                process.terminate()
-                process.waitUntilExit()
-            }
-        }
+        stop()
+    }
 
-        self.process = nil
-        self.pipeHandler = nil
+    /// Terminates the mediaremote-adapter helper. Idempotent. Called by MusicManager when this
+    /// controller is replaced or the app quits — deinit alone isn't reliable for that.
+    func stop() {
+        streamTask?.cancel()
+        streamTask = nil
+        if let process, process.isRunning {
+            process.terminate()
+        }
+        process = nil
+        try? stdinPipe?.fileHandleForWriting.close()
+        stdinPipe = nil
+        // The stream task ends on its own when the helper's stdout hits EOF.
+        pipeHandler = nil
     }
 
     // MARK: - Protocol Implementation
@@ -187,7 +190,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
     
     // MARK: - Setup Methods
-    private func setupNowPlayingObserver() async {
+    private func setupNowPlayingObserver() {
         let process = Process()
         guard
             let scriptURL = Bundle.main.url(forResource: "mediaremote-adapter", withExtension: "pl"),
@@ -199,29 +202,35 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         
         process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         process.arguments = [scriptURL.path, frameworkPath, "stream"]
-        
+
+        // Parent-death watchdog: the helper exits when its stdin hits EOF. Otherwise it only
+        // notices we're gone on its next stdout write (SIGPIPE) — never, if nothing is playing.
+        let stdinPipe = Pipe()
+        // Keep the write end out of any other child we spawn, or it would hold the pipe open.
+        _ = fcntl(stdinPipe.fileHandleForWriting.fileDescriptor, F_SETFD, FD_CLOEXEC)
+        process.standardInput = stdinPipe
+        var environment = ProcessInfo.processInfo.environment
+        environment["MEDIAREMOTEADAPTER_EXIT_ON_STDIN_EOF"] = "1"
+        process.environment = environment
+
         let pipeHandler = JSONLinesPipeHandler()
-        process.standardOutput = await pipeHandler.getPipe()
+        process.standardOutput = pipeHandler.getPipe()
         
         self.process = process
+        self.stdinPipe = stdinPipe
         self.pipeHandler = pipeHandler
 
         do {
             try process.run()
-            streamTask = Task { [weak self] in
-                await self?.processJSONStream()
+            // Capture the handler, not self: awaiting a method on self would retain the controller
+            // for the stream's whole life, so it never deinits (the upstream helper leak).
+            streamTask = Task { [weak self, pipeHandler] in
+                await pipeHandler.readJSONLines(as: NowPlayingUpdate.self) { [weak self] update in
+                    await self?.handleAdapterUpdate(update)
+                }
             }
         } catch {
             assertionFailure("Failed to launch mediaremote-adapter.pl: \(error)")
-        }
-    }
-
-    // MARK: - Async Stream Processing
-    private func processJSONStream() async {
-        guard let pipeHandler = self.pipeHandler else { return }
-        
-        await pipeHandler.readJSONLines(as: NowPlayingUpdate.self) { [weak self] update in
-            await self?.handleAdapterUpdate(update)
         }
     }
 
@@ -357,7 +366,7 @@ actor JSONLinesPipeHandler {
         self.fileHandle = pipe.fileHandleForReading
     }
     
-    func getPipe() -> Pipe {
+    nonisolated func getPipe() -> Pipe {
         return pipe
     }
     
