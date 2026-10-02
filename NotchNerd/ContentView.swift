@@ -459,6 +459,8 @@ struct ContentView: View {
                         AgentView()
                     case .notepad:
                         NotepadTabView()
+                    case .mod(let id):
+                        NotchModTabView(modID: id)
                     }
                 }
                 .transition(
@@ -759,7 +761,7 @@ struct ContentView: View {
             }
             // Swipe-up is an explicit dismiss. On the Notes tab it also overrides the keep-open
             // pin so you can close the notch while editing.
-            if coordinator.currentView == .notepad {
+            if coordinator.currentView == .notepad || NotchModTabView.takesKeyboard(coordinator.currentView) {
                 NotepadNotchFocus.allowsNotchKey = false
                 SharingStateManager.shared.preventNotchClose = false
             }

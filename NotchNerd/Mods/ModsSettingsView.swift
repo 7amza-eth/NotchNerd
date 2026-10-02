@@ -101,6 +101,8 @@ struct ModsSettings: View {
                     }
                 }
             }
+
+            NotchModsSection()
         }
         .accentColor(.effectiveAccent)
         .navigationTitle("Mods")

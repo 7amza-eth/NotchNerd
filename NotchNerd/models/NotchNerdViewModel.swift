@@ -189,9 +189,16 @@ class NotchNerdViewModel: NSObject, ObservableObject {
         return false
     }
 
-    /// The open height depends on the tab — the Agent tab is taller (see matters.swift).
+    /// The open height depends on the tab — the Agent tab is taller (see matters.swift), and a
+    /// notch mod's tab asks for its own height (clamped to fit the window).
     func openSize(for view: NotchViews) -> CGSize {
-        view == .agent ? agentNotchSize : openNotchSize
+        switch view {
+        case .agent: return agentNotchSize
+        case .mod(let id):
+            guard let mod = NotchModStore.shared.mod(id: id) else { return openNotchSize }
+            return CGSize(width: openNotchSize.width, height: mod.manifest.tabHeight)
+        default: return openNotchSize
+        }
     }
 
     func open() {

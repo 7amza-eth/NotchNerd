@@ -24,11 +24,13 @@ public enum NotchState {
     case open
 }
 
-public enum NotchViews {
+public enum NotchViews: Hashable {
     case home
     case shelf
     case agent
     case notepad
+    /// A notch mod's tab, by mod id (see Mods/NotchModStore.swift).
+    case mod(String)
 }
 
 enum SettingsEnum {

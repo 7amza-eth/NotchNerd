@@ -1,0 +1,12 @@
+{
+  "id": "tally",
+  "name": "Tally",
+  "version": "1.0.0",
+  "minAppVersion": "0.3.4",
+  "author": "MK Builds",
+  "description": "A sample notch mod: a counter you can tap up and down, saved between launches.",
+  "surfaces": {
+    "tab": { "title": "Tally", "icon": "plusminus.circle", "height": 170 }
+  },
+  "permissions": ["storage"]
+}
