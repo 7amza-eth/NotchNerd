@@ -5,6 +5,7 @@ Connects Claude Code sessions to [NotchNerd](https://github.com/7amza-eth/NotchN
 - **Notepad tools.** Claude gets `notepad_list`, `notepad_read`, `notepad_append` and `notepad_new` over NotchNerd's always-open notepad, so it can read your scratch notes or leave you one.
 - **Notch messages.** Claude gets `notch_notify`, which flashes a short message in the closed notch: a deploy going live, tests failing, something waiting on you. Turn these off in NotchNerd under Settings → Mods.
 - **`/notch [text]`** jots a line into the open note.
+- **`/timer 25 [label]`** starts a countdown in the notch; it ends with a message and a sound. `/timer` shows what's left, `/timer stop` stops it. Claude can start one too (`notch_timer`), e.g. when you ask to be reminded in ten minutes.
 - **Reply from the notch.** With Settings → Agent → "Reply to sessions from the notch" on, what you type under a session in the notch is sent to it as your next prompt.
 
 ## Install
@@ -26,7 +27,7 @@ Everything stays on your Mac; the mod makes no network requests.
 - Writes requests to `Notepad/inbox/`, which NotchNerd applies and deletes. It never writes your notes directly.
 - For replies, writes a heartbeat to `Agent/mod-sessions/<session>.json` and reads replies from `Agent/outbox/<session>/`, deleting each one before submitting it.
 
-- For notch messages, writes a request to `Events/inbox/`, which NotchNerd shows and deletes.
+- For notch messages and timers, writes a request to `Events/inbox/`, which NotchNerd applies and deletes, and reads `Events/timer.json` for `/timer`.
 
 If NotchNerd isn't running, notepad writes wait in the inbox until it starts. Notch messages older than a minute are dropped instead of shown late.
 
@@ -40,6 +41,8 @@ Any mod (or script) can use NotchNerd's event inbox. Write one JSON file per mes
 ```
 
 `message` is required. Optional: `title` (short source label, default "Claude Code"), `style` (`info`, `success`, `warning` or `error`), `icon` (an SF Symbol name), `duration` (2 to 10 seconds, default 4), `sound` (true plays the notification sound) and `createdAt` (milliseconds since the epoch; messages more than a minute old are dropped). NotchNerd deletes the file once it has read it.
+
+A countdown works the same way: `{ "version": 1, "type": "timer", "op": "start", "minutes": 25, "label": "Write tests" }` starts one (replacing any running timer) and `{ "version": 1, "type": "timer", "op": "stop" }` stops it. While one runs, NotchNerd keeps `Events/timer.json` (`endsAt` in milliseconds, `minutes`, `label`) so you can read it.
 
 ## License
 

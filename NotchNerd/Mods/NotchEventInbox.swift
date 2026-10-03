@@ -16,7 +16,16 @@
 //
 //  `message` is required; `style` is info | success | warning | error; `icon` is an SF Symbol name
 //  (falls back to the style's); `duration` is clamped to 2–10s; `createdAt` (ms) lets a toast queued
-//  while NotchNerd wasn't running be dropped instead of shown late. Unknown types are discarded, so
+//  while NotchNerd wasn't running be dropped instead of shown late.
+//
+//  "timer" runs one focus countdown in the closed notch, ending with a toast and sound:
+//
+//    { "version": 1, "type": "timer", "op": "start", "minutes": 25, "label": "Write tests" }
+//    { "version": 1, "type": "timer", "op": "stop" }
+//
+//  `minutes` is clamped to 1–240; starting replaces any running timer. While one runs, the app keeps
+//  Events/timer.json = { endsAt (ms), minutes, label } so readers (the mod's /focus) can show it, and
+//  so it survives a relaunch. Unknown types are discarded, so
 //  new types can be added without breaking older apps. Writers can't rename atomically, so a file
 //  that won't decode is retried for 10s, then moved to inbox/rejected/ (same as the notepad inbox).
 //
@@ -57,17 +66,30 @@ struct NotchToast: Equatable, Identifiable {
     let duration: TimeInterval
 }
 
+/// A focus countdown shown in the closed notch.
+struct FocusTimer: Equatable, Codable {
+    /// Milliseconds since the epoch, like `createdAt`.
+    let endsAt: Double
+    let minutes: Double
+    let label: String
+
+    var endDate: Date { Date(timeIntervalSince1970: endsAt / 1000) }
+}
+
 @MainActor
 final class NotchEventInbox: ObservableObject {
     static let shared = NotchEventInbox()
 
     /// The toast on screen, if any.
     @Published private(set) var toast: NotchToast?
+    /// The running focus timer, if any.
+    @Published private(set) var timer: FocusTimer?
 
     static let rootDirectory: URL = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("NotchNerd/Events", isDirectory: true)
     private var inboxDir: URL { Self.rootDirectory.appendingPathComponent("inbox", isDirectory: true) }
+    private var timerStateURL: URL { Self.rootDirectory.appendingPathComponent("timer.json") }
 
     /// Toasts older than this when read (queued while the app was down) are dropped.
     private static let maxAge: TimeInterval = 60
@@ -85,6 +107,9 @@ final class NotchEventInbox: ObservableObject {
         let duration: Double?
         let sound: Bool?
         let createdAt: Double?
+        let op: String?
+        let minutes: Double?
+        let label: String?
     }
 
     private let fm = FileManager.default
@@ -93,6 +118,7 @@ final class NotchEventInbox: ObservableObject {
     private var unreadableSince: [String: Date] = [:]
     private var queue: [NotchToast] = []
     private var hideTask: Task<Void, Never>?
+    private var timerTask: Task<Void, Never>?
 
     private init() {}
 
@@ -110,12 +136,14 @@ final class NotchEventInbox: ObservableObject {
             source.resume()
             self.source = source
         }
+        restoreTimer()
         scheduleScan()
     }
 
     /// Shows a toast now (or after the ones already waiting). Also the entry point for in-app callers.
-    func show(_ toast: NotchToast, sound: Bool = false) {
-        guard Defaults[.modToastsEnabled] else { return }
+    /// `always` skips the "Let mods show messages" switch, for alerts the user asked for (a timer ending).
+    func show(_ toast: NotchToast, sound: Bool = false, always: Bool = false) {
+        guard always || Defaults[.modToastsEnabled] else { return }
         if sound, !Defaults[.agentSoundMuted] {
             let name = Defaults[.agentSoundName]
             AgentNotificationSound.play(name.isEmpty ? AgentNotificationSound.fallbackSoundName : name)
@@ -191,9 +219,58 @@ final class NotchEventInbox: ObservableObject {
                Date().timeIntervalSince1970 - createdAt / 1000 > Self.maxAge { return }
             guard let toast = Self.toast(from: request) else { return }
             show(toast, sound: request.sound ?? false)
+        case "timer":
+            if request.op == "stop" {
+                stopTimer()
+            } else if request.op == "start", let minutes = request.minutes {
+                startTimer(minutes: minutes, label: Self.clean(request.label, limit: 32))
+            }
         default:
             break   // Unknown type: from a newer mod. Dropped (the file is already gone).
         }
+    }
+
+    // MARK: Focus timer
+
+    func startTimer(minutes: Double, label: String) {
+        let minutes = min(max(minutes, 1), 240)
+        let endsAt = (Date().timeIntervalSince1970 + minutes * 60) * 1000
+        setTimer(FocusTimer(endsAt: endsAt, minutes: minutes, label: label.isEmpty ? "Focus" : label))
+    }
+
+    func stopTimer() {
+        setTimer(nil)
+    }
+
+    private func setTimer(_ new: FocusTimer?) {
+        timerTask?.cancel()
+        withAnimation(.smooth(duration: 0.3)) { timer = new }
+        if let new, let data = try? JSONEncoder().encode(new) {
+            try? data.write(to: timerStateURL, options: .atomic)
+        } else {
+            try? fm.removeItem(at: timerStateURL)
+        }
+        guard let new else { return }
+        timerTask = Task { [weak self] in
+            let wait = new.endDate.timeIntervalSinceNow
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard let self, !Task.isCancelled else { return }
+            self.setTimer(nil)
+            self.show(NotchToast(title: new.label, message: "Done. \(Self.minutesText(new.minutes)) up", style: .success,
+                                 symbol: "timer", duration: 8), sound: true, always: true)
+        }
+    }
+
+    /// Picks a timer back up after a relaunch. One that ended while the app was down is just cleared.
+    private func restoreTimer() {
+        guard let data = try? Data(contentsOf: timerStateURL),
+              let saved = try? JSONDecoder().decode(FocusTimer.self, from: data) else { return }
+        setTimer(saved.endDate > Date() ? saved : nil)
+    }
+
+    private static func minutesText(_ minutes: Double) -> String {
+        let whole = Int(minutes.rounded())
+        return whole == 1 ? "1 minute" : "\(whole) minutes"
     }
 
     private static func toast(from request: Request) -> NotchToast? {
@@ -253,5 +330,49 @@ struct NotchToastView: View {
         }
         .id(toast.id)
         .transition(.opacity)
+    }
+}
+
+/// The focus timer in the closed notch: icon + label on the left wing, the countdown on the right.
+struct NotchTimerView: View {
+    let timer: FocusTimer
+    let notchWidth: CGFloat
+    let leftWing: CGFloat
+    let rightWing: CGFloat
+
+    var body: some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "timer")
+                    .foregroundStyle(.orange)
+                Text(timer.label)
+                    .foregroundStyle(.gray)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .font(.subheadline)
+            .padding(.leading, 12)
+            .frame(width: leftWing, alignment: .leading)
+
+            Rectangle()
+                .fill(.black)
+                .frame(width: notchWidth)
+
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(Self.remaining(until: timer.endDate, now: context.date))
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText(countsDown: true))
+            }
+            .padding(.trailing, 12)
+            .frame(width: rightWing, alignment: .trailing)
+        }
+        .transition(.opacity)
+    }
+
+    static func remaining(until end: Date, now: Date) -> String {
+        let seconds = max(0, Int(end.timeIntervalSince(now).rounded(.up)))
+        let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60)
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 }

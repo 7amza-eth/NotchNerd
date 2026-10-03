@@ -69,6 +69,14 @@ struct ContentView: View {
         eventInbox.toast != nil && vm.notchState == .closed && !vm.hideOnClosed
     }
 
+    /// A focus timer is running: shown in the closed notch above music (it's what you chose to focus
+    /// on), below a toast and "needs you".
+    private let timerLeftWing: CGFloat = 140
+    private let timerRightWing: CGFloat = 80
+    private var timerIsActive: Bool {
+        eventInbox.timer != nil && vm.notchState == .closed && !vm.hideOnClosed
+    }
+
     private var topCornerRadius: CGFloat {
        ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
                 ? cornerRadiusInsets.opened.top
@@ -87,7 +95,8 @@ struct ContentView: View {
     /// True when the closed-notch music live-activity is on screen. Agent status then rides the music
     /// visualizer slot rather than replacing the notch, so music and Claude status "play nice".
     private var musicIsShowing: Bool {
-        (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
+        !timerIsActive
+            && (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
             && vm.notchState == .closed
             && (musicManager.isPlaying || !musicManager.isPlayerIdle)
             && coordinator.musicLiveActivityEnabled
@@ -99,7 +108,7 @@ struct ContentView: View {
     /// NotchLayout(), computedChinWidth and closedNotchHOffset all use this, so they stay in step.
     private var modChipShowing: (chip: NotchModChip, textWidth: CGFloat)? {
         // A notify() notice also shows over Claude "working"; a mod's standing chip doesn't.
-        guard vm.notchState == .closed, !vm.hideOnClosed, !musicIsShowing,
+        guard vm.notchState == .closed, !vm.hideOnClosed, !musicIsShowing, !timerIsActive,
               agent.workingCount == 0 || modChips.notice != nil,
               agent.attentionCount == 0,
               !(coordinator.expandingView.type == .battery && coordinator.expandingView.show
@@ -117,11 +126,13 @@ struct ContentView: View {
         let statusPadding = 2 * (agentStatusFlankWidth + 6)
 
         // Mirror NotchLayout()'s closed-notch branch priority so the chin matches what's drawn:
-        // toast → attention (only without music) → battery → music → agent-live → face.
+        // toast → attention (only without music) → timer → battery → music → agent-live → face.
         if toastIsShowing {
             chinWidth += toastLeftWing + toastRightWing
         } else if agent.attentionCount > 0 && vm.notchState == .closed && !musicIsShowing {
             chinWidth += attentionPadding
+        } else if timerIsActive {
+            chinWidth += timerLeftWing + timerRightWing
         } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
@@ -150,6 +161,7 @@ struct ContentView: View {
     /// the wider (text) side. Zero in every other state.
     private var closedNotchHOffset: CGFloat {
         if toastIsShowing { return (toastRightWing - toastLeftWing) / 2 }
+        if timerIsActive && agent.attentionCount == 0 { return (timerRightWing - timerLeftWing) / 2 }
         if let modChip = modChipShowing {
             // Small icon wing left, text wing right: grow only on the text side.
             return (modChip.textWidth - NotchModClosedChip.iconSlot) / 2
@@ -390,6 +402,10 @@ struct ContentView: View {
                             textFlank: agentAttentionFlankWidth
                         )
                         .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                    } else if timerIsActive, let timer = eventInbox.timer {
+                        NotchTimerView(timer: timer, notchWidth: vm.closedNotchSize.width,
+                                       leftWing: timerLeftWing, rightWing: timerRightWing)
+                            .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                     } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
                         && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
                     {

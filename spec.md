@@ -405,6 +405,13 @@ left wing, message on a 250pt right wing, notch shifted via `closedNotchHOffset`
 is open or hidden. Gated by `Defaults[.modToastsEnabled]` (Settings → Mods → "In the notch", with a Test
 button). The NotchNerd mod (0.2.0) exposes it as the `notch_notify` tool; the file format is in its README
 so other mods (deploy-watch, prod-guard) can post directly.
+Type **`timer`** (`op: start` with `minutes` 1–240 + `label`, or `op: stop`) runs one countdown in the closed
+notch (`NotchTimerView`, timer icon + label | `M:SS`), ranked toast → "needs you" → **timer** → battery →
+music (`musicIsShowing` is false while a timer runs). The app persists it as `Events/timer.json`
+(`{endsAt ms, minutes, label}`, restored on launch, deleted on stop/end) and ends it with an 8s toast + sound.
+The mod drives it with `/timer [min] [label] | stop` and the `notch_timer` tool. **Not `/focus`:** that's a
+Claude Code built-in, and a refused `$.command.register` throws, which aborted the whole `session.start` hook
+(tools, reply loop); command registration is now caught per command.
 
 **Notch mods (`NotchNerd/Mods/NotchMod*.swift`; template `tooling/notch-mod-sample/`).** Mods that
 change NotchNerd itself, on Obsidian's model: an author ships `notch-mod.json` + web files (HTML, JS,

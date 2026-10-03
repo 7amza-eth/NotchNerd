@@ -27,6 +27,8 @@
 //
 //   ~/Library/Application Support/NotchNerd/Events/inbox/<ms>-<rand>.json
 //     { version: 1, type: "toast", message, title?, style?, icon?, duration?, sound?, createdAt }
+//     { version: 1, type: "timer", op: "start", minutes, label } | { version: 1, type: "timer", op: "stop" }
+//   Events/timer.json   { endsAt, minutes, label } while a focus timer runs (written by NotchNerd)
 
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -79,12 +81,60 @@ type ToastRequest = {
 }
 
 const TOAST_STYLES = ['info', 'success', 'warning', 'error'] as const
+const NOT_RUNNING = "NotchNerd didn't pick it up (it may not be running)."
 
-async function postToast($: EngineInterface, request: ToastRequest): Promise<boolean> {
+async function readTimer($: EngineInterface): Promise<TimerState | undefined> {
+  try {
+    const state = JSON.parse(await $.fs.read(`${await eventsRoot($)}/timer.json`)) as TimerState
+    return state.endsAt > (await $.clock.now()) ? state : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function remaining(state: TimerState, now: number): string {
+  const minutes = Math.max(1, Math.ceil((state.endsAt - now) / 60_000))
+  return minutes === 1 ? 'under a minute' : `${minutes} minutes`
+}
+
+// "25", "25m", "1h", "1.5h" → minutes; anything else is undefined.
+function parseMinutes(token: string | undefined): number | undefined {
+  const match = /^(\d+(?:\.\d+)?)(m|min|h|hr)?$/i.exec(token ?? '')
+  if (!match) return undefined
+  const value = Number(match[1])
+  return /^h/i.test(match[2] ?? '') ? value * 60 : value
+}
+
+async function startTimer($: EngineInterface, minutes: number, label: string): Promise<string> {
+  const clamped = Math.min(Math.max(minutes, 1), 240)
+  const isApplied = await postEvent($, { version: 1, type: 'timer', op: 'start', minutes: clamped, label: label || null })
+  const what = `${label || 'Focus'}: ${clamped} minute${clamped === 1 ? '' : 's'}`
+  return isApplied ? `Timer started in the notch (${what}).` : `${NOT_RUNNING} Timer not started.`
+}
+
+async function stopTimer($: EngineInterface): Promise<string> {
+  const running = await readTimer($)
+  if (!running) return 'No timer is running.'
+  const isApplied = await postEvent($, { version: 1, type: 'timer', op: 'stop' })
+  return isApplied ? `Stopped "${running.label}".` : `${NOT_RUNNING} Timer not stopped.`
+}
+
+type TimerRequest =
+  | { version: 1; type: 'timer'; op: 'start'; minutes: number; label: string | null }
+  | { version: 1; type: 'timer'; op: 'stop' }
+
+type TimerState = { endsAt: number; minutes: number; label: string }
+
+async function eventsRoot($: EngineInterface): Promise<string> {
   const home = await $.env.get('HOME')
   if (!home) throw new NotepadError('HOME is not set, so NotchNerd cannot be located.')
+  return `${home}/Library/Application Support/NotchNerd/Events`
+}
+
+// Drops a request into NotchNerd's event inbox; true once the app has picked it up.
+async function postEvent($: EngineInterface, request: ToastRequest | TimerRequest): Promise<boolean> {
   const name = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.json`
-  const path = `${home}/Library/Application Support/NotchNerd/Events/inbox/${name}`
+  const path = `${await eventsRoot($)}/inbox/${name}`
   await $.fs.write(path, JSON.stringify(request))
   for (let waited = 0; waited < APPLY_WAIT_MS; waited += APPLY_POLL_MS) {
     await $.clock.sleep(APPLY_POLL_MS)
@@ -357,12 +407,38 @@ export const register: Register = on => {
         required: ['message'],
       },
     })
-    await $.command.register({
-      name: 'notch',
-      description: 'Jot a line into the NotchNerd notepad (no text: show the open note)',
-      argumentHint: '[text]',
-      immediate: true,
+    await $.tool.register({
+      name: 'notch_timer',
+      description:
+        "Start or stop a countdown in the user's Mac notch (NotchNerd); when it ends the notch shows a message and plays a sound. Use when the user asks for a timer, a focus session or a reminder in N minutes. One timer at a time: starting replaces the running one.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          minutes: { type: 'number', description: 'Length in minutes, 1 to 240. Omit with stop.' },
+          label: { type: 'string', description: 'What it is for, a few words (e.g. "Write tests", "Tea").' },
+          stop: { type: 'boolean', description: 'Stop the running timer instead of starting one.' },
+        },
+      },
     })
+    // A command whose name Claude Code later takes as a built-in is refused; skip it rather than let
+    // the throw stop the rest of this hook (the tools above and the reply loop below).
+    const commands = [
+      {
+        name: 'timer',
+        description: 'Countdown in the notch: /timer 25 [label], /timer stop, or /timer to see what is left',
+        argumentHint: '[minutes] [label] | stop',
+        immediate: true as const,
+      },
+      {
+        name: 'notch',
+        description: 'Jot a line into the NotchNerd notepad (no text: show the open note)',
+        argumentHint: '[text]',
+        immediate: true as const,
+      },
+    ]
+    for (const command of commands) {
+      await $.command.register(command).catch(() => $.ui.toast(`NotchNerd: /${command.name} is taken, so it's off.`))
+    }
     startReplyLoop($, e.cwd, e.surface)
     return next(e)
   })
@@ -463,7 +539,7 @@ export const register: Register = on => {
     const title = asText(e.title).trim()
     const icon = asText(e.icon).trim()
     try {
-      const isShown = await postToast($, {
+      const isShown = await postEvent($, {
         version: 1,
         type: 'toast',
         message,
@@ -480,6 +556,35 @@ export const register: Register = on => {
         : "NotchNerd didn't pick it up (it may not be running), so it won't be shown." }
     } catch (error) {
       return { deny: error instanceof NotepadError ? error.message : `Could not reach NotchNerd: ${error}` }
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__notchnerd__notch_timer' }, async ($, e) => {
+    try {
+      if (e.stop === true) return { result: await stopTimer($) }
+      const minutes = typeof e.minutes === 'number' ? e.minutes : NaN
+      if (!(minutes > 0)) return { deny: 'Give `minutes` (1 to 240), or `stop: true`.' }
+      return { result: await startTimer($, minutes, asText(e.label).trim()) }
+    } catch (error) {
+      return { deny: error instanceof NotepadError ? error.message : `Could not reach NotchNerd: ${error}` }
+    }
+  })
+
+  on('command.run', { command: 'timer' }, async ($, e) => {
+    try {
+      const words = e.args.trim().split(/\s+/).filter(word => word !== '')
+      if (words.length === 0) {
+        const running = await readTimer($)
+        return { text: running
+          ? `${running.label}: ${remaining(running, await $.clock.now())} left.`
+          : 'No timer is running. Start one with /timer 25 [label].' }
+      }
+      if (/^(stop|cancel|off|end)$/i.test(words[0] ?? '')) return { text: await stopTimer($) }
+      const minutes = parseMinutes(words[0])
+      const label = (minutes === undefined ? words : words.slice(1)).join(' ')
+      return { text: await startTimer($, minutes ?? 25, label) }
+    } catch (error) {
+      return { text: error instanceof NotepadError ? error.message : `Could not reach NotchNerd: ${error}` }
     }
   })
 

@@ -53,7 +53,7 @@ struct ModsSettings: View {
             } header: {
                 Text("In the notch")
             } footer: {
-                Text("A mod with notch_notify (like the NotchNerd mod) can flash a short message in the closed notch: a deploy going live, tests passing, a session waiting on you. Any mod can do it by writing to NotchNerd's event inbox.")
+                Text("Mods can flash a short message in the closed notch (a deploy going live, tests failing) and run a countdown there: /timer 25 in the NotchNerd mod. Any mod can do it by writing to NotchNerd's event inbox. Turning this off doesn't stop timers.")
             }
 
             addSection
