@@ -30,11 +30,13 @@ enum ClaudeCLI {
 
     enum Failure: LocalizedError {
         case notFound
+        case toolNotFound(String)
         case timedOut
 
         var errorDescription: String? {
             switch self {
             case .notFound: return "Claude Code's claude command wasn't found."
+            case .toolNotFound(let name): return "The \(name) command wasn't found."
             case .timedOut: return "The claude command took too long and was stopped."
             }
         }
@@ -89,7 +91,27 @@ enum ClaudeCLI {
         }
     }
 
-    private static func runSync(_ executable: URL, _ arguments: [String], timeout: TimeInterval) throws -> Output {
+    /// Runs another command-line tool (git, say) found on the same search path, off the main thread.
+    /// Git is told never to prompt for credentials, so a private repo fails instead of hanging.
+    static func runTool(_ name: String, _ arguments: [String], timeout: TimeInterval = 120) async throws -> Output {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let fm = FileManager.default
+                    guard let path = searchPath.map({ "\($0)/\(name)" }).first(where: { fm.isExecutableFile(atPath: $0) }) else {
+                        throw Failure.toolNotFound(name)
+                    }
+                    continuation.resume(returning: try runSync(URL(fileURLWithPath: path), arguments, timeout: timeout,
+                                                               extraEnvironment: ["GIT_TERMINAL_PROMPT": "0"]))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private static func runSync(_ executable: URL, _ arguments: [String], timeout: TimeInterval,
+                                extraEnvironment: [String: String] = [:]) throws -> Output {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
@@ -97,6 +119,7 @@ enum ClaudeCLI {
         let inherited = environment["PATH"].map { [$0] } ?? []
         environment["PATH"] = (searchPath + inherited).joined(separator: ":")
         environment["NO_COLOR"] = "1"
+        environment.merge(extraEnvironment) { _, new in new }
         process.environment = environment
         process.standardInput = FileHandle.nullDevice
 

@@ -21,6 +21,12 @@
 //   ~/Library/Application Support/NotchNerd/Agent/
 //     mod-sessions/<sessionId>.json       { sessionId, cwd, surface, updatedAt, ended? }
 //     outbox/<sessionId>/<ms>-<rand>.json { version: 1, text }
+//
+// Notch toasts: `notch_notify` flashes a short message in the closed notch by
+// dropping a request into NotchNerd's event inbox, which any mod may write to.
+//
+//   ~/Library/Application Support/NotchNerd/Events/inbox/<ms>-<rand>.json
+//     { version: 1, type: "toast", message, title?, style?, icon?, duration?, sound?, createdAt }
 
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -58,6 +64,34 @@ const APPLY_POLL_MS = 150
 const MAX_READ_CHARS = 100_000
 
 class NotepadError extends Error {}
+
+type ToastRequest = {
+  version: 1
+  type: 'toast'
+  message: string
+  title: string | null
+  style: 'info' | 'success' | 'warning' | 'error'
+  icon: string | null
+  duration: number | null
+  sound: boolean
+  createdAt: number
+  source: string
+}
+
+const TOAST_STYLES = ['info', 'success', 'warning', 'error'] as const
+
+async function postToast($: EngineInterface, request: ToastRequest): Promise<boolean> {
+  const home = await $.env.get('HOME')
+  if (!home) throw new NotepadError('HOME is not set, so NotchNerd cannot be located.')
+  const name = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.json`
+  const path = `${home}/Library/Application Support/NotchNerd/Events/inbox/${name}`
+  await $.fs.write(path, JSON.stringify(request))
+  for (let waited = 0; waited < APPLY_WAIT_MS; waited += APPLY_POLL_MS) {
+    await $.clock.sleep(APPLY_POLL_MS)
+    if (!(await $.fs.exists(path))) return true
+  }
+  return false
+}
 
 async function notepadRoot($: EngineInterface): Promise<string> {
   const home = await $.env.get('HOME')
@@ -302,6 +336,27 @@ export const register: Register = on => {
         required: ['text'],
       },
     })
+    await $.tool.register({
+      name: 'notch_notify',
+      description:
+        "Flash a short message in the user's Mac notch (NotchNerd) for a few seconds. Use it when the user asks to be told in the notch, or to flag something they'd want to see while looking elsewhere: a long build, test run or deploy finishing, or something waiting on them. One short phrase, not a summary; don't use it for routine progress.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          message: { type: 'string', description: 'The message, a few words (shown on one line, about 30 characters fit).' },
+          title: { type: 'string', description: 'Short label for where it comes from, e.g. the project name. Defaults to "Claude Code".' },
+          style: {
+            type: 'string',
+            enum: [...TOAST_STYLES],
+            description: 'info (default), success, warning or error. Sets the icon and its color.',
+          },
+          icon: { type: 'string', description: 'Optional SF Symbol name to use instead of the style\'s icon.' },
+          duration: { type: 'number', description: 'Seconds on screen, 2 to 10. Default 4.' },
+          sound: { type: 'boolean', description: 'Also play the notification sound. Default false.' },
+        },
+        required: ['message'],
+      },
+    })
     await $.command.register({
       name: 'notch',
       description: 'Jot a line into the NotchNerd notepad (no text: show the open note)',
@@ -398,6 +453,33 @@ export const register: Register = on => {
         ) }
     } catch (error) {
       return { deny: error instanceof NotepadError ? error.message : `Could not write to the notepad: ${error}` }
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__notchnerd__notch_notify' }, async ($, e) => {
+    const message = asText(e.message).trim()
+    if (message === '') return { deny: '`message` is empty; nothing to show.' }
+    const style = TOAST_STYLES.find(s => s === e.style) ?? 'info'
+    const title = asText(e.title).trim()
+    const icon = asText(e.icon).trim()
+    try {
+      const isShown = await postToast($, {
+        version: 1,
+        type: 'toast',
+        message,
+        title: title === '' ? null : title,
+        style,
+        icon: icon === '' ? null : icon,
+        duration: typeof e.duration === 'number' ? e.duration : null,
+        sound: e.sound === true,
+        createdAt: await $.clock.now(),
+        source: 'claude-code',
+      })
+      return { result: isShown
+        ? `Shown in the notch: "${message}".`
+        : "NotchNerd didn't pick it up (it may not be running), so it won't be shown." }
+    } catch (error) {
+      return { deny: error instanceof NotepadError ? error.message : `Could not reach NotchNerd: ${error}` }
     }
   })
 

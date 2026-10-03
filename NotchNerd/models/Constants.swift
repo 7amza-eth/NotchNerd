@@ -237,6 +237,10 @@ extension Defaults.Keys {
     static let notchModDevelopmentFolders = Key<[String]>("notchModDevelopmentFolders", default: [])
     // The mod whose closed-notch chip shows; "" = the first enabled mod that has one.
     static let notchModChipID = Key<String>("notchModChipID", default: "")
+    // Marketplaces the user added from a link in Settings → Mods → "Add a mod", whose mods are listed there.
+    static let modsAddedMarketplaces = Key<[String]>("modsAddedMarketplaces", default: [])
+    // Mods can show a short message in the closed notch through the event inbox (NotchEventInbox).
+    static let modToastsEnabled = Key<Bool>("modToastsEnabled", default: true)
 
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)

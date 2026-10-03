@@ -2,8 +2,8 @@
 //  ModsSettingsView.swift
 //  NotchNerd
 //
-//  Settings → Mods. Lists the Claude Code mods in the MK Builds marketplace and installs,
-//  updates or removes them through the claude CLI. See ModCatalog.swift.
+//  Settings → Mods. Adds mods from a link (AddedMods.swift), lists the Claude Code mods in the
+//  MK Builds marketplace, and installs, updates or removes them through the claude CLI. See ModCatalog.swift.
 //
 
 import Defaults
@@ -12,7 +12,9 @@ import SwiftUI
 struct ModsSettings: View {
     @ObservedObject private var store = ModCatalogStore.shared
     @Default(.modsShowCommunity) private var showCommunity
+    @Default(.modToastsEnabled) private var toastsEnabled
     @State private var search = ""
+    @State private var link = ""
 
     private func matches(_ listing: ModListing) -> Bool {
         let query = search.trimmingCharacters(in: .whitespaces)
@@ -37,6 +39,24 @@ struct ModsSettings: View {
             } footer: {
                 Text("Mods run inside Claude Code sessions, in the terminal or the desktop app's Code tab. Installing here is the same as running `claude plugin install <id>@\(ModCatalogStore.marketplaceName)`. New sessions pick up the change.")
             }
+
+            Section {
+                HStack {
+                    Defaults.Toggle(key: .modToastsEnabled) { Text("Let mods show messages in the notch") }
+                    Spacer()
+                    Button("Test") {
+                        NotchEventInbox.shared.show(NotchToast(title: "NotchNerd", message: "Mods can show messages here",
+                                                               style: .success, symbol: NotchToast.Style.success.symbol, duration: 4))
+                    }
+                    .disabled(!toastsEnabled)
+                }
+            } header: {
+                Text("In the notch")
+            } footer: {
+                Text("A mod with notch_notify (like the NotchNerd mod) can flash a short message in the closed notch: a deploy going live, tests passing, a session waiting on you. Any mod can do it by writing to NotchNerd's event inbox.")
+            }
+
+            addSection
 
             if !store.installedRemoved.isEmpty {
                 Section {
@@ -107,6 +127,75 @@ struct ModsSettings: View {
         .accentColor(.effectiveAccent)
         .navigationTitle("Mods")
         .task { await store.refresh() }
+        .alert(pendingTitle, isPresented: Binding(get: { store.pendingAdd != nil }, set: { if !$0 { store.pendingAdd = nil } }),
+               presenting: store.pendingAdd) { pending in
+            Button(pendingConfirmLabel(pending)) {
+                store.confirmAdd()
+                link = ""
+            }
+            Button("Cancel", role: .cancel) { store.pendingAdd = nil }
+        } message: { pending in
+            Text(pendingMessage(pending))
+        }
+    }
+
+    private var cliReady: Bool { if case .found = store.cli { return true } else { return false } }
+
+    @ViewBuilder private var addSection: some View {
+        Section {
+            HStack {
+                TextField("Mod link", text: $link, prompt: Text("owner/repo or a GitHub link"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { store.lookUp(link) }
+                    .disabled(store.addProgress != nil)
+                Button("Add") { store.lookUp(link) }
+                    .disabled(!cliReady || store.addProgress != nil || link.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let progress = store.addProgress {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(progress).font(.caption).foregroundStyle(.secondary)
+                }
+            } else if let message = store.addMessage {
+                Label(message.text, systemImage: message.isError ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(message.isError ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(store.addedListings, id: \.pluginID) { ModRow(listing: $0) }
+        } header: {
+            Text("Add a mod")
+        } footer: {
+            Text("Paste a GitHub repo, a link to a mod's folder in one, or any git URL, and NotchNerd installs it into Claude Code for you. No folder to keep around and no --plugin-dir. Mods you add yourself aren't checked by anyone: they run code on your Mac as you, so add only ones you trust.")
+        }
+    }
+
+    private var pendingTitle: String {
+        switch store.pendingAdd?.kind {
+        case .mod(let name, _, _, let version): return "Install \(name)\(version.map { " \($0)" } ?? "")?"
+        case .marketplace(let name, _, _): return "Add the \(name) marketplace?"
+        case nil: return ""
+        }
+    }
+
+    private func pendingConfirmLabel(_ pending: PendingModAdd) -> String {
+        if case .marketplace(_, _, let plugins) = pending.kind, plugins.count != 1 { return "Add" }
+        return "Install"
+    }
+
+    private func pendingMessage(_ pending: PendingModAdd) -> String {
+        let warning = "It runs code on your Mac as you, inside Claude Code. Only continue if you trust it."
+        switch pending.kind {
+        case .mod(_, let description, let author, _):
+            return [description, author.map { "By \($0)." }, "From \(pending.link.display).", warning]
+                .compactMap { $0 }.joined(separator: "\n\n")
+        case .marketplace(_, _, let plugins):
+            let list = plugins.isEmpty ? "It lists no mods yet." : "It has \(plugins.count == 1 ? "one mod" : "\(plugins.count) mods"): \(plugins.joined(separator: ", "))."
+            return ["From \(pending.link.display).", list, plugins.count == 1 ? warning : "You pick which to install. \(warning)"]
+                .joined(separator: "\n\n")
+        }
     }
 
     @ViewBuilder private var loadingRow: some View {
@@ -142,6 +231,8 @@ private struct RemovedModRow: View {
     let mod: RemovedMod
     @ObservedObject private var store = ModCatalogStore.shared
 
+    private var pluginID: String { "\(mod.id)@\(ModCatalogStore.marketplaceName)" }
+
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
@@ -149,16 +240,16 @@ private struct RemovedModRow: View {
                 Label(mod.reason, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.orange)
-                if let message = store.messages[mod.id] {
+                if let message = store.messages[pluginID] {
                     Text(message.text).font(.caption).foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            if let label = store.busy[mod.id] {
+            if let label = store.busy[pluginID] {
                 ProgressView().controlSize(.small)
                 Text(label).font(.caption).foregroundStyle(.secondary)
             } else {
-                Button("Remove") { store.uninstall(id: mod.id) }
+                Button("Remove") { store.uninstall(pluginID: pluginID) }
             }
         }
         .padding(.vertical, 4)
@@ -199,7 +290,7 @@ private struct ModRow: View {
                 Spacer(minLength: 8)
                 actions
             }
-            if let message = store.messages[listing.name] {
+            if let message = store.messages[listing.pluginID] {
                 Label(message.text, systemImage: message.isError ? "exclamationmark.triangle.fill" : "info.circle")
                     .font(.caption)
                     .foregroundStyle(message.isError ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
@@ -232,7 +323,7 @@ private struct ModRow: View {
     }
 
     @ViewBuilder private var actions: some View {
-        if let label = store.busy[listing.name] {
+        if let label = store.busy[listing.pluginID] {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text(label).font(.caption).foregroundStyle(.secondary)
@@ -240,7 +331,19 @@ private struct ModRow: View {
         } else {
             switch status {
             case .notInstalled:
-                if listing.isInstallable {
+                if listing.marketplace == ModCatalogStore.addedMarketplaceName {
+                    HStack(spacing: 6) {
+                        Button("Install") { store.install(listing) }
+                        Button {
+                            store.forget(listing)
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove from this list")
+                    }
+                    .disabled(!cliReady)
+                } else if listing.isInstallable {
                     Button("Install") { store.install(listing) }
                         .disabled(!cliReady)
                 } else {
@@ -255,8 +358,11 @@ private struct ModRow: View {
                         Button("Update") { store.update(listing) }
                     }
                     Menu {
+                        if listing.marketplace != ModCatalogStore.marketplaceName {
+                            Button("Check for updates") { store.update(listing) }
+                        }
                         Button(enabled ? "Disable" : "Enable") { store.setEnabled(!enabled, listing) }
-                        Button("Remove", role: .destructive) { store.uninstall(id: listing.id) }
+                        Button("Remove", role: .destructive) { store.uninstall(pluginID: listing.pluginID) }
                         if let homepage = listing.homepage {
                             Divider()
                             Button("Open homepage") { NSWorkspace.shared.open(homepage) }

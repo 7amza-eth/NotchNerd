@@ -486,6 +486,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotesStore.shared.startInbox()
         // Run the logic of enabled notch mods (no-op when none are on; see Mods/NotchModRuntime.swift).
         NotchModRuntimeManager.shared.start()
+        // Show toasts and other events mods drop into Events/inbox/.
+        NotchEventInbox.shared.start()
 
         // Replay the feature tour on demand (menu-bar "Feature Tour" + Settings "Replay feature tour").
         NotificationCenter.default.addObserver(

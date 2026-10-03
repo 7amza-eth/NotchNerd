@@ -382,6 +382,29 @@ default OFF, like Obsidian's Restricted mode). A mod also loaded as `name@inline
 `NOTCHNERD_MODS_REGISTRY` (env; raw-URL prefix or local folder) points the app at another registry
 for testing. To test installs without touching your real Claude config, launch the Debug build with
 `open -n --env CLAUDE_CONFIG_DIR=<scratch dir> …`.
+**Add a mod from a link (`NotchNerd/Mods/AddedMods.swift`).** The "Add a mod" field takes `owner/repo`,
+a `github.com/<o>/<r>/tree/<ref>/<path>` link, or any git URL, and installs it without the directory or
+`--plugin-dir`. `claude plugin install` only installs from marketplaces, so the app keeps its own:
+**`notchnerd-added`** at `~/Library/Application Support/NotchNerd/Mods/added/.claude-plugin/marketplace.json`
+(a `directory` marketplace, added on first install). Lookup shallow-clones the link (`git`, with
+`GIT_TERMINAL_PROMPT=0`) to read `.claude-plugin/plugin.json`, refuses a name already installed from
+another source, and asks to confirm (with a run-as-you warning); confirming writes an entry
+(`github` / `git-subdir` / `url` source, `ref` from the link) and runs `plugin install <name>@notchnerd-added`.
+Removing uninstalls (`--keep-data`) and drops the entry. A link that is a marketplace
+(`marketplace.json`) is `marketplace add`ed instead and tracked in `Defaults[.modsAddedMarketplaces]`;
+its mods are listed under "Add a mod" with Install buttons (a one-mod marketplace installs directly).
+
+**Event inbox + notch toasts (`NotchNerd/Mods/NotchEventInbox.swift`).** The general channel for mods to
+put something in the notch: one JSON file per request in `~/Library/Application Support/NotchNerd/Events/inbox/`
+(`{ version: 1, type, … }`), watched with a `DispatchSource` like the notepad inbox (unreadable files retried
+10s, then moved to `rejected/`; unknown types dropped so new ones can be added). The only type so far is
+**`toast`** (`message`, `title?`, `style?` info|success|warning|error, `icon?` SF Symbol, `duration?` 2–10s,
+`sound?`, `createdAt` ms; >60s old is dropped; queue capped at 5, shown one after another). A toast takes over
+the **closed** notch above every other status (`toastIsShowing` in `ContentView`): icon + title on a 140pt
+left wing, message on a 250pt right wing, notch shifted via `closedNotchHOffset`. Not shown while the notch
+is open or hidden. Gated by `Defaults[.modToastsEnabled]` (Settings → Mods → "In the notch", with a Test
+button). The NotchNerd mod (0.2.0) exposes it as the `notch_notify` tool; the file format is in its README
+so other mods (deploy-watch, prod-guard) can post directly.
 
 **Notch mods (`NotchNerd/Mods/NotchMod*.swift`; template `tooling/notch-mod-sample/`).** Mods that
 change NotchNerd itself, on Obsidian's model: an author ships `notch-mod.json` + web files (HTML, JS,

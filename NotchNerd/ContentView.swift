@@ -25,6 +25,7 @@ struct ContentView: View {
     @ObservedObject var volumeManager = VolumeManager.shared
     @ObservedObject var agent = AgentBridgeManager.shared
     @ObservedObject var modChips = NotchModChipCenter.shared
+    @ObservedObject var eventInbox = NotchEventInbox.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -58,6 +59,15 @@ struct ContentView: View {
     /// plus the leading sparkle + spacing (~18). Derived so the right padding after "needs you" MATCHES
     /// the Claude-only notch — the two read as the same size. The notch expands only on this side.
     private var musicAttentionSlotWidth: CGFloat { agentAttentionFlankWidth + 18 }
+    /// A mod toast (NotchEventInbox) is asymmetric like the attention pill: icon + source on a narrow
+    /// left wing, the message on a wider right one, with the notch shifted to keep the cutout bridged.
+    private let toastLeftWing: CGFloat = 140
+    private let toastRightWing: CGFloat = 250
+
+    /// A mod toast is on screen. It briefly takes the closed notch over every other status.
+    private var toastIsShowing: Bool {
+        eventInbox.toast != nil && vm.notchState == .closed && !vm.hideOnClosed
+    }
 
     private var topCornerRadius: CGFloat {
        ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
@@ -107,8 +117,10 @@ struct ContentView: View {
         let statusPadding = 2 * (agentStatusFlankWidth + 6)
 
         // Mirror NotchLayout()'s closed-notch branch priority so the chin matches what's drawn:
-        // attention (only without music) → battery → music → agent-live → face.
-        if agent.attentionCount > 0 && vm.notchState == .closed && !musicIsShowing {
+        // toast → attention (only without music) → battery → music → agent-live → face.
+        if toastIsShowing {
+            chinWidth += toastLeftWing + toastRightWing
+        } else if agent.attentionCount > 0 && vm.notchState == .closed && !musicIsShowing {
             chinWidth += attentionPadding
         } else if coordinator.expandingView.type == .battery && coordinator.expandingView.show
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
@@ -137,6 +149,7 @@ struct ContentView: View {
     /// notch-width black bridge stays centered on the hardware cutout while the shape expands only on
     /// the wider (text) side. Zero in every other state.
     private var closedNotchHOffset: CGFloat {
+        if toastIsShowing { return (toastRightWing - toastLeftWing) / 2 }
         if let modChip = modChipShowing {
             // Small icon wing left, text wing right: grow only on the text side.
             return (modChip.textWidth - NotchModClosedChip.iconSlot) / 2
@@ -365,7 +378,11 @@ struct ContentView: View {
                     .padding(.top, 40)
                     Spacer()
                 } else {
-                    if agent.attentionCount > 0 && vm.notchState == .closed && !musicIsShowing {
+                    if toastIsShowing, let toast = eventInbox.toast {
+                        NotchToastView(toast: toast, notchWidth: vm.closedNotchSize.width,
+                                       leftWing: toastLeftWing, rightWing: toastRightWing)
+                            .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                    } else if agent.attentionCount > 0 && vm.notchState == .closed && !musicIsShowing {
                         AgentClosedIndicator(
                             count: agent.attentionCount,
                             notchWidth: vm.closedNotchSize.width,

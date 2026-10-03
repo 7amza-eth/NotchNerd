@@ -30,6 +30,11 @@ struct ModListing: Identifiable, Equatable {
     let isOfficial: Bool
     /// In the generated marketplace, so `claude plugin install` can find it.
     let isInstallable: Bool
+    /// The Claude Code marketplace it installs from: the directory's, or one the user added.
+    var marketplace: String = ModCatalogStore.marketplaceName
+
+    /// What `claude plugin …` calls it, and the key for its busy state and messages.
+    var pluginID: String { "\(id)@\(marketplace)" }
 }
 
 /// A mod taken out of the directory (`community-mods-removed.json`).
@@ -121,6 +126,8 @@ final class ModCatalogStore: ObservableObject {
         }
         return URL(string: "https://raw.githubusercontent.com/mkbuilds4/mods/main/")!
     }()
+    /// The marketplace NotchNerd writes for mods added from a link (AddedMods.swift).
+    static let addedMarketplaceName = "notchnerd-added"
     static let browseURL = URL(string: "https://github.com/mkbuilds4/mods")!
     static let submitURL = URL(string: "https://github.com/mkbuilds4/mods/blob/main/CONTRIBUTING.md")!
 
@@ -147,22 +154,31 @@ final class ModCatalogStore: ObservableObject {
     @Published private(set) var catalogError: String?
     /// Whether the mkbuilds marketplace is already added to Claude Code.
     @Published private(set) var marketplaceAdded = false
-    /// Mod id → the operation running on it ("Installing…").
+    /// Plugin id (`name@marketplace`) → the operation running on it ("Installing…").
     @Published private(set) var busy: [String: String] = [:]
-    /// Mod id → the last CLI message for it (success notes and errors alike).
+    /// Plugin id → the last CLI message for it (success notes and errors alike).
     @Published private(set) var messages: [String: Message] = [:]
+    /// Mods the user added from a link, plus every mod in marketplaces they added that way.
+    @Published var addedListings: [ModListing] = []
+    /// The link being looked up or added ("Looking up…"), if any.
+    @Published var addProgress: String?
+    @Published var addMessage: Message?
+    /// A looked-up link waiting for the user to confirm.
+    @Published var pendingAdd: PendingModAdd?
 
     struct Message: Equatable {
         let text: String
         let isError: Bool
     }
 
-    private struct MarketplaceEntry: Decodable {
+    struct MarketplaceEntry: Decodable {
         let name: String
         let installLocation: String?
     }
 
     private var lastRefresh: Date?
+    /// Marketplaces Claude Code has, from the last refresh.
+    var knownMarketplaces: [MarketplaceEntry] = []
 
     private init() {}
 
@@ -184,12 +200,15 @@ final class ModCatalogStore: ObservableObject {
         if case .found = cli {
             async let installedPlugins = Self.loadInstalled()
             async let marketplaces = Self.loadMarketplaces()
-            localClone = (try? await marketplaces)?.first { $0.name == Self.marketplaceName }
+            let known = try? await marketplaces
+            localClone = known?.first { $0.name == Self.marketplaceName }
             marketplaceAdded = localClone != nil
+            if let known { knownMarketplaces = known }
             installed = (try? await installedPlugins) ?? installed
         } else {
             installed = []
         }
+        addedListings = loadAddedListings()
 
         do {
             apply(try await remote)
@@ -217,7 +236,7 @@ final class ModCatalogStore: ObservableObject {
 
     func status(of listing: ModListing) -> Status {
         let matches = installed.filter { $0.name == listing.id }
-        if let ours = matches.first(where: { $0.marketplace == Self.marketplaceName }) {
+        if let ours = matches.first(where: { $0.marketplace == listing.marketplace }) {
             return .installed(version: ours.version, enabled: ours.enabled ?? true)
         }
         if let other = matches.first { return .loadedElsewhere(id: other.id) }
@@ -233,42 +252,59 @@ final class ModCatalogStore: ObservableObject {
     // MARK: Changing
 
     func install(_ listing: ModListing) {
-        perform(listing.id, label: "Installing…") {
-            try await self.ensureMarketplace()
-            return try await Self.runJSON(["plugin", "install", self.pluginID(listing.id), "--json"])
+        perform(listing.pluginID, label: "Installing…") {
+            try await self.ensureMarketplace(listing.marketplace)
+            return try await Self.runJSON(["plugin", "install", listing.pluginID, "--json"])
         }
     }
 
     func update(_ listing: ModListing) {
-        perform(listing.id, label: "Updating…") {
-            try await self.ensureMarketplace()
-            return try await Self.runJSON(["plugin", "update", self.pluginID(listing.id), "--json"])
+        perform(listing.pluginID, label: "Updating…") {
+            try await self.ensureMarketplace(listing.marketplace)
+            return try await Self.runJSON(["plugin", "update", listing.pluginID, "--json"])
         }
     }
 
-    /// Uninstalls but keeps the plugin's data folder (prayer-times' tracker, say), so reinstalling restores it.
-    func uninstall(id: String) {
-        perform(id, label: "Removing…") {
-            try await Self.runJSON(["plugin", "uninstall", self.pluginID(id), "--keep-data", "--json"])
+    /// Uninstalls but keeps the plugin's data folder (prayer-times' tracker, say), so reinstalling
+    /// restores it. A mod added from a link also leaves NotchNerd's marketplace.
+    func uninstall(pluginID: String) {
+        perform(pluginID, label: "Removing…") {
+            let note = try await Self.runJSON(["plugin", "uninstall", pluginID, "--keep-data", "--json"])
+            try await self.forgetAddedEntry(pluginID: pluginID)
+            return note
+        }
+    }
+
+    /// Drops a link-added mod that never installed (or was removed elsewhere) from NotchNerd's marketplace.
+    func forget(_ listing: ModListing) {
+        perform(listing.pluginID, label: "Removing…") {
+            try await self.forgetAddedEntry(pluginID: listing.pluginID)
+            return nil
         }
     }
 
     func setEnabled(_ enabled: Bool, _ listing: ModListing) {
-        perform(listing.id, label: enabled ? "Enabling…" : "Disabling…") {
-            try await Self.runJSON(["plugin", enabled ? "enable" : "disable", self.pluginID(listing.id)])
+        perform(listing.pluginID, label: enabled ? "Enabling…" : "Disabling…") {
+            try await Self.runJSON(["plugin", enabled ? "enable" : "disable", listing.pluginID])
         }
     }
 
-    private func pluginID(_ id: String) -> String { "\(id)@\(Self.marketplaceName)" }
-
     /// Adds the marketplace if Claude Code doesn't have it yet, otherwise pulls its latest list,
     /// so a mod published since the last update can be found.
-    private func ensureMarketplace() async throws {
-        if marketplaceAdded {
-            _ = try await Self.runJSON(["plugin", "marketplace", "update", Self.marketplaceName])
-        } else {
-            _ = try await Self.runJSON(["plugin", "marketplace", "add", Self.marketplaceRepo])
-            marketplaceAdded = true
+    func ensureMarketplace(_ name: String) async throws {
+        switch name {
+        case Self.marketplaceName:
+            if marketplaceAdded {
+                _ = try await Self.runJSON(["plugin", "marketplace", "update", name])
+            } else {
+                _ = try await Self.runJSON(["plugin", "marketplace", "add", Self.marketplaceRepo])
+                marketplaceAdded = true
+            }
+        case Self.addedMarketplaceName where !knownMarketplaces.contains(where: { $0.name == name }):
+            _ = try await Self.runJSON(["plugin", "marketplace", "add", AddedMods.marketplaceDirectory.path, "--json"])
+            knownMarketplaces = (try? await Self.loadMarketplaces()) ?? knownMarketplaces
+        default:
+            _ = try await Self.runJSON(["plugin", "marketplace", "update", name])
         }
     }
 
@@ -297,7 +333,7 @@ final class ModCatalogStore: ObservableObject {
 
     /// Runs a claude command and returns anything worth showing beyond "it worked" (e.g. options
     /// still to set). Throws with the CLI's own message when it fails.
-    private static func runJSON(_ arguments: [String]) async throws -> String? {
+    static func runJSON(_ arguments: [String]) async throws -> String? {
         let output = try await ClaudeCLI.run(arguments)
         let result = output.resultLine
         let message = (result?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -332,7 +368,7 @@ final class ModCatalogStore: ObservableObject {
         return try JSONDecoder().decode([InstalledClaudePlugin].self, from: output.stdout)
     }
 
-    private static func loadMarketplaces() async throws -> [MarketplaceEntry] {
+    static func loadMarketplaces() async throws -> [MarketplaceEntry] {
         let output = try await ClaudeCLI.run(["plugin", "marketplace", "list", "--json"], timeout: 60)
         return try JSONDecoder().decode([MarketplaceEntry].self, from: output.stdout)
     }
