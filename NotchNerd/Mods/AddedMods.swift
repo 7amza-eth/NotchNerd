@@ -2,8 +2,14 @@
 //  AddedMods.swift
 //  NotchNerd
 //
-//  Settings → Mods → "Add a mod": install any Claude Code mod from a link (a GitHub repo, a folder
-//  in one, or any git URL) without the directory listing it and without `--plugin-dir`.
+//  Settings → Mods → "Add a mod": install a mod from a link (a GitHub repo, a folder in one, or any
+//  git URL) without the directory listing it and without loading a folder.
+//
+//  The link is shallow-cloned and looked at in this order:
+//    notch-mod.json               a notch mod (runs inside NotchNerd): copied into Mods/<id>/ and
+//                                 switched on. Adding the same link again updates it.
+//    .claude-plugin/plugin.json   a Claude Code mod, installed as below
+//    .claude-plugin/marketplace.json  a Claude Code marketplace, added and its mods listed
 //
 //  Claude Code only installs plugins from marketplaces, so NotchNerd keeps its own small one,
 //  `notchnerd-added`, in Application Support. Adding a link shallow-clones it to read its
@@ -97,6 +103,9 @@ struct PendingModAdd: Equatable {
         case mod(name: String, description: String?, author: String?, version: String?)
         /// A marketplace; `argument` is what `claude plugin marketplace add` takes.
         case marketplace(name: String, argument: String, plugins: [String])
+        /// A notch mod, checked and copied to `staged`, waiting to be moved into Mods/<id>/.
+        /// `replaces` is the installed version it would update, if any.
+        case notchMod(manifest: NotchModManifest, staged: URL, replaces: String?)
     }
 
     let link: ModLink
@@ -105,9 +114,13 @@ struct PendingModAdd: Equatable {
 
 /// NotchNerd's own marketplace file for mods added from a link.
 enum AddedMods {
+    /// Not under Mods/: that folder holds installed notch mods, one per id.
     static let marketplaceDirectory: URL = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("NotchNerd/Mods/added", isDirectory: true)
+        .appendingPathComponent("NotchNerd/ClaudeMods/added", isDirectory: true)
+
+    /// Notch mods are a few web files; anything bigger is likely the wrong folder.
+    static let maxNotchModBytes = 25 * 1024 * 1024
 
     private static var manifestURL: URL {
         marketplaceDirectory.appendingPathComponent(".claude-plugin/marketplace.json")
@@ -187,7 +200,7 @@ extension ModCatalogStore {
     func lookUp(_ input: String) {
         guard addProgress == nil else { return }
         addMessage = nil
-        pendingAdd = nil
+        cancelAdd()
         guard let link = ModLink.parse(input) else {
             addMessage = Message(text: "Paste a GitHub repo (owner/repo), a link to a folder in one, or a git URL.", isError: true)
             return
@@ -219,6 +232,9 @@ extension ModCatalogStore {
 
         let base = link.path.map { checkout.appendingPathComponent($0, isDirectory: true) } ?? checkout
         let decoder = JSONDecoder()
+        if let data = try? Data(contentsOf: base.appendingPathComponent(NotchModManifest.fileName)) {
+            return try stageNotchMod(data, from: base, link: link)
+        }
         if let data = try? Data(contentsOf: base.appendingPathComponent(".claude-plugin/plugin.json")) {
             guard let manifest = try? decoder.decode(PluginManifest.self, from: data), ModLink.isSafeName(manifest.name) else {
                 throw AddError(message: "Its .claude-plugin/plugin.json has no usable name.")
@@ -241,7 +257,71 @@ extension ModCatalogStore {
                                                                 argument: link.githubRepo ?? link.cloneURL,
                                                                 plugins: manifest.plugins.map(\.name)))
         }
-        throw AddError(message: "No Claude Code mod at \(link.display): there's no .claude-plugin/plugin.json there.")
+        throw AddError(message: "No mod at \(link.display): there's no notch-mod.json or .claude-plugin/plugin.json there.")
+    }
+
+    /// Checks a notch mod's manifest and moves its folder out of the checkout so it survives until
+    /// the user confirms. The folder becomes the installed mod as is, minus git metadata.
+    private func stageNotchMod(_ data: Data, from base: URL, link: ModLink) throws -> PendingModAdd {
+        let manifest: NotchModManifest
+        do {
+            manifest = try JSONDecoder().decode(NotchModManifest.self, from: data)
+            try manifest.validate()
+        } catch let error as NotchModManifest.Problem {
+            throw AddError(message: "Its notch-mod.json can't be used: \(error.localizedDescription)")
+        } catch {
+            throw AddError(message: "Its notch-mod.json can't be read.")
+        }
+        let fm = FileManager.default
+        var size = 0
+        if let files = fm.enumerator(at: base, includingPropertiesForKeys: [.fileSizeKey]) {
+            for case let file as URL in files {
+                size += (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            }
+        }
+        guard size <= AddedMods.maxNotchModBytes else {
+            throw AddError(message: "That folder is over 25 MB, too big for a notch mod. Link to the mod's own folder.")
+        }
+        let staged = fm.temporaryDirectory.appendingPathComponent("notchnerd-notchmod-\(UUID().uuidString)", isDirectory: true)
+        try fm.moveItem(at: base, to: staged)
+        try? fm.removeItem(at: staged.appendingPathComponent(".git"))
+        let installed = NotchModStore.shared.mod(id: manifest.id)
+        return PendingModAdd(link: link, kind: .notchMod(manifest: manifest, staged: staged,
+                                                          replaces: installed.map { $0.manifest.version }))
+    }
+
+    /// Drops a looked-up link without installing it.
+    func cancelAdd() {
+        if case .notchMod(_, let staged, _) = pendingAdd?.kind { try? FileManager.default.removeItem(at: staged) }
+        pendingAdd = nil
+    }
+
+    private func installNotchMod(_ manifest: NotchModManifest, from staged: URL) {
+        let fm = FileManager.default
+        let store = NotchModStore.shared
+        let destination = NotchModStore.installedDirectory.appendingPathComponent(manifest.id, isDirectory: true)
+        do {
+            try fm.createDirectory(at: NotchModStore.installedDirectory, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: destination.path) {
+                _ = try fm.replaceItemAt(destination, withItemAt: staged)
+            } else {
+                try fm.moveItem(at: staged, to: destination)
+            }
+        } catch {
+            try? fm.removeItem(at: staged)
+            addMessage = Message(text: "Couldn't install \(manifest.name): \(error.localizedDescription)", isError: true)
+            return
+        }
+        store.reload()
+        guard let mod = store.mod(id: manifest.id) else { return }
+        if mod.isDevelopment {
+            addMessage = Message(text: "Installed \(manifest.name), but a developer folder with the same id is loaded and wins.", isError: false)
+        } else if !store.isCompatible(mod) {
+            addMessage = Message(text: "Installed \(manifest.name). It needs a newer NotchNerd, so it stays off.", isError: false)
+        } else {
+            if !store.isEnabled(mod) { store.setEnabled(true, mod) }
+            addMessage = Message(text: "Installed \(manifest.name) \(manifest.version). It's on: see Notch mods below.", isError: false)
+        }
     }
 
     /// Installs what `pendingAdd` describes.
@@ -249,6 +329,8 @@ extension ModCatalogStore {
         guard let pending = pendingAdd else { return }
         pendingAdd = nil
         switch pending.kind {
+        case .notchMod(let manifest, let staged, _):
+            installNotchMod(manifest, from: staged)
         case .mod(let name, let description, let author, _):
             do {
                 try AddedMods.upsert(name: name, link: pending.link, description: description, author: author)

@@ -160,6 +160,14 @@ final class NotchModStore: ObservableObject {
         reload()
     }
 
+    /// Deletes an installed mod's files. Its saved data (ModData/<id>/) stays, so reinstalling keeps it.
+    func uninstall(_ mod: NotchMod) {
+        guard !mod.isDevelopment else { return }
+        if isEnabled(mod) { setEnabled(false, mod) }
+        try? fm.removeItem(at: mod.folder)
+        reload()
+    }
+
     func reveal(_ mod: NotchMod) {
         NSWorkspace.shared.activateFileViewerSelecting([mod.folder.appendingPathComponent(NotchModManifest.fileName)])
     }

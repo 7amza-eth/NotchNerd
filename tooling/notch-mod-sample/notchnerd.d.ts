@@ -118,8 +118,9 @@ interface Notch {
     clear(): Promise<void>;
   };
   /**
-   * Shows a chip for a few seconds, even while Claude is working. Needs "notify".
-   * At most one every 10 seconds; resolves false when skipped.
+   * Shows a message in the closed notch for a few seconds (2–8), over everything else, titled with the
+   * mod's name. Needs "notify". At most one every 10 seconds, and none while the user has mod messages
+   * turned off; resolves false when skipped.
    */
   notify(notice: NotchNotice): Promise<boolean>;
   /** Needs "media.read". */

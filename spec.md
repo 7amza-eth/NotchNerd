@@ -93,7 +93,7 @@ NotchNerd/                          repo root
 │  │  ├─ NotchModTabView.swift      a mod's tab in the open notch (`NotchViews.mod(id)`)
 │  │  ├─ NotchModAPI.swift          the one dispatcher for `notch.*` (page + logic), permissions, NotchModEvents
 │  │  ├─ NotchModRuntime.swift      logic: one JavaScriptCore VM per mod on its own queue, timers, 2 s run limit
-│  │  ├─ NotchModChips.swift        closed-notch chip + notify() notices (NotchModChipCenter, NotchModClosedChip)
+│  │  ├─ NotchModChips.swift        closed-notch chip (NotchModChipCenter, NotchModClosedChip); notify() → NotchEventInbox toast
 │  │  └─ NotchModsSection.swift     Settings → Mods → Notch mods (toggle, permissions, errors, chip picker)
 │  ├─ Notepad/                      always-open notepad (NEW)
 │  │  ├─ NotepadWindowController.swift  floating panel singleton; CGS-space float strategy
@@ -385,7 +385,7 @@ for testing. To test installs without touching your real Claude config, launch t
 **Add a mod from a link (`NotchNerd/Mods/AddedMods.swift`).** The "Add a mod" field takes `owner/repo`,
 a `github.com/<o>/<r>/tree/<ref>/<path>` link, or any git URL, and installs it without the directory or
 `--plugin-dir`. `claude plugin install` only installs from marketplaces, so the app keeps its own:
-**`notchnerd-added`** at `~/Library/Application Support/NotchNerd/Mods/added/.claude-plugin/marketplace.json`
+**`notchnerd-added`** at `~/Library/Application Support/NotchNerd/ClaudeMods/added/.claude-plugin/marketplace.json`
 (a `directory` marketplace, added on first install). Lookup shallow-clones the link (`git`, with
 `GIT_TERMINAL_PROMPT=0`) to read `.claude-plugin/plugin.json`, refuses a name already installed from
 another source, and asks to confirm (with a run-as-you warning); confirming writes an entry
@@ -404,7 +404,14 @@ the **closed** notch above every other status (`toastIsShowing` in `ContentView`
 left wing, message on a 250pt right wing, notch shifted via `closedNotchHOffset`. Not shown while the notch
 is open or hidden. Gated by `Defaults[.modToastsEnabled]` (Settings → Mods → "In the notch", with a Test
 button). The NotchNerd mod (0.2.0) exposes it as the `notch_notify` tool; the file format is in its README
-so other mods (deploy-watch, prod-guard) can post directly.
+so other mods (deploy-watch, prod-guard) can post directly. A notch mod's `notch.notify` is the same toast
+(titled with the mod's name, its icon + tint; still one per 10s per mod), so the notch has one notification
+style; the chip slot is only for standing chips.
+**Notch mods from a link:** "Add a mod" checks the clone for `notch-mod.json` first (validated with
+`NotchModManifest.validate()`, ≤25 MB), shows its permissions/hosts in the confirm, and moves the folder (minus
+`.git`) into `Mods/<id>/` (replacing an older copy; "Update x → y" / "Reinstall"), then reloads and turns it on.
+Notch mods get an **Uninstall** item (deletes `Mods/<id>/`, keeps `ModData/<id>/`). The Claude Code link
+marketplace lives in `Application Support/NotchNerd/ClaudeMods/added/`, *not* under `Mods/` (one folder per notch mod).
 Type **`timer`** (`op: start` with `minutes` 1–240 + `label`, or `op: stop`) runs one countdown in the closed
 notch (`NotchTimerView`, timer icon + label | `M:SS`), ranked toast → "needs you" → **timer** → battery →
 music (`musicIsShowing` is false while a timer runs). The app persists it as `Events/timer.json`

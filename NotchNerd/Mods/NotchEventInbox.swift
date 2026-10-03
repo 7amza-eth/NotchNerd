@@ -64,6 +64,8 @@ struct NotchToast: Equatable, Identifiable {
     let style: Style
     let symbol: String
     let duration: TimeInterval
+    /// Overrides the style's icon color (a notch mod's `tint`).
+    var tint: Color? = nil
 }
 
 /// A focus countdown shown in the closed notch.
@@ -304,7 +306,7 @@ struct NotchToastView: View {
         HStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: toast.symbol)
-                    .foregroundStyle(toast.style.tint)
+                    .foregroundStyle(toast.tint ?? toast.style.tint)
                     .symbolEffect(.bounce, value: toast.id)
                 Text(toast.title)
                     .foregroundStyle(.gray)

@@ -3,7 +3,7 @@
 //  NotchNerd
 //
 //  Settings → Mods → "Notch mods": mods that run inside NotchNerd itself (see NotchModStore).
-//  For now they're loaded from a folder; the mod directory will install them too.
+//  Installed from a link (Settings → Mods → Add a mod, AddedMods.swift) or loaded from a folder.
 //
 
 import Defaults
@@ -126,9 +126,11 @@ private struct NotchModRow: View {
             Menu {
                 Button("Reload") { store.refresh(mod) }
                 Button("Show in Finder") { store.reveal(mod) }
+                Divider()
                 if mod.isDevelopment {
-                    Divider()
                     Button("Stop loading this folder", role: .destructive) { store.removeDevelopmentFolder(mod.folder) }
+                } else {
+                    Button("Uninstall", role: .destructive) { store.uninstall(mod) }
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")

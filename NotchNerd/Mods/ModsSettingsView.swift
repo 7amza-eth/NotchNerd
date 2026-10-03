@@ -127,13 +127,13 @@ struct ModsSettings: View {
         .accentColor(.effectiveAccent)
         .navigationTitle("Mods")
         .task { await store.refresh() }
-        .alert(pendingTitle, isPresented: Binding(get: { store.pendingAdd != nil }, set: { if !$0 { store.pendingAdd = nil } }),
+        .alert(pendingTitle, isPresented: Binding(get: { store.pendingAdd != nil }, set: { if !$0 { store.cancelAdd() } }),
                presenting: store.pendingAdd) { pending in
             Button(pendingConfirmLabel(pending)) {
                 store.confirmAdd()
                 link = ""
             }
-            Button("Cancel", role: .cancel) { store.pendingAdd = nil }
+            Button("Cancel", role: .cancel) { store.cancelAdd() }
         } message: { pending in
             Text(pendingMessage(pending))
         }
@@ -144,7 +144,7 @@ struct ModsSettings: View {
     @ViewBuilder private var addSection: some View {
         Section {
             HStack {
-                TextField("Mod link", text: $link, prompt: Text("owner/repo or a GitHub link"))
+                TextField("Mod link", text: $link, prompt: Text("owner/repo or a GitHub link to a mod"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { store.lookUp(link) }
@@ -168,7 +168,7 @@ struct ModsSettings: View {
         } header: {
             Text("Add a mod")
         } footer: {
-            Text("Paste a GitHub repo, a link to a mod's folder in one, or any git URL, and NotchNerd installs it into Claude Code for you. No folder to keep around and no --plugin-dir. Mods you add yourself aren't checked by anyone: they run code on your Mac as you, so add only ones you trust.")
+            Text("Paste a GitHub repo, a link to a mod's folder in one, or any git URL. Notch mods install into NotchNerd (listed under Notch mods); Claude Code mods install into Claude Code, as with `claude plugin install`. No folder to keep around. Mods you add yourself aren't checked by anyone, so add only ones you trust.")
         }
     }
 
@@ -176,13 +176,20 @@ struct ModsSettings: View {
         switch store.pendingAdd?.kind {
         case .mod(let name, _, _, let version): return "Install \(name)\(version.map { " \($0)" } ?? "")?"
         case .marketplace(let name, _, _): return "Add the \(name) marketplace?"
+        case .notchMod(let manifest, _, let replaces?):
+            return replaces == manifest.version ? "Reinstall \(manifest.name) \(manifest.version)?"
+                : "Update \(manifest.name) from \(replaces) to \(manifest.version)?"
+        case .notchMod(let manifest, _, nil): return "Install \(manifest.name) \(manifest.version)?"
         case nil: return ""
         }
     }
 
     private func pendingConfirmLabel(_ pending: PendingModAdd) -> String {
-        if case .marketplace(_, _, let plugins) = pending.kind, plugins.count != 1 { return "Add" }
-        return "Install"
+        switch pending.kind {
+        case .marketplace(_, _, let plugins) where plugins.count != 1: return "Add"
+        case .notchMod(let manifest, _, let replaces?): return replaces == manifest.version ? "Reinstall" : "Update"
+        default: return "Install"
+        }
     }
 
     private func pendingMessage(_ pending: PendingModAdd) -> String {
@@ -190,6 +197,13 @@ struct ModsSettings: View {
         switch pending.kind {
         case .mod(_, let description, let author, _):
             return [description, author.map { "By \($0)." }, "From \(pending.link.display).", warning]
+                .compactMap { $0 }.joined(separator: "\n\n")
+        case .notchMod(let manifest, _, _):
+            var access = manifest.declaredPermissions.map { "• \($0.summary)" }
+            if !manifest.networkHosts.isEmpty { access.append("• Connect to \(manifest.networkHosts.joined(separator: ", "))") }
+            let lines = access.isEmpty ? "It asks for no access beyond its own files." : "It asks to:\n" + access.joined(separator: "\n")
+            return [manifest.description, manifest.author.map { "By \($0)." }, "A notch mod from \(pending.link.display).", lines,
+                    "It runs in NotchNerd's sandbox with only this access."]
                 .compactMap { $0 }.joined(separator: "\n\n")
         case .marketplace(_, _, let plugins):
             let list = plugins.isEmpty ? "It lists no mods yet." : "It has \(plugins.count == 1 ? "one mod" : "\(plugins.count) mods"): \(plugins.joined(separator: ", "))."

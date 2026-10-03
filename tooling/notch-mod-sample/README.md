@@ -9,8 +9,8 @@ Tally has both. Its tab counts up and down; its logic shows the count in the clo
 
 ## Try it
 
-1. In NotchNerd, open **Settings → Mods → Notch mods** and click **Load mod from folder…**.
-2. Choose this folder. Tally is turned on and a **Tally** tab appears in the notch.
+1. In NotchNerd, open **Settings → Mods → Add a mod**, paste `https://github.com/7amza-eth/NotchNerd/tree/main/tooling/notch-mod-sample` and click **Add**. Tally installs and turns on, and a **Tally** tab appears in the notch. (Share your own mod the same way: push it to GitHub and pass on the link. Adding the link again updates it.)
+2. To work on it, use **Settings → Mods → Notch mods → Load mod from folder…** and choose this folder instead. A folder wins over an installed copy with the same id.
 3. Tap **+** a few times and close the notch: the count shows beside it.
 4. Edit any file. The mod reloads on its own, tab and logic.
 5. Debugging: the tab page opens in Safari → **Develop** → NotchNerd → *Tally* (turn on Safari → Settings → Advanced → "Show features for web developers" first). Logic errors show under the mod in Settings, and `notch.log` goes to Console.app (category `mod.tally`).
@@ -56,12 +56,12 @@ Tally has both. Its tab counts up and down; its logic shows the count in the clo
 | `agent.read` | See Claude Code sessions: counts, titles and status, never transcripts (`notch.agent`, `agent`). |
 | `notes.read` | List and read notepad notes (`notch.notes.list/read`, `notes`). |
 | `notes.write` | Add to notes or make new ones (`notch.notes.append/create`). |
-| `notify` | Show a notification chip (`notch.notify`). |
+| `notify` | Show a notification in the notch (`notch.notify`). |
 | `network:<host>` | Reach that host over https from the tab page. `*.example.com` covers subdomains. |
 
 ## The closed notch
 
-The chip is a symbol on the left of the notch and a few words on the right, drawn by NotchNerd in its own style. It gives way to the things that matter more: a Claude session that needs you, battery and volume, music, and Claude working. It shows over Claude's calm "active" indicator. A **notification** (`notch.notify`) shows for a few seconds even while Claude is working, at most once every 10 seconds per mod. If more than one mod has a chip, the user picks which shows in Settings.
+The chip is a symbol on the left of the notch and a few words on the right, drawn by NotchNerd in its own style. It gives way to the things that matter more: a Claude session that needs you, battery and volume, music, and Claude working. It shows over Claude's calm "active" indicator. A **notification** (`notch.notify`) is different: it shows for a few seconds over everything in the closed notch, titled with your mod's name, in the same style as Claude Code mods' messages. At most one every 10 seconds per mod, and none if the user turned off "Let mods show messages in the notch". If more than one mod has a chip, the user picks which shows in Settings.
 
 ## The sandbox
 

@@ -107,9 +107,9 @@ struct ContentView: View {
     /// "needs you", battery, inline HUDs, music and Claude "working", and wins over Claude "active".
     /// NotchLayout(), computedChinWidth and closedNotchHOffset all use this, so they stay in step.
     private var modChipShowing: (chip: NotchModChip, textWidth: CGFloat)? {
-        // A notify() notice also shows over Claude "working"; a mod's standing chip doesn't.
+        // notify() is a toast (toastIsShowing), so a standing chip only yields here.
         guard vm.notchState == .closed, !vm.hideOnClosed, !musicIsShowing, !timerIsActive,
-              agent.workingCount == 0 || modChips.notice != nil,
+              agent.workingCount == 0,
               agent.attentionCount == 0,
               !(coordinator.expandingView.type == .battery && coordinator.expandingView.show
                 && Defaults[.showPowerStatusNotifications]),

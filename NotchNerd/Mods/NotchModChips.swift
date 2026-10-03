@@ -4,11 +4,11 @@
 //
 //  The closed-notch chip a notch mod can show: an SF Symbol on the left of the hardware notch and a
 //  short text on the right, drawn natively (mods describe it; they never draw it). Set with
-//  `notch.closed.set({ icon, text, tint })`; `notch.notify(...)` shows a chip for a few seconds over
-//  everything else a mod shows.
+//  `notch.closed.set({ icon, text, tint })`. `notch.notify(...)` is a toast: it goes through
+//  NotchEventInbox like a Claude Code mod's, so the notch has one notification style.
 //
-//  Placement (ContentView.NotchLayout + computedChinWidth): below "needs you", battery, HUDs, music
-//  and Claude "working" (a notice shows over "working" too); above Claude "active" and the idle face.
+//  Placement (ContentView.NotchLayout + computedChinWidth): below "needs you", a timer, battery, HUDs,
+//  music and Claude "working"; above Claude "active" and the idle face.
 //  One chip at a time: the one picked in Settings → Mods, else the first enabled mod that has one.
 //
 
@@ -27,8 +27,6 @@ final class NotchModChipCenter: ObservableObject {
     static let shared = NotchModChipCenter()
 
     @Published private(set) var chips: [String: NotchModChip] = [:]
-    @Published private(set) var notice: (modID: String, chip: NotchModChip)?
-    private var noticeTask: Task<Void, Never>?
     private var lastNotice: [String: Date] = [:]
 
     static let maxText = 24
@@ -38,9 +36,6 @@ final class NotchModChipCenter: ObservableObject {
 
     /// The chip to draw now, and the width of its text side.
     var visible: (chip: NotchModChip, textWidth: CGFloat)? {
-        if let notice, let mod = NotchModStore.shared.mod(id: notice.modID) {
-            return (notice.chip, mod.manifest.chipWidth)
-        }
         let enabled = Defaults[.notchModsEnabled]
         let preferred = Defaults[.notchModChipID]
         let order = preferred.isEmpty ? enabled : [preferred]
@@ -58,28 +53,20 @@ final class NotchModChipCenter: ObservableObject {
 
     func clear(_ modID: String) {
         if chips[modID] != nil { chips[modID] = nil }
-        if notice?.modID == modID { endNotice() }
     }
 
-    /// Shows a chip briefly. At most one notice per mod every 10 seconds; returns false when skipped.
+    /// Shows the notice as a toast titled with the mod's name. At most one per mod every 10 seconds,
+    /// and none while mod messages are off in Settings; returns false when skipped.
     func notify(_ chip: NotchModChip, for modID: String, seconds: Double) -> Bool {
         let now = Date()
+        guard Defaults[.modToastsEnabled], !chip.text.isEmpty else { return false }
         if let last = lastNotice[modID], now.timeIntervalSince(last) < Self.noticeInterval { return false }
         lastNotice[modID] = now
-        notice = (modID, chip)
-        noticeTask?.cancel()
-        noticeTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(min(max(seconds, 2), 8)))
-            guard !Task.isCancelled else { return }
-            self?.endNotice()
-        }
+        let name = NotchModStore.shared.mod(id: modID)?.manifest.name ?? modID
+        NotchEventInbox.shared.show(NotchToast(
+            title: name, message: chip.text, style: .info, symbol: chip.icon,
+            duration: min(max(seconds, 2), 8), tint: chip.tint.map { Self.color($0) }))
         return true
-    }
-
-    private func endNotice() {
-        noticeTask?.cancel()
-        noticeTask = nil
-        notice = nil
     }
 
     /// Builds a chip from what a mod passed in, or throws a message for the mod.
