@@ -267,8 +267,8 @@ class NotchNerdViewCoordinator: ObservableObject {
         NotificationCenter.default.post(name: .agentNotificationCloseRequested, object: nil)
     }
 
-    /// Best-effort: is the session's terminal already the frontmost app? (Ghostty-only, cheap —
-    /// no ps/AX.) Used to suppress a pop when the user is already looking at the session.
+    /// Best-effort: is the session's app already frontmost? (Ghostty or Cursor — cheap, no ps/AX.)
+    /// Used to suppress a pop when the user is already looking at the session.
     private func isSessionTerminalFrontmost(_ sessionID: String) -> Bool {
         guard Defaults[.agentSuppressWhenFrontmost] else { return false }
         guard let session = AgentBridgeManager.shared.sessions.first(where: { $0.id == sessionID }),
@@ -281,8 +281,14 @@ class NotchNerdViewCoordinator: ObservableObject {
             return frontBundle == AgentBridgeManager.claudeDesktopBundleID
         }
         let app = target.terminalApp.lowercased()
-        let isGhostty = app.contains("ghostty") || app.contains("mitchellh")
-        return isGhostty && frontBundle == GhosttyJumpService.bundleIdentifier
+        if app.contains("ghostty") || app.contains("mitchellh") {
+            return frontBundle == GhosttyJumpService.bundleIdentifier
+        }
+        if app == "cursor" {
+            return frontBundle == CursorJumpService.bundleIdentifier
+                || NSWorkspace.shared.frontmostApplication?.localizedName?.caseInsensitiveCompare("Cursor") == .orderedSame
+        }
+        return false
     }
 
     @objc func sneakPeekEvent(_ notification: Notification) {

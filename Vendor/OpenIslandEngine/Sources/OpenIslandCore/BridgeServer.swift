@@ -1226,7 +1226,9 @@ public final class BridgeServer: @unchecked Sendable {
                     )
                 )
             )
-            send(.response(.cursorHookDirective(CursorHookDirective(permission: .allow))), to: clientID)
+            // NotchNerd patch: observe only. An `allow` directive skips Cursor's own
+            // approval UI; exit 0 with no directive leaves Cursor's permission flow intact.
+            send(.response(.acknowledged), to: clientID)
 
         case .beforeMCPExecution:
             clearStaleCursorInteractionIfNeeded(for: payload.sessionID)
@@ -1244,7 +1246,8 @@ public final class BridgeServer: @unchecked Sendable {
                     )
                 )
             )
-            send(.response(.cursorHookDirective(CursorHookDirective(permission: .allow))), to: clientID)
+            // NotchNerd patch: same observe-only stance as beforeShellExecution.
+            send(.response(.acknowledged), to: clientID)
 
         case .beforeReadFile:
             clearStaleCursorInteractionIfNeeded(for: payload.sessionID)

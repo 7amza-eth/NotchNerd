@@ -180,7 +180,7 @@ NotchNerd/                          repo root
 - **Live activities** — closed-notch expanding views (music, battery, download).
 
 **New in NotchNerd:**
-- **Claude Code agent monitor** — observe-only, in-notch. Agent tab with an overview-counts row,
+- **Claude Code + Cursor agent monitor** — observe-only, in-notch. Agent tab with an overview-counts row,
   pulsing per-phase status dots + per-activity recap icons (`AgentActivity`), **click-to-expand
   session rows** (manager-owned expansion; full last assistant message + copy, live subagents +
   task/todo checklists, transcript-derived recent activity / files touched / turns · output tokens ·
@@ -188,7 +188,9 @@ NotchNerd/                          repo root
   plan text + keep-planning feedback), a "N agents researching" chip, stopped/compacting states,
   Allow Once/Deny permission cards, question option buttons, and a
   terminal jump button (already-focused short-circuit + live re-resolution; Ghostty **or**
-  Terminal.app via the `AgentTerminalJump` dispatcher). **In-notch notification mode** auto-pops the
+  Terminal.app via the `AgentTerminalJump` dispatcher; Cursor sessions activate the Cursor app).
+  Cursor is observe-only: `~/.cursor/hooks.json` feeds the same list, and shell/MCP approvals stay
+  in Cursor. **In-notch notification mode** auto-pops the
   notch on permission/question/completion events (never hijacks an open notch; frontmost-suppression;
   completion auto-collapses after 10s) with optional **system-sound** alerts. **Usage HUD** chips
   (5h/7d Claude quotas) via a vendored statusline wrapper. **Closed-notch Claude status:**
@@ -306,10 +308,13 @@ while monitoring is disabled. Settings UI is `AgentSettings` (Settings → Agent
 Install/Remove/Refresh hooks.
 
 **Scope:** the vendored Core is multi-agent (Codex/Cursor/Gemini/Kimi/OpenCode/Warp types + a hook
-CLI advertising ~10 tools), but NotchNerd wires **only the Claude Code path** — it filters/persists
-`tool == .claudeCode`, `AgentView` is Claude-only, and terminal jump covers only Ghostty +
-Terminal.app. The rest is dormant surface area (broadening it is To-do — see Part II → Roadmap & TODO,
-and the porting recipes there).
+CLI advertising ~10 tools). NotchNerd wires **Claude Code and Cursor**. Claude stays the
+approve/deny path (`tool == .claudeCode`, `~/.claude/settings.json`). Cursor uses the vendored
+`CursorHookInstallationManager` (`~/.cursor/hooks.json`); shell/MCP hooks are observe-only (engine
+patch replies `.acknowledged` instead of `permission: allow`, so Cursor keeps its own approval UI).
+Cursor liveness is app-level (Cursor running + a running turn, or a short grace after `stop`) because
+there is no terminal PID to match. Jump activates Cursor. Terminal jump for Claude is still Ghostty +
+Terminal.app. The other agents stay dormant (see Part II → Roadmap & TODO).
 
 **Notification mode + sounds (batch-1 port; see Part II → Changelog).** Beyond the persistent `AgentClosedIndicator`,
 agent events drive a transient auto-pop: `AgentBridgeManager.ingest` maps each `AgentEvent` →
@@ -912,6 +917,11 @@ scope entirely: chat-app AX automation and any MCP-based monitor (MCP only ever 
 Condensed per-phase summary of what shipped. (Build-verified `BUILD SUCCEEDED`, committed, pushed at
 each phase; git history holds the dated detail.)
 
+- **Cursor agent monitor.** Same Agent tab now watches Cursor via `~/.cursor/hooks.json`
+  (`CursorHookInstallationManager`). Sessions stay visible while Cursor is running and a turn is in
+  progress (30 min silence cap) and for 2 minutes after `stop`. Jump activates Cursor. A vendored
+  patch stops `beforeShellExecution` / `beforeMCPExecution` from auto-allowing, so Cursor’s own
+  permission prompts stay in Cursor. Install/Remove/Refresh in Settings → Agent covers both agents.
 - **Phase 0 — Sandbox drop.** Flipped `app-sandbox=false`, kept hardened runtime; stood up stable dev
   signing; confirmed MediaRemoteAdapter keeps its entitlement after re-sign (music survives); full
   regression baseline (now-playing, Sparkle, camera, calendar, CGS-notch-over-fullscreen).
@@ -1332,7 +1342,8 @@ more-agents reality*: two parallel hardcoded enums + ~6 hardcoded switch sites.
 - **Small** (Claude forks — almost no code; reuse `ClaudeHookPayload`, differ by config dir +
   `--source`; Kimi installs TOML): Qoder, Qwen, Factory, CodeBuddy, Kimi. Most savings are install/UI,
   not the hot path.
-- **Small** (own hook payload + installer, already vendored): OpenCode, Gemini, Cursor.
+- **Small** (own hook payload + installer, already vendored): OpenCode, Gemini. *(Cursor shipped —
+  install + session list + app jump; observe-only on shell/MCP, no notch approve/deny.)*
 - **Medium**: **Codex** — the outlier: a second JSON-RPC app-server integration (~3000 lines, watches
   rollout JSONL), not just a hook source.
 

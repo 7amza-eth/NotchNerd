@@ -92,17 +92,59 @@ enum TerminalAppJumpService {
     }
 }
 
-/// Routes an agent session's jump to the right terminal service. NotchNerd supports
-/// Ghostty (precise, with live re-resolution) and macOS Terminal.app (TTY match).
-enum AgentTerminalJump {
+/// Brings the Cursor app forward for a Cursor agent session. The engine stamps
+/// `terminalApp == "Cursor"` and a workspace path; there is no per-chat AppleScript target,
+/// so the jump activates Cursor rather than a terminal tab.
+enum CursorJumpService {
+    static let bundleIdentifier = "com.todesktop.230313mzl4w4u92"
+
     static func canJump(to target: JumpTarget?) -> Bool {
-        GhosttyJumpService.canJump(to: target) || TerminalAppJumpService.canJump(to: target)
+        guard let app = target?.terminalApp.lowercased() else { return false }
+        return app == "cursor"
     }
 
-    /// Display name for the matched terminal (for status messages).
+    @discardableResult
+    static func jump(to target: JumpTarget) -> Bool {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+        let app = running.first ?? NSWorkspace.shared.runningApplications.first {
+            $0.localizedName?.caseInsensitiveCompare("Cursor") == .orderedSame
+        }
+        if let app {
+            if Thread.isMainThread {
+                return app.activate(options: [.activateAllWindows])
+            }
+            var activated = false
+            DispatchQueue.main.sync {
+                activated = app.activate(options: [.activateAllWindows])
+            }
+            return activated
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
+            return false
+        }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        // openApplication is async; report that we found the app to launch.
+        NSWorkspace.shared.openApplication(at: url, configuration: config, completionHandler: nil)
+        return true
+    }
+}
+
+/// Routes an agent session's jump to the right app. NotchNerd supports Ghostty
+/// (precise, with live re-resolution), macOS Terminal.app (TTY match), and Cursor
+/// (activate the app).
+enum AgentTerminalJump {
+    static func canJump(to target: JumpTarget?) -> Bool {
+        GhosttyJumpService.canJump(to: target)
+            || TerminalAppJumpService.canJump(to: target)
+            || CursorJumpService.canJump(to: target)
+    }
+
+    /// Display name for the matched app (for status messages).
     static func appName(for target: JumpTarget?) -> String {
         if GhosttyJumpService.canJump(to: target) { return "Ghostty" }
         if TerminalAppJumpService.canJump(to: target) { return "Terminal" }
+        if CursorJumpService.canJump(to: target) { return "Cursor" }
         return "terminal"
     }
 
@@ -110,6 +152,7 @@ enum AgentTerminalJump {
     static func jump(to target: JumpTarget) -> Bool {
         if GhosttyJumpService.canJump(to: target) { return GhosttyJumpService.jumpResolving(to: target) }
         if TerminalAppJumpService.canJump(to: target) { return TerminalAppJumpService.jump(to: target) }
+        if CursorJumpService.canJump(to: target) { return CursorJumpService.jump(to: target) }
         return false
     }
 }

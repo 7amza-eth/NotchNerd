@@ -1,7 +1,7 @@
 # NotchNerd
 
 A macOS menu-bar app that turns the notch into a live workspace — music, a file shelf, calendar,
-and system HUDs in the notch you already have, plus a **Claude Code agent monitor** and an
+and system HUDs in the notch you already have, plus a **Claude Code and Cursor agent monitor** and an
 **always-open notepad** that floats over everything.
 
 NotchNerd is a fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) by TheBoredTeam,
@@ -26,10 +26,12 @@ keyboard focus without stealing your frontmost app.
   overlays with notch-native ones.
 - **Webcam mirror** and closed-notch **live activities**.
 
-**New in NotchNerd — the Claude Code agent monitor**
+**New in NotchNerd — the agent monitor**
 
-An in-notch **Agent tab** that watches your local Claude Code sessions through Claude Code hooks.
-It is **observe-only** — it never calls the Anthropic API and stores no credentials.
+An in-notch **Agent tab** that watches your local Claude Code and Cursor sessions through their hooks.
+It is **observe-only** — it never calls an API and stores no credentials. Claude Code permission
+prompts can be allowed or denied from the notch. Cursor’s own approval prompts stay in Cursor; the
+notch shows the live session and can bring Cursor forward.
 
 - **Live session list as a recap, not a transcript** — each row shows the session's goal (its first
   prompt), a one-line recap of the latest outcome (`Claude: …`) or current activity **with a
