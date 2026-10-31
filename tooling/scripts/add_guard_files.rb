@@ -9,7 +9,7 @@ require "xcodeproj"
 PROJECT     = File.expand_path("NotchNerd.xcodeproj", Dir.pwd)
 TARGET_NAME = "NotchNerd"
 PKG_URL     = "https://github.com/mkbuilds4/presence-lock.git"
-PKG_REV     = ARGV[0] || "f5c6aa80057d49bcfc1acf3889707604b924a2b2"
+PKG_REV     = ARGV[0] || "93302fd16aafcecf623261a75373f3563d6bbe19"
 
 project = Xcodeproj::Project.open(PROJECT)
 target  = project.targets.find { |t| t.name == TARGET_NAME } or abort "target #{TARGET_NAME} not found"
