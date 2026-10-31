@@ -196,6 +196,7 @@ class NotchNerdViewModel: NSObject, ObservableObject {
         case .agent: return agentNotchSize
         case .storage: return storageNotchSize
         case .display: return displayNotchSize
+        case .guardian: return MainActor.assumeIsolated { GuardNotchModel.shared.size }
         case .mod(let id):
             guard let mod = NotchModStore.shared.mod(id: id) else { return openNotchSize }
             return CGSize(width: openNotchSize.width, height: mod.manifest.tabHeight)
@@ -214,6 +215,10 @@ class NotchNerdViewModel: NSObject, ObservableObject {
     func close() {
         // Do not close while a share picker or sharing service is active
         if SharingStateManager.shared.preventNotchClose {
+            return
+        }
+        // Guard's HUD / enrollment stays up until Guard takes it down (hover-out can't dismiss it).
+        if coordinator.currentView == .guardian && MainActor.assumeIsolated({ GuardNotchModel.shared.presentation != nil }) {
             return
         }
         self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)

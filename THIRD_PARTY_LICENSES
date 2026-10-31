@@ -478,3 +478,16 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 This Source Code Form is "Incompatible With Secondary Licenses", as
 defined by the Mozilla Public License, v. 2.0.
+
+================================================================================
+PresenceKit (Guard engine) - MIT
+https://github.com/mkbuilds4/presence-lock (private until launch)
+Linked as a Swift package. It includes code adapted from Glance
+(github.com/jonnyoo/glance, MIT) and FaceGate (MIT); see its own notices.
+
+InsightFace w600k_mbf face recognition model - NOT distributed
+https://github.com/deepinsight/insightface
+InsightFace's pretrained models are available for non-commercial research
+purposes only. NotchNerd does not include them: Guard downloads the model from
+InsightFace's GitHub release on the user's Mac, after showing this notice, and
+converts it there.

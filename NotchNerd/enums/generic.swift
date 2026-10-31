@@ -31,6 +31,8 @@ public enum NotchViews: Hashable {
     case notepad
     case storage
     case display
+    /// Guard's Face ID HUD and face enrollment (not a tab; PresenceKit opens it).
+    case guardian
     /// A notch mod's tab, by mod id (see Mods/NotchModStore.swift).
     case mod(String)
 }

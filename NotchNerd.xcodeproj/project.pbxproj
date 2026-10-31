@@ -27,6 +27,7 @@
 		111BEA5F2ED07A340079DD4E /* MacroVisionKit in Frameworks */ = {isa = PBXBuildFile; productRef = 111BEA5E2ED07A340079DD4E /* MacroVisionKit */; };
 		111BEA612ED09B1B0079DD4E /* NSScreen+UUID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111BEA602ED09B1B0079DD4E /* NSScreen+UUID.swift */; };
 		111BEA6F2ED166E20079DD4E /* MacroVisionKit in Frameworks */ = {isa = PBXBuildFile; productRef = 111BEA6E2ED166E20079DD4E /* MacroVisionKit */; };
+		112AF2A4FEC37466FAA3DFFB /* GuardSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F299CBB016B0485223103E /* GuardSettings.swift */; };
 		112B0EB82E30DD0F00562D6C /* MediaRemoteAdapterTestClient in Resources */ = {isa = PBXBuildFile; fileRef = 112B0EB52E30DD0F00562D6C /* MediaRemoteAdapterTestClient */; };
 		112B0EB92E30DD0F00562D6C /* mediaremote-adapter.pl in Resources */ = {isa = PBXBuildFile; fileRef = 112B0EB32E30DD0F00562D6C /* mediaremote-adapter.pl */; };
 		112B0EBB2E30DD5000562D6C /* MediaRemoteAdapter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 112B0EBA2E30DD5000562D6C /* MediaRemoteAdapter.framework */; };
@@ -134,12 +135,14 @@
 		69BF5F91BEC383D6036AAB34 /* ClaudeCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */; };
 		70EE0982A57E3779295446AE /* DisplayPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C206599DFEF4086B6F14823 /* DisplayPresets.swift */; };
 		71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */; };
+		7323A4D70A92E453673D0CA6 /* GuardNotchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EB95876F8C19069A8BBFC1 /* GuardNotchView.swift */; };
 		7A98EAE87A6E7A0F939A2A51 /* DisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A765E76AF9DDBB65947706 /* DisplayManager.swift */; };
 		7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */; };
 		7FD37B6D01C3489188DD4746 /* NotchModsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E892AF9C48D0D427F894A4 /* NotchModsSection.swift */; };
 		7FD50E9C43BB8876982812EC /* NotchModAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C333DD18C7D5B05C5BFED7B0 /* NotchModAPI.swift */; };
 		8F67032A4B49FC8758C08ECC /* StorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAC1C0CA1AC6855ED0CEF52 /* StorageManager.swift */; };
 		92AFD0C0E17DB24E008AB87F /* NotepadWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */; };
+		95CD6F2459CD85255856E1C7 /* PresenceKit in Frameworks */ = {isa = PBXBuildFile; productRef = DA5EF840C8AB19F0173E6D91 /* PresenceKit */; };
 		960EFDD51C2E88B7320516E3 /* ModsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2888C5285E2BE249A17F7EED /* ModsSettingsView.swift */; };
 		9A0887322C7A693000C160EA /* TabButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887312C7A693000C160EA /* TabButton.swift */; };
 		9A0887352C7AFF8E00C160EA /* TabSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887342C7AFF8E00C160EA /* TabSelectionView.swift */; };
@@ -179,6 +182,7 @@
 		B1FEB4992C7686630066EBBC /* PanGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1FEB4982C7686630066EBBC /* PanGesture.swift */; };
 		B54D100E683F3C3734A28A44 /* NotchModTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F14A31613C0C91A6180309 /* NotchModTabView.swift */; };
 		BF52E90305AF5F26B60F35A9 /* AgentReplyChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56645EAC0345B21ADE649072 /* AgentReplyChannel.swift */; };
+		BFF9F098568D4213BCDC0D89 /* GuardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D214D816407B7B4AC2E8B7B /* GuardManager.swift */; };
 		D4B34A341EAAC48470D3C113 /* TerminalAppJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */; };
 		D5287D99FDCD8AC32A17E88D /* AgentUsageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A629446A5E38FC2A7B34B2F /* AgentUsageManager.swift */; };
 		D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */; };
@@ -229,6 +233,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		02EB95876F8C19069A8BBFC1 /* GuardNotchView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GuardNotchView.swift; sourceTree = "<group>"; };
 		0371E07FC854E8A680B4FCA9 /* NotchModWebView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModWebView.swift; sourceTree = "<group>"; };
 		0D80555B5ED262D41B5B9320 /* NotchEventInbox.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchEventInbox.swift; sourceTree = "<group>"; };
 		1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSItemProvider+LoadHelpers.swift"; sourceTree = "<group>"; };
@@ -348,12 +353,14 @@
 		5A629446A5E38FC2A7B34B2F /* AgentUsageManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentUsageManager.swift; sourceTree = "<group>"; };
 		601C6725C4CB1BF5E1C99B3F /* UsageChip.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UsageChip.swift; sourceTree = "<group>"; };
 		603CCB82C090912E8305411C /* AgentNotificationSound.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentNotificationSound.swift; sourceTree = "<group>"; };
+		60F299CBB016B0485223103E /* GuardSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GuardSettings.swift; sourceTree = "<group>"; };
 		6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TerminalAppJumpService.swift; sourceTree = "<group>"; };
 		624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GrokBotMonitor.swift; sourceTree = "<group>"; };
 		64A1335325669BA8E6668AF6 /* GhosttyJumpService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GhosttyJumpService.swift; sourceTree = "<group>"; };
 		7538835A1F722032A387A1CC /* AgentMonitorOnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentMonitorOnboardingView.swift; sourceTree = "<group>"; };
 		78D2D1B0341317E67E89B8C4 /* MeetingWatcher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingWatcher.swift; sourceTree = "<group>"; };
 		7B822991BC603F48F7F30F11 /* FeatureTourView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeatureTourView.swift; sourceTree = "<group>"; };
+		8D214D816407B7B4AC2E8B7B /* GuardManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GuardManager.swift; sourceTree = "<group>"; };
 		94D0606AAEA2000BEE38757E /* AgentSessionPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentSessionPresentation.swift; sourceTree = "<group>"; };
 		9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeCLI.swift; sourceTree = "<group>"; };
 		9A0887312C7A693000C160EA /* TabButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabButton.swift; sourceTree = "<group>"; };
@@ -468,12 +475,24 @@
 				111BE95D2ECD71E10079DD4E /* AsyncXPCConnection in Frameworks */,
 				B1628B922CC260C0003D8DF3 /* SwiftUIIntrospect in Frameworks */,
 				E3E7E0A839C22FA4C78209C2 /* OpenIslandCore in Frameworks */,
+				95CD6F2459CD85255856E1C7 /* PresenceKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		06A47D879BA6C262290CEDE5 /* Guard */ = {
+			isa = PBXGroup;
+			children = (
+				8D214D816407B7B4AC2E8B7B /* GuardManager.swift */,
+				02EB95876F8C19069A8BBFC1 /* GuardNotchView.swift */,
+				60F299CBB016B0485223103E /* GuardSettings.swift */,
+			);
+			name = Guard;
+			path = Guard;
+			sourceTree = "<group>";
+		};
 		1113ABB82E80E27000EC13B2 /* Models */ = {
 			isa = PBXGroup;
 			children = (
@@ -706,6 +725,7 @@
 				3CFF14CDCCEF65B1348D0CEB /* Mods */,
 				D8B04AAD24E3225C8D37B9AC /* Storage */,
 				4F08868C87025A4780939154 /* Display */,
+				06A47D879BA6C262290CEDE5 /* Guard */,
 			);
 			path = NotchNerd;
 			sourceTree = "<group>";
@@ -1023,6 +1043,7 @@
 				111BEA5E2ED07A340079DD4E /* MacroVisionKit */,
 				111BEA6E2ED166E20079DD4E /* MacroVisionKit */,
 				B11E5C1F3836AF0C941BEAD6 /* OpenIslandCore */,
+				DA5EF840C8AB19F0173E6D91 /* PresenceKit */,
 			);
 			productName = NotchNerd;
 			productReference = 14CEF4122C5CAED300855D72 /* NotchNerd.app */;
@@ -1069,6 +1090,7 @@
 				111BE95B2ECD71E10079DD4E /* XCRemoteSwiftPackageReference "AsyncXPCConnection" */,
 				111BEA6D2ED166E20079DD4E /* XCRemoteSwiftPackageReference "MacroVisionKit" */,
 				6209AB78ED825F067AA96BA2 /* XCLocalSwiftPackageReference "OpenIslandEngine" */,
+				2712ECC1447E37672E640408 /* XCRemoteSwiftPackageReference "notchguard" */,
 			);
 			productRefGroup = 14CEF4132C5CAED300855D72 /* Products */;
 			projectDirPath = "";
@@ -1298,6 +1320,9 @@
 				2971C3BBC3C53B8C18304371 /* ColorProfiles.swift in Sources */,
 				70EE0982A57E3779295446AE /* DisplayPresets.swift in Sources */,
 				9D156590C7889AF9E73C7110 /* VirtualHiDPI.swift in Sources */,
+				BFF9F098568D4213BCDC0D89 /* GuardManager.swift in Sources */,
+				7323A4D70A92E453673D0CA6 /* GuardNotchView.swift in Sources */,
+				112AF2A4FEC37466FAA3DFFB /* GuardSettings.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1688,6 +1713,14 @@
 				version = 2.9.1;
 			};
 		};
+		2712ECC1447E37672E640408 /* XCRemoteSwiftPackageReference "notchguard" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mkbuilds4/notchguard.git";
+			requirement = {
+				kind = revision;
+				revision = d5938f67792115bd33ae94aa4d33e009ce8931a8;
+			};
+		};
 		9A987A0E2C73CA8D005CA465 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-collections.git";
@@ -1793,6 +1826,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B19016202CC15B3D00E3F12E /* XCRemoteSwiftPackageReference "Defaults" */;
 			productName = Defaults;
+		};
+		DA5EF840C8AB19F0173E6D91 /* PresenceKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2712ECC1447E37672E640408 /* XCRemoteSwiftPackageReference "notchguard" */;
+			productName = PresenceKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

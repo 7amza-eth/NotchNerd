@@ -73,8 +73,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenLockedObserver: Any?
     private var screenUnlockedObserver: Any?
     private var isScreenLocked: Bool = false
+    /// Whether the notch windows stayed up for this lock (lock-screen setting, or Guard's face unlock HUD).
+    private var notchOnLockScreen: Bool = false
     private var windowScreenDidChangeObserver: Any?
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // With Guard on, quitting needs Touch ID (logout and shutdown pass through).
+        MainActor.assumeIsolated { GuardManager.shared.shouldTerminate(sender) }
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -94,6 +101,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         cleanupDragDetectors()
         AgentBridgeManager.shared.stop()
         AgentUsageManager.shared.stop()
+        MainActor.assumeIsolated { GuardManager.shared.stopEngine() }
         NotesStore.shared.flush()
         cleanupWindows()
         MediaKeyInterceptor.shared.stopAccessibilityMonitoring()
@@ -102,7 +110,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func onScreenLocked(_ notification: Notification) {
         isScreenLocked = true
-        if !Defaults[.showOnLockScreen] {
+        notchOnLockScreen = Defaults[.showOnLockScreen] || GuardManager.shared.wantsLockScreenNotch
+        if !notchOnLockScreen {
             cleanupWindows()
         } else {
             enableSkyLightOnAllWindows()
@@ -112,7 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func onScreenUnlocked(_ notification: Notification) {
         isScreenLocked = false
-        if !Defaults[.showOnLockScreen] {
+        if !notchOnLockScreen {
             adjustWindowPosition(changeAlpha: true)
         } else {
             disableSkyLightOnAllWindows()
@@ -476,6 +485,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AgentBridgeManager.shared.start()
         // Start the usage HUD bridge (no-op unless Defaults[.agentUsageEnabled]).
         AgentUsageManager.shared.start()
+
+        // Start Guard (no-op unless Defaults[.guardEnabled] and its setup is done).
+        GuardManager.shared.startIfEnabled()
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "guardNotchDemo") { GuardManager.shared.runNotchDemo() }
+        #endif
 
         // Seed the bundled music-visualizer presets once (idempotent).
         CustomVisualizer.seedBuiltInsIfNeeded()

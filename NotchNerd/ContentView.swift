@@ -26,6 +26,9 @@ struct ContentView: View {
     @ObservedObject var agent = AgentBridgeManager.shared
     @ObservedObject var modChips = NotchModChipCenter.shared
     @ObservedObject var eventInbox = NotchEventInbox.shared
+    @ObservedObject var guardNotch = GuardNotchModel.shared
+    /// The tab to go back to once Guard's HUD closes.
+    @State private var viewBeforeGuard: NotchViews?
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -278,6 +281,9 @@ struct ContentView: View {
                             if vm.notchState == .closed { doOpen() }
                         }
                     }
+                    .onChange(of: guardNotch.presentation) { _, presentation in
+                        handleGuardPresentation(presentation)
+                    }
                     .onReceive(NotificationCenter.default.publisher(for: .agentNotificationCloseRequested)) { _ in
                         guard !isHovering, !SharingStateManager.shared.preventNotchClose else { return }
                         vm.close()
@@ -459,6 +465,9 @@ struct ContentView: View {
                           .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           NotchNerdFaceAnimation()
+                       } else if vm.notchState == .open && coordinator.currentView == .guardian {
+                           // Guard's HUD has no tabs: just the bridge under the hardware notch.
+                           Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width, height: max(24, vm.effectiveClosedNotchHeight))
                        } else if vm.notchState == .open {
                            NotchNerdHeader()
                                .frame(height: max(24, vm.effectiveClosedNotchHeight))
@@ -524,6 +533,8 @@ struct ContentView: View {
                         StorageTabView()
                     case .display:
                         DisplayTabView()
+                    case .guardian:
+                        GuardNotchView()
                     case .mod(let id):
                         NotchModTabView(modID: id)
                     }
@@ -707,6 +718,23 @@ struct ContentView: View {
         }
         } else {
             EmptyView()
+        }
+    }
+
+    /// Guard's HUD and enrollment take over the notch (security UI, so unlike agent pops it may
+    /// replace an open tab), on the built-in display only, and hand it back when they're done.
+    private func handleGuardPresentation(_ presentation: GuardNotchModel.Presentation?) {
+        guard GuardNotchModel.hostsOnScreen(vm.screenUUID) else { return }
+        if presentation != nil {
+            if coordinator.currentView != .guardian { viewBeforeGuard = coordinator.currentView }
+            coordinator.currentView = .guardian
+            withAnimation(animationSpring) {
+                if vm.notchState == .closed { vm.open() } else { vm.notchSize = vm.openSize(for: .guardian) }
+            }
+        } else if coordinator.currentView == .guardian {
+            coordinator.currentView = viewBeforeGuard ?? .home
+            viewBeforeGuard = nil
+            if isHovering { vm.notchSize = vm.openSize(for: coordinator.currentView) } else { vm.close() }
         }
     }
 

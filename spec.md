@@ -579,6 +579,33 @@ camera/notepad/settings buttons); the left bar keeps Home, Shelf, Agent, Notes.
   music, timer, Claude working/needs-you like mod chips. Events count only with other attendees or a
   call link, not declined. One toast at start; optional notes-app launch (`meetingNotesApp`, "Granola").
 
+### Guard (walk-away protection)
+
+Guard is NotchNerd's front end for **PresenceKit** (the engine of the standalone Presence Lock app,
+MIT), linked as a Swift package from `github.com/mkbuilds4/presence-lock` pinned to a commit
+(`tooling/scripts/add_guard_files.rb [commit]` adds the files and re-pins). That repo is private until
+launch, so CI needs a token with read access to resolve it. PresenceKit owns face matching (Vision + MobileFaceNet), liveness (random
+head-turn challenge, blink, phone-outline check), the frosted away cover, lock-screen face unlock, intruder photos +
+iMessage, and its tuned settings (`PresenceKit.Config`, aliased `GuardConfig` because NotchNerd has its
+own `Config`). NotchNerd owns, in `NotchNerd/Guard/`:
+
+- `GuardManager` - on/off (`Defaults[.guardEnabled]`, off by default), first-run state, and **tamper
+  protection**: turning Guard off and quitting/restarting NotchNerd need Touch ID
+  (`applicationShouldTerminate` → `.terminateLater`); logout/shutdown pass through
+  (`willPowerOffNotification`). A force quit (Activity Monitor, `kill -9`) can't be intercepted.
+- `GuardSettings` - Settings → Guard: model download, camera, face enrollment, optional face unlock
+  (password + Accessibility) and iMessage alert number.
+- Face model, **never bundled** (InsightFace's pretrained weights are non-commercial research only):
+  Settings calls `PresenceGuard.installModel()`, which range-fetches just `w600k_mbf.onnx` (13 MB) from
+  InsightFace's `buffalo_s.zip` release, checks its SHA-256, and converts it to Core ML on device
+  (PresenceKit's `ModelInstaller`/`ModelConverter`, first written on this branch).
+- `GuardNotchView` - the Face ID HUD and enrollment ring as the `.guardian` notch view (not a tab).
+  `GuardNotchModel` is PresenceKit's `GuardPresenter` (so PresenceKit's own notch panel never opens). The
+  live check's head-turn prompts ("Turn your head left", "Look up") get a direction arrow. It takes over the notch even when open (security UI), only on the camera's display,
+  blocks hover-close while up, and restores the previous tab after. With face unlock on, the notch
+  windows stay on the lock screen (SkyLight) so the HUD has a home there. Debug builds:
+  `-guardNotchDemo YES` plays every state without a camera.
+
 ### XPC helper
 
 `NotchNerdXPCHelper/` (5 files) is a separate XPC service `eth.7amza.notchnerd.XPCHelper`, built as
