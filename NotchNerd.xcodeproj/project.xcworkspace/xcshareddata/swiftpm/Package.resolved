@@ -69,7 +69,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mkbuilds4/presence-lock.git",
       "state" : {
-        "revision" : "9c687d0290d6112f2a4a9e71e84492ebb7b5b447"
+        "revision" : "f5c6aa80057d49bcfc1acf3889707604b924a2b2"
       }
     },
     {
