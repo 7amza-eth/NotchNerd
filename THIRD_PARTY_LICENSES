@@ -481,7 +481,7 @@ defined by the Mozilla Public License, v. 2.0.
 
 ================================================================================
 PresenceKit (Guard engine) - MIT
-https://github.com/mkbuilds4/presence-lock (private until launch)
+https://github.com/mkbuilds4/notchguard
 Linked as a Swift package. It includes code adapted from Glance
 (github.com/jonnyoo/glance, MIT) and FaceGate (MIT); see its own notices.
 

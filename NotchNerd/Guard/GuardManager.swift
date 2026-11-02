@@ -2,7 +2,7 @@
 //  GuardManager.swift
 //  NotchNerd
 //
-//  NotchNerd's side of Guard. The engine is PresenceKit (the presence-lock package, MIT):
+//  NotchNerd's side of Guard. The engine is PresenceKit (the NotchGuard package, MIT):
 //  face matching, liveness, the away cover, lock-screen face unlock and intruder alerts. This owns
 //  what's NotchNerd's: the on/off switch, first-run setup state, the face model install, and the
 //  Touch ID gate on quitting NotchNerd or turning Guard off.

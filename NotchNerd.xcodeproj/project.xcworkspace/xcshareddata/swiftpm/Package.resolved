@@ -65,11 +65,11 @@
       }
     },
     {
-      "identity" : "presence-lock",
+      "identity" : "notchguard",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mkbuilds4/presence-lock.git",
+      "location" : "https://github.com/mkbuilds4/notchguard.git",
       "state" : {
-        "revision" : "93302fd16aafcecf623261a75373f3563d6bbe19"
+        "revision" : "d5938f67792115bd33ae94aa4d33e009ce8931a8"
       }
     },
     {

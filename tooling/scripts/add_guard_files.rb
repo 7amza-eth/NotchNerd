@@ -3,13 +3,13 @@
 # PresenceKit package from GitHub pinned to a commit. Idempotent; pass a new commit to re-pin.
 #
 # Usage (from repo root):
-#   ruby tooling/scripts/add_guard_files.rb [presence-lock commit]
+#   ruby tooling/scripts/add_guard_files.rb [notchguard commit]
 require "xcodeproj"
 
 PROJECT     = File.expand_path("NotchNerd.xcodeproj", Dir.pwd)
 TARGET_NAME = "NotchNerd"
-PKG_URL     = "https://github.com/mkbuilds4/presence-lock.git"
-PKG_REV     = ARGV[0] || "93302fd16aafcecf623261a75373f3563d6bbe19"
+PKG_URL     = "https://github.com/mkbuilds4/notchguard.git"
+PKG_REV     = ARGV[0] || "d5938f67792115bd33ae94aa4d33e009ce8931a8"
 
 project = Xcodeproj::Project.open(PROJECT)
 target  = project.targets.find { |t| t.name == TARGET_NAME } or abort "target #{TARGET_NAME} not found"
