@@ -108,7 +108,11 @@ NotchNerd/                          repo root
 │  │  ├─ DisplayManager.swift       displays, modes (incl. HiDPI/hidden), brightness, mirror, main
 │  │  ├─ DDC.swift                  DDC/CI over IOAVService (private IOKit) for external monitors
 │  │  ├─ DisplayTabView.swift       tab UI + DisplaySettings + MeetingChipSettings
-│  │  └─ MeetingWatcher.swift       next-meeting countdown in the closed notch (EventKit)
+│  │  ├─ MeetingWatcher.swift       next-meeting countdown in the closed notch (EventKit)
+│  │  ├─ ColorProfiles.swift        ColorSync profile list + set
+│  │  ├─ DisplayPresets.swift       named display setups (Defaults, per display UUID)
+│  │  └─ VirtualHiDPI.swift         CGVirtualDisplay at 2x + mirror = HiDPI on any monitor
+│  ├─ NotchNerd-Bridging-Header.h   private CGVirtualDisplay* declarations (only these)
 │  ├─ components/                   Notch/ Calendar/ Live activities/ Music/ Onboarding/
 │  │                                Settings/ Shelf/ Tabs/ Tips/ Webcam/
 │  │  └─ Notch/                     NotchNerdSkyLightWindow (runtime), NotchNerdWindow (legacy),
@@ -549,8 +553,22 @@ camera/notepad/settings buttons); the left bar keeps Home, Shelf, Agent, Notes.
   IDs. Right for one monitor, best effort for several (MonitorControl matches EDID; port that if it bites).
 - **Modes:** `CGDisplayCopyAllDisplayModes` with `kCGDisplayShowDuplicateLowResolutionModes`, split into
   HiDPI and low-res sections. Mirror and make-main use `CGBeginDisplayConfiguration`.
-- **Not yet (BetterDisplay Pro):** XDR/EDR extra brightness, virtual screens for HiDPI on monitors
-  without it, PiP, presets, brightness keys for externals, EDID override.
+- **Combined brightness (v0.4.0):** one slider; above `dimSplit` (0.25) is hardware, below it gamma dimming.
+  Warmth and gamma share the same gamma table (`applyGamma`); adjustments are saved per display UUID
+  (`displayAdjustments`) and re-applied on launch and after any reconfiguration.
+- **Keep these settings:** `displayProtectedModes[uuid] = mode id`; the reconfiguration callback puts the
+  mode back after 1 s. **Hide the notch:** switch the built-in panel to its 16:10 mode (1470x918).
+- **Keys:** MediaKeyInterceptor sends brightness keys to the external display under the pointer
+  (`displayKeysControlExternal`); `displayBrightnessSync` makes externals follow the built-in.
+- **Presets:** `[DisplayPreset]` in Defaults; saved auto-named from the Displays tab (the notch can't take
+  typing), renamed/deleted in Settings. Apply skips screens that aren't connected.
+- **Virtual HiDPI:** `CGVirtualDisplay` (vendor 0x4E4E) at 2x the panel's pixels with HiDPI modes at
+  scales 1 to 0.5, then the monitor mirrors onto it. `reload()` hides virtual displays and folds their
+  modes into the physical card; `setMode`/`makeMain` target the virtual one. The object must stay alive
+  (held in `VirtualHiDPI.virtuals`); re-created at launch from `displayVirtualHiDPI`. Verified creating
+  a virtual display on macOS 26 with `-debugVirtualProbe YES`; the mirror step needs a real monitor.
+- **Not yet:** XDR/EDR extra brightness (no effect on the M3 Air panel), PiP/stream, rotation, soft
+  disconnect, auto-brightness switch, color mode, EDID override.
 - **Meeting chip:** `MeetingWatcher` (30 s timer + EKEventStoreChanged) sets
   `NotchModChipCenter.setNative(_:)`; the native chip shows only when no mod chip does, and yields to
   music, timer, Claude working/needs-you like mod chips. Events count only with other attendees or a
