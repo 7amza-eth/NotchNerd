@@ -258,6 +258,10 @@ extension Defaults.Keys {
     static let meetingChipLeadMinutes = Key<Int>("meetingChipLeadMinutes", default: 60)
     static let meetingOpenNotesApp = Key<Bool>("meetingOpenNotesApp", default: false)
     static let meetingNotesApp = Key<String>("meetingNotesApp", default: "Granola")
+    static let displayAdjustments = Key<[String: [String: Double]]>("displayAdjustments", default: [:])
+    static let displayProtectedModes = Key<[String: String]>("displayProtectedModes", default: [:])
+    static let displayBrightnessSync = Key<Bool>("displayBrightnessSync", default: false)
+    static let displayKeysControlExternal = Key<Bool>("displayKeysControlExternal", default: true)
 
     // Helper to determine the default media controller based on NowPlaying deprecation status
     static var defaultMediaController: MediaControllerType {

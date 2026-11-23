@@ -275,6 +275,13 @@ final class MediaKeyInterceptor {
             if keyboard {
                 KeyboardBacklightManager.shared.setRelative(delta: delta)
             } else {
+                // The pointer is on an external display: step that one instead (Displays tab).
+                if Defaults[.displayKeysControlExternal],
+                   let display = DisplayManager.shared.displayUnderPointer(), !display.isBuiltIn,
+                   let value = DisplayManager.shared.stepExternal(display.id, by: Double(delta)) {
+                    NotchNerdViewCoordinator.shared.toggleSneakPeek(status: true, type: .brightness, value: CGFloat(value))
+                    return
+                }
                 BrightnessManager.shared.setRelative(delta: delta)
             }
         }

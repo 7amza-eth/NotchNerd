@@ -111,6 +111,7 @@
 		14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */; };
 		1E7DB3D57CA1D0BE41B0E8F4 /* ClaudeTranscriptReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C498DDEF5564D00E8400B9F1 /* ClaudeTranscriptReader.swift */; };
 		22353DBBEEEE803295590640 /* AgentMonitorOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7538835A1F722032A387A1CC /* AgentMonitorOnboardingView.swift */; };
+		2971C3BBC3C53B8C18304371 /* ColorProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3FDB6EB8CEE7008F7DFB1C /* ColorProfiles.swift */; };
 		35B6CC2787B7DE3868F62C66 /* NotchModManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B7CD21676B44BBFA2451F4 /* NotchModManifest.swift */; };
 		375736ED1B967208F5D20697 /* NotchModWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0371E07FC854E8A680B4FCA9 /* NotchModWebView.swift */; };
 		3B35AEFA27C6647596C04D48 /* NotepadTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */; };
@@ -385,6 +386,7 @@
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
 		B6D0FD510B346C0ABAC10B21 /* AgentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentView.swift; sourceTree = "<group>"; };
 		B9F14A31613C0C91A6180309 /* NotchModTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModTabView.swift; sourceTree = "<group>"; };
+		BB3FDB6EB8CEE7008F7DFB1C /* ColorProfiles.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ColorProfiles.swift; sourceTree = "<group>"; };
 		BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentActivity.swift; sourceTree = "<group>"; };
 		C333DD18C7D5B05C5BFED7B0 /* NotchModAPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModAPI.swift; sourceTree = "<group>"; };
 		C498DDEF5564D00E8400B9F1 /* ClaudeTranscriptReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeTranscriptReader.swift; sourceTree = "<group>"; };
@@ -783,6 +785,7 @@
 				50A765E76AF9DDBB65947706 /* DisplayManager.swift */,
 				AE47E51820F028140C36D979 /* DisplayTabView.swift */,
 				78D2D1B0341317E67E89B8C4 /* MeetingWatcher.swift */,
+				BB3FDB6EB8CEE7008F7DFB1C /* ColorProfiles.swift */,
 			);
 			name = Display;
 			path = Display;
@@ -1286,6 +1289,7 @@
 				7A98EAE87A6E7A0F939A2A51 /* DisplayManager.swift in Sources */,
 				E960AAD88A1EAD240D94F82D /* DisplayTabView.swift in Sources */,
 				E68DE5DB53EAEF44C49D386B /* MeetingWatcher.swift in Sources */,
+				2971C3BBC3C53B8C18304371 /* ColorProfiles.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

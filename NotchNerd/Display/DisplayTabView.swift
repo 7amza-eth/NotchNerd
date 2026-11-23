@@ -2,10 +2,10 @@
 //  DisplayTabView.swift
 //  NotchNerd
 //
-//  The Displays tab: one card per screen. Brightness for every display (built-in via DisplayServices,
-//  external via DDC, software dimming as fallback), resolutions including HiDPI and hidden modes,
-//  mirroring and "make main". External monitors that answer DDC also get contrast, volume and input.
-//  Engine: DisplayManager.swift / DDC.swift.
+//  The Displays tab: one card per screen with a combined brightness slider (hardware, then software
+//  dimming below it), a resolution slider over the HiDPI sizes, and an Adjust panel (warmth, gamma).
+//  The ⋯ menu holds hide-the-notch, keep-these-settings, color profile, mirror and make-main.
+//  External monitors that answer DDC also get contrast, volume and input. Engine: DisplayManager.swift.
 //
 
 import Defaults
@@ -16,6 +16,10 @@ let displayNotchSize: CGSize = .init(width: openNotchSize.width, height: 300)
 struct DisplayTabView: View {
     @ObservedObject private var manager = DisplayManager.shared
     @ObservedObject private var builtInBrightness = BrightnessManager.shared
+    @State private var adjusting: Set<CGDirectDisplayID> = []
+    /// Slider position while dragging, so the label follows before the mode is applied on release.
+    @State private var draggingResolution: [CGDirectDisplayID: Double] = [:]
+    @State private var profiles: [ColorProfiles.Profile] = []
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -24,7 +28,7 @@ struct DisplayTabView: View {
                     card(display)
                 }
                 if let message = manager.message {
-                    Text(message).font(.caption2).foregroundStyle(.orange)
+                    Text(message).font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 12)
@@ -32,7 +36,10 @@ struct DisplayTabView: View {
             .padding(.bottom, 10)
         }
         .foregroundStyle(.white)
-        .onAppear { manager.reload() }
+        .onAppear {
+            manager.reload()
+            if profiles.isEmpty { profiles = ColorProfiles.all() }
+        }
     }
 
     private func card(_ d: DisplayInfo) -> some View {
@@ -43,13 +50,28 @@ struct DisplayTabView: View {
                 Text(d.name).font(.callout.weight(.medium)).lineLimit(1)
                 if d.isMain { badge("Main") }
                 if d.mirrorOf != nil { badge("Mirroring") }
+                if d.isProtected { Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.secondary).help("Settings are kept") }
                 Spacer()
-                resolutionMenu(d)
-                arrangementMenu(d)
+                Button {
+                    withAnimation(.smooth(duration: 0.2)) {
+                        if adjusting.contains(d.id) { adjusting.remove(d.id) } else { adjusting.insert(d.id) }
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundStyle(adjusting.contains(d.id) || !d.adjustments.isDefault ? .white : .gray)
+                }
+                .buttonStyle(.plain)
+                .help("Image adjustments")
+                moreMenu(d)
             }
 
-            sliderRow(symbol: "sun.max", value: brightnessBinding(d))
-                .help(d.isBuiltIn ? "Brightness" : d.hasDDC ? "Brightness (DDC)" : "Brightness (software dimming; this monitor didn't answer DDC)")
+            // Combined brightness: hardware above the split, software dimming below it.
+            sliderRow(symbol: "sun.max", value: Binding(
+                get: { d.isBuiltIn ? manager.combinedBuiltIn(builtInBrightness.rawBrightness, d) : manager.combined(d) },
+                set: { manager.setCombined($0, for: d.id) }))
+                .help(d.isBuiltIn || d.hasDDC ? "Brightness (the lowest quarter dims in software)" : "Brightness (software; this monitor didn't answer DDC)")
+
+            resolutionRow(d)
 
             if !d.isBuiltIn && d.hasDDC {
                 HStack(spacing: 14) {
@@ -65,45 +87,61 @@ struct DisplayTabView: View {
                 }
             }
 
-            if d.isBuiltIn || d.hasDDC {
-                // Dim below the panel's minimum (great at night).
-                sliderRow(symbol: "moon", value: Binding(
-                    get: { d.dim }, set: { manager.setDim($0, for: d.id) }), range: 0.2...1)
-                    .help("Dim below the lowest brightness (software)")
+            if adjusting.contains(d.id) {
+                HStack(spacing: 14) {
+                    sliderRow(symbol: "thermometer.medium", value: Binding(
+                        get: { d.adjustments.warmth }, set: { manager.setWarmth($0, for: d.id) }), range: -1...1)
+                        .help("Warmth: left is cooler, right is warmer")
+                    sliderRow(symbol: "circle.bottomrighthalf.pattern.checkered", value: Binding(
+                        get: { 2.2 - d.adjustments.gamma }, set: { manager.setGamma(2.2 - $0, for: d.id) }), range: 0.6...1.6)
+                        .help("Gamma: right lifts shadows")
+                    Button("Reset") { manager.resetAdjustments(for: d.id) }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(d.adjustments.isDefault ? .gray : .white)
+                        .disabled(d.adjustments.isDefault)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.05)))
     }
 
-    private func brightnessBinding(_ d: DisplayInfo) -> Binding<Double> {
-        if d.isBuiltIn {
-            return Binding(get: { Double(builtInBrightness.rawBrightness) },
-                           set: { manager.setBrightness($0, for: d.id) })
-        }
-        if d.hasDDC {
-            return Binding(get: { d.brightness ?? 0.5 }, set: { manager.setBrightness($0, for: d.id) })
-        }
-        return Binding(get: { d.dim }, set: { manager.setDim($0, for: d.id) })
-    }
+    // MARK: Resolution
 
-    private func sliderRow(symbol: String, value: Binding<Double>, range: ClosedRange<Double> = 0...1) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol).font(.caption).foregroundStyle(.secondary).frame(width: 16)
-            Slider(value: value, in: range)
+    @ViewBuilder
+    private func resolutionRow(_ d: DisplayInfo) -> some View {
+        let modes = d.sliderModes
+        if modes.count > 1 {
+            let currentIndex = Double(modes.firstIndex { $0.width == d.current?.width } ?? 0)
+            let shown = Int((draggingResolution[d.id] ?? currentIndex).rounded())
+            let label = modes[min(max(shown, 0), modes.count - 1)]
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.caption).foregroundStyle(.secondary).frame(width: 16)
+                Slider(value: Binding(
+                    get: { draggingResolution[d.id] ?? currentIndex },
+                    set: { draggingResolution[d.id] = $0 }),
+                       in: 0...Double(modes.count - 1), step: 1) { editing in
+                    guard !editing, let v = draggingResolution[d.id] else { return }
+                    let target = modes[Int(v.rounded())]
+                    draggingResolution[d.id] = nil
+                    if target != d.current { manager.setMode(target, for: d.id) }
+                }
                 .controlSize(.small)
                 .tint(.white)
+                resolutionMenu(d, title: "\(label.width)×\(label.height)")
+            }
+        } else {
+            HStack {
+                Spacer()
+                resolutionMenu(d, title: d.current.map { "\($0.width)×\($0.height)" } ?? "Resolution")
+            }
         }
     }
 
-    private func badge(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
-            .padding(.horizontal, 6).padding(.vertical, 1)
-            .background(Capsule().fill(Color.white.opacity(0.12)))
-    }
-
-    private func resolutionMenu(_ d: DisplayInfo) -> some View {
+    private func resolutionMenu(_ d: DisplayInfo, title: String) -> some View {
         Menu {
             let hidpi = d.modes.filter(\.hiDPI)
             let lowres = d.modes.filter { !$0.hiDPI }
@@ -112,11 +150,11 @@ struct DisplayTabView: View {
             }
             Section(hidpi.isEmpty ? "Resolutions" : "Native pixels and low resolution") { modeButtons(lowres, d) }
         } label: {
-            Text(d.current.map { "\($0.width)×\($0.height)" } ?? "Resolution")
-                .font(.caption.monospacedDigit())
+            Text(title).font(.caption.monospacedDigit())
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .help("All resolutions and refresh rates")
     }
 
     @ViewBuilder
@@ -130,8 +168,27 @@ struct DisplayTabView: View {
         }
     }
 
-    private func arrangementMenu(_ d: DisplayInfo) -> some View {
+    // MARK: Menus
+
+    private func moreMenu(_ d: DisplayInfo) -> some View {
         Menu {
+            if let notch = manager.notchToggleMode(d) {
+                Button(notch.hides ? "Hide the notch" : "Show the notch") { manager.setMode(notch.mode, for: d.id) }
+            }
+            Toggle("Keep these settings", isOn: Binding(
+                get: { d.isProtected }, set: { manager.setProtected($0, for: d.id) }))
+            Menu("Color profile") {
+                Button("Factory default") { manager.setProfile(nil, for: d.id) }
+                Divider()
+                ForEach(profiles) { profile in
+                    Button {
+                        manager.setProfile(profile, for: d.id)
+                    } label: {
+                        if profile.name == d.profileName { Label(profile.name, systemImage: "checkmark") } else { Text(profile.name) }
+                    }
+                }
+            }
+            Divider()
             if !d.isMain { Button("Make main display") { manager.makeMain(d.id) } }
             if manager.displays.count > 1 {
                 Button(d.mirrorOf == nil ? "Mirror main display" : "Stop mirroring") { manager.toggleMirror(d.id) }
@@ -160,6 +217,33 @@ struct DisplayTabView: View {
         .fixedSize()
         .help("Switch input")
     }
+
+    // MARK: Pieces
+
+    private func sliderRow(symbol: String, value: Binding<Double>, range: ClosedRange<Double> = 0...1) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).font(.caption).foregroundStyle(.secondary).frame(width: 16)
+            Slider(value: value, in: range)
+                .controlSize(.small)
+                .tint(.white)
+        }
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(Capsule().fill(Color.white.opacity(0.12)))
+    }
+}
+
+extension DisplayManager {
+    /// The built-in display's combined value, read from BrightnessManager's published brightness so
+    /// the slider follows the keyboard keys live.
+    func combinedBuiltIn(_ raw: Float, _ d: DisplayInfo) -> Double {
+        if d.adjustments.dim < 0.999 { return (d.adjustments.dim - 0.2) / 0.8 * Self.dimSplit }
+        return Self.dimSplit + (1 - Self.dimSplit) * Double(raw)
+    }
 }
 
 // MARK: - Settings → Displays
@@ -169,10 +253,12 @@ struct DisplaySettings: View {
         Form {
             Section {
                 Defaults.Toggle(key: .displayTabEnabled) { Text("Show the Displays tab in the notch") }
+                Defaults.Toggle(key: .displayBrightnessSync) { Text("External displays follow the built-in brightness") }
+                Defaults.Toggle(key: .displayKeysControlExternal) { Text("Brightness keys adjust the display under the pointer") }
             } header: {
                 Text("Displays")
             } footer: {
-                Text("Brightness, resolution (including HiDPI and hidden modes), mirroring and the main display for every screen. External monitors that support DDC also get contrast, volume and input switching; ones that don't are dimmed in software.")
+                Text("Brightness, resolution (including HiDPI and hidden modes), warmth and gamma, color profiles, mirroring and the main display for every screen. External monitors that support DDC also get contrast, volume and input switching; ones that don't are dimmed in software. \"Keep these settings\" in a display's ⋯ menu puts its resolution back if macOS changes it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
