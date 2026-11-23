@@ -112,6 +112,7 @@ final class DisplayManager: ObservableObject {
     private var pendingWrites: [String: DispatchWorkItem] = [:]
     private var started = false
     private var syncCancellable: AnyCancellable?
+    private var syncTimer: Timer?
     private var restoring = false
 
     /// Where the combined slider switches from software dimming to hardware brightness.
@@ -136,7 +137,25 @@ final class DisplayManager: ObservableObject {
         syncCancellable = BrightnessManager.shared.$rawBrightness
             .removeDuplicates()
             .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
-            .sink { [weak self] value in self?.followBuiltIn(Double(value)) }
+            .sink { [weak self] value in
+                guard let self else { return }
+                // The brightness keys went up from the bottom: drop the software dimming so the
+                // panel and the combined slider agree again.
+                if value > 0.02, let b = self.displays.first(where: \.isBuiltIn), b.adjustments.dim < 0.999 {
+                    self.setDim(1, for: b.id)
+                }
+                self.followBuiltIn(Double(value))
+            }
+        // With sync on and an external connected, watch the built-in panel even while the tab is
+        // closed (macOS handles the keys itself unless NotchNerd's HUD replacement is on).
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            Task { @MainActor in
+                let m = DisplayManager.shared
+                if Defaults[.displayBrightnessSync], m.displays.contains(where: { !$0.isBuiltIn }) {
+                    BrightnessManager.shared.refresh()
+                }
+            }
+        }
     }
 
     private func displaysChanged() {

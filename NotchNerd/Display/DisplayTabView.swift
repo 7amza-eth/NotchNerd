@@ -41,6 +41,11 @@ struct DisplayTabView: View {
             manager.reload()
             if profiles.isEmpty { profiles = ColorProfiles.all() }
         }
+        // macOS handles the brightness keys itself unless NotchNerd's HUD replacement is on, so the
+        // slider wouldn't hear about them: re-read the built-in panel's brightness while this tab shows.
+        .onReceive(Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()) { _ in
+            if manager.displays.contains(where: \.isBuiltIn) { BrightnessManager.shared.refresh() }
+        }
     }
 
     private func card(_ d: DisplayInfo) -> some View {
