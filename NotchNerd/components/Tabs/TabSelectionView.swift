@@ -24,8 +24,6 @@ struct TabSelectionView: View {
     @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
     @Default(.agentPanelEnabled) var agentPanelEnabled
     @Default(.notepadTabEnabled) var notepadTabEnabled
-    @Default(.storageTabEnabled) var storageTabEnabled
-    @Default(.displayTabEnabled) var displayTabEnabled
     @Default(.notchModsEnabled) var notchModsEnabled
     @ObservedObject var notchMods = NotchModStore.shared
     @Namespace var animation
@@ -33,8 +31,6 @@ struct TabSelectionView: View {
         var result = tabs
         if agentPanelEnabled { result.append(TabModel(label: "Agent", icon: "sparkles", view: .agent)) }
         if notepadTabEnabled { result.append(TabModel(label: "Notes", icon: "note.text", view: .notepad)) }
-        if storageTabEnabled { result.append(TabModel(label: "Storage", icon: "internaldrive", view: .storage)) }
-        if displayTabEnabled { result.append(TabModel(label: "Displays", icon: "sun.max", view: .display)) }
         _ = notchModsEnabled   // re-render when mods are turned on or off
         for mod in notchMods.enabledTabMods {
             let icon = mod.manifest.surfaces.tab?.icon.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil ? $0 : nil }
@@ -118,4 +114,37 @@ struct TabSelectionView: View {
 
 #Preview {
     NotchNerdHeader().environmentObject(NotchNerdViewModel())
+}
+
+/// Utility tabs (Storage, Displays) shown on the right of the open notch, beside the camera,
+/// notepad and settings buttons, so the left tab bar stays short.
+struct RightTabButtons: View {
+    @ObservedObject var coordinator = NotchNerdViewCoordinator.shared
+    @Default(.storageTabEnabled) var storageTabEnabled
+    @Default(.displayTabEnabled) var displayTabEnabled
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if storageTabEnabled { button("internaldrive", "Storage", .storage) }
+            if displayTabEnabled { button("sun.max", "Displays", .display) }
+        }
+    }
+
+    private func button(_ icon: String, _ label: String, _ view: NotchViews) -> some View {
+        let selected = coordinator.currentView == view
+        return Button {
+            withAnimation(.smooth) { coordinator.currentView = view }
+        } label: {
+            Capsule()
+                .fill(selected ? Color(nsColor: .secondarySystemFill) : .black)
+                .frame(width: 30, height: 30)
+                .overlay {
+                    Image(systemName: icon)
+                        .foregroundColor(selected ? .white : .gray)
+                        .imageScale(.medium)
+                }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .help(label)
+    }
 }
