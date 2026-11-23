@@ -262,6 +262,8 @@ extension Defaults.Keys {
     static let displayProtectedModes = Key<[String: String]>("displayProtectedModes", default: [:])
     static let displayBrightnessSync = Key<Bool>("displayBrightnessSync", default: false)
     static let displayKeysControlExternal = Key<Bool>("displayKeysControlExternal", default: true)
+    static let displayPresets = Key<[DisplayPreset]>("displayPresets", default: [])
+    static let displayVirtualHiDPI = Key<Set<String>>("displayVirtualHiDPI", default: [])
 
     // Helper to determine the default media controller based on NowPlaying deprecation status
     static var defaultMediaController: MediaControllerType {

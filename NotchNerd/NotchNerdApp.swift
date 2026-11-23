@@ -497,6 +497,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         // Dev aid: `open NotchNerd.app --args -debugOpenTab storage` opens the notch on that tab,
         // so a tab can be checked with a screenshot without hovering the notch.
+        if UserDefaults.standard.bool(forKey: "debugVirtualProbe") { VirtualHiDPI.shared.debugProbe() }
         if let tab = UserDefaults.standard.string(forKey: "debugOpenTab") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 guard let self else { return }

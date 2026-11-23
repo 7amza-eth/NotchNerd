@@ -24,6 +24,7 @@ struct DisplayTabView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 6) {
+                presetsBar
                 ForEach(manager.displays) { display in
                     card(display)
                 }
@@ -108,6 +109,31 @@ struct DisplayTabView: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.05)))
     }
 
+    // MARK: Presets
+
+    @Default(.displayPresets) private var presets
+
+    private var presetsBar: some View {
+        HStack(spacing: 8) {
+            Menu {
+                if presets.isEmpty { Text("No presets yet") }
+                ForEach(presets) { preset in
+                    Button(preset.name) { manager.apply(preset) }
+                }
+                Divider()
+                Button("Save current setup") { manager.saveCurrentPreset() }
+                Button("Rename or delete…") { SettingsWindowController.shared.showWindow() }
+            } label: {
+                Label("Presets", systemImage: "rectangle.stack")
+                    .font(.caption)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+    }
+
     // MARK: Resolution
 
     @ViewBuilder
@@ -174,6 +200,10 @@ struct DisplayTabView: View {
         Menu {
             if let notch = manager.notchToggleMode(d) {
                 Button(notch.hides ? "Hide the notch" : "Show the notch") { manager.setMode(notch.mode, for: d.id) }
+            }
+            if !d.isBuiltIn && !d.nativeHiDPI || d.virtualID != nil {
+                Toggle("Sharper text (HiDPI)", isOn: Binding(
+                    get: { d.virtualID != nil }, set: { manager.setVirtualHiDPI($0, for: d.id) }))
             }
             Toggle("Keep these settings", isOn: Binding(
                 get: { d.isProtected }, set: { manager.setProtected($0, for: d.id) }))
@@ -249,6 +279,8 @@ extension DisplayManager {
 // MARK: - Settings → Displays
 
 struct DisplaySettings: View {
+    @Default(.displayPresets) var presets
+
     var body: some View {
         Form {
             Section {
@@ -260,6 +292,21 @@ struct DisplaySettings: View {
             } footer: {
                 Text("Brightness, resolution (including HiDPI and hidden modes), warmth and gamma, color profiles, mirroring and the main display for every screen. External monitors that support DDC also get contrast, volume and input switching; ones that don't are dimmed in software. \"Keep these settings\" in a display's ⋯ menu puts its resolution back if macOS changes it.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                if presets.isEmpty {
+                    Text("Save one from the Displays tab: Presets, then Save current setup.").foregroundStyle(.secondary)
+                }
+                ForEach($presets) { $preset in
+                    HStack {
+                        TextField("Name", text: $preset.name)
+                        Button(role: .destructive) { presets.removeAll { $0.id == preset.id } } label: { Image(systemName: "trash") }
+                            .buttonStyle(.plain)
+                    }
+                }
+            } header: {
+                Text("Presets")
             }
         }
         .formStyle(.grouped)

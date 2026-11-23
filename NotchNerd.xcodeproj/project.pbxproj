@@ -132,6 +132,7 @@
 		643DEBDC400E040846AA790F /* GhosttyJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A1335325669BA8E6668AF6 /* GhosttyJumpService.swift */; };
 		64F2126E830969FF9EB4D366 /* WorkflowAgentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */; };
 		69BF5F91BEC383D6036AAB34 /* ClaudeCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */; };
+		70EE0982A57E3779295446AE /* DisplayPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C206599DFEF4086B6F14823 /* DisplayPresets.swift */; };
 		71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */; };
 		7A98EAE87A6E7A0F939A2A51 /* DisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A765E76AF9DDBB65947706 /* DisplayManager.swift */; };
 		7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */; };
@@ -147,6 +148,7 @@
 		9AB0C6BD2C73C9CB00F7CD30 /* NotchHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AB0C6BB2C73C9CB00F7CD30 /* NotchHomeView.swift */; };
 		9AB6C45F7DD33ABC71A85CAF /* AgentSessionDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40B3ECF7F69F23BD607D5A5 /* AgentSessionDetails.swift */; };
 		9ADC85C9AE3F3B0E4C85F8BD /* NotepadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EA51FAE2D3E577A2639854B /* NotepadPanel.swift */; };
+		9D156590C7889AF9E73C7110 /* VirtualHiDPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17B8F94CE29029521D76F6A /* VirtualHiDPI.swift */; };
 		A6A213C9133CACB3B39CEF61 /* NotchModStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55CC912C5FCD244AC5342C52 /* NotchModStore.swift */; };
 		B10348D92C74E56000475897 /* ConditionalModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10348D82C74E56000475897 /* ConditionalModifier.swift */; };
 		B10F84A32C6C9596009F3026 /* TestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10F84A22C6C9596009F3026 /* TestView.swift */; };
@@ -334,6 +336,7 @@
 		3AFCD29F43E3EFA6629578A3 /* ModCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModCatalog.swift; sourceTree = "<group>"; };
 		3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadTabView.swift; sourceTree = "<group>"; };
 		430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowAgentReader.swift; sourceTree = "<group>"; };
+		4C206599DFEF4086B6F14823 /* DisplayPresets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisplayPresets.swift; sourceTree = "<group>"; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
 		50A765E76AF9DDBB65947706 /* DisplayManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisplayManager.swift; sourceTree = "<group>"; };
 		55CC912C5FCD244AC5342C52 /* NotchModStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModStore.swift; sourceTree = "<group>"; };
@@ -367,6 +370,7 @@
 		B17266E02C6532560031BA0D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		B17266E22C65F7FB0031BA0D /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		B172AABF2C95DA0B001623F1 /* InlineHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineHUD.swift; sourceTree = "<group>"; };
+		B17B8F94CE29029521D76F6A /* VirtualHiDPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VirtualHiDPI.swift; sourceTree = "<group>"; };
 		B186543B2C6F49AE000B926A /* ShortcutConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutConstants.swift; sourceTree = "<group>"; };
 		B19016232CC15B4D00E3F12E /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		B19424082CD0FEFE003E5DC2 /* LottieAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieAnimationView.swift; sourceTree = "<group>"; };
@@ -786,6 +790,8 @@
 				AE47E51820F028140C36D979 /* DisplayTabView.swift */,
 				78D2D1B0341317E67E89B8C4 /* MeetingWatcher.swift */,
 				BB3FDB6EB8CEE7008F7DFB1C /* ColorProfiles.swift */,
+				4C206599DFEF4086B6F14823 /* DisplayPresets.swift */,
+				B17B8F94CE29029521D76F6A /* VirtualHiDPI.swift */,
 			);
 			name = Display;
 			path = Display;
@@ -1290,6 +1296,8 @@
 				E960AAD88A1EAD240D94F82D /* DisplayTabView.swift in Sources */,
 				E68DE5DB53EAEF44C49D386B /* MeetingWatcher.swift in Sources */,
 				2971C3BBC3C53B8C18304371 /* ColorProfiles.swift in Sources */,
+				70EE0982A57E3779295446AE /* DisplayPresets.swift in Sources */,
+				9D156590C7889AF9E73C7110 /* VirtualHiDPI.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1525,6 +1533,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "NotchNerd/NotchNerd-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.0;
 				SYSTEM_FRAMEWORK_SEARCH_PATHS = (
@@ -1581,6 +1590,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "NotchNerd/NotchNerd-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.0;
 				SYSTEM_FRAMEWORK_SEARCH_PATHS = (

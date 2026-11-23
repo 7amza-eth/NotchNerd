@@ -72,12 +72,17 @@ struct DisplayInfo: Identifiable, Equatable {
     var isProtected: Bool
     var profileName: String?
     var hasNotch: Bool
+    /// The virtual HiDPI display this monitor mirrors onto (VirtualHiDPI.swift), if on.
+    var virtualID: CGDirectDisplayID?
+    /// The monitor itself offers HiDPI modes (no virtual display needed).
+    var nativeHiDPI: Bool
 
     static func == (a: DisplayInfo, b: DisplayInfo) -> Bool {
         a.id == b.id && a.name == b.name && a.isMain == b.isMain && a.mirrorOf == b.mirrorOf
             && a.current == b.current && a.brightness == b.brightness && a.contrast == b.contrast
             && a.volume == b.volume && a.hasDDC == b.hasDDC && a.adjustments == b.adjustments
             && a.isProtected == b.isProtected && a.profileName == b.profileName && a.modes.count == b.modes.count
+            && a.virtualID == b.virtualID
     }
 
     /// Modes for the resolution slider: HiDPI sizes at the current refresh rate, one per width,
@@ -122,6 +127,10 @@ final class DisplayManager: ObservableObject {
             DispatchQueue.main.async { DisplayManager.shared.displaysChanged() }
         }, nil)
         reload()
+        // Bring back virtual HiDPI for monitors that had it on.
+        for d in displays where !d.isBuiltIn && Defaults[.displayVirtualHiDPI].contains(d.uuid) {
+            VirtualHiDPI.shared.enable(physical: d.id, uuid: d.uuid, name: d.name)
+        }
         reapplyAllGamma()
         // Externals follow the built-in panel when brightness sync is on.
         syncCancellable = BrightnessManager.shared.$rawBrightness
@@ -143,6 +152,9 @@ final class DisplayManager: ObservableObject {
         CGGetOnlineDisplayList(0, nil, &count)
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
         CGGetOnlineDisplayList(count, &ids, &count)
+        let online = Set(ids)
+        // Virtual HiDPI displays are folded into the monitor they serve.
+        ids = ids.filter { !VirtualHiDPI.isVirtual($0) }
 
         let externals = ids.filter { CGDisplayIsBuiltin($0) == 0 }
         if Set(ddc.keys) != Set(externals) { ddc = DDCChannel.channels(for: externals) }
@@ -154,15 +166,17 @@ final class DisplayManager: ObservableObject {
             let mirror = CGDisplayMirrorsDisplay(id)
             let uuid = Self.uuid(for: id)
             let previous = displays.first { $0.id == id }
+            let vid = VirtualHiDPI.shared.virtualID(forPhysical: uuid).flatMap { online.contains($0) ? $0 : nil }
+            let ownModes = Self.modes(for: id)
             return DisplayInfo(
                 id: id,
                 uuid: uuid,
                 name: Self.name(for: id),
                 isBuiltIn: builtIn,
                 isMain: CGDisplayIsMain(id) != 0,
-                mirrorOf: mirror == kCGNullDirectDisplay ? nil : mirror,
-                current: CGDisplayCopyDisplayMode(id).map(DisplayMode.init),
-                modes: Self.modes(for: id),
+                mirrorOf: mirror == kCGNullDirectDisplay || mirror == vid ? nil : mirror,
+                current: CGDisplayCopyDisplayMode(vid ?? id).map(DisplayMode.init),
+                modes: vid.map(Self.modes(for:)) ?? ownModes,
                 brightness: builtIn ? Double(BrightnessManager.shared.rawBrightness) : previous?.brightness,
                 contrast: previous?.contrast,
                 volume: previous?.volume,
@@ -170,7 +184,9 @@ final class DisplayManager: ObservableObject {
                 adjustments: saved[uuid].map(DisplayAdjustments.init) ?? DisplayAdjustments(),
                 isProtected: protected[uuid] != nil,
                 profileName: ColorProfiles.currentName(for: id),
-                hasNotch: builtIn && Self.screen(for: id).map { $0.safeAreaInsets.top > 0 } ?? false)
+                hasNotch: builtIn && Self.screen(for: id).map { $0.safeAreaInsets.top > 0 } ?? false,
+                virtualID: vid,
+                nativeHiDPI: ownModes.contains(where: \.hiDPI))
         }
         .sorted { ($0.isBuiltIn ? 0 : 1, $0.id) < ($1.isBuiltIn ? 0 : 1, $1.id) }
 
@@ -375,7 +391,7 @@ final class DisplayManager: ObservableObject {
     func setMode(_ mode: DisplayMode, for id: CGDirectDisplayID) {
         var config: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&config) == .success else { return }
-        CGConfigureDisplayWithDisplayMode(config, id, mode.mode, nil)
+        CGConfigureDisplayWithDisplayMode(config, (displays.first { $0.id == id }?.virtualID ?? id), mode.mode, nil)
         let err = CGCompleteDisplayConfiguration(config, .permanently)
         message = err == .success ? nil : "Couldn't switch to \(mode.label)"
         // A protected display keeps whatever the user picks here.
@@ -404,12 +420,14 @@ final class DisplayManager: ObservableObject {
 
     /// Makes `id` the main display (menu bar and Dock) by moving it to the origin.
     func makeMain(_ id: CGDirectDisplayID) {
-        let origin = CGDisplayBounds(id).origin
+        let target = displays.first { $0.id == id }?.virtualID ?? id
+        let origin = CGDisplayBounds(target).origin
         var config: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&config) == .success else { return }
         for d in displays where d.mirrorOf == nil {
-            let b = CGDisplayBounds(d.id).origin
-            CGConfigureDisplayOrigin(config, d.id, Int32(b.x - origin.x), Int32(b.y - origin.y))
+            let did = d.virtualID ?? d.id
+            let b = CGDisplayBounds(did).origin
+            CGConfigureDisplayOrigin(config, did, Int32(b.x - origin.x), Int32(b.y - origin.y))
         }
         CGCompleteDisplayConfiguration(config, .permanently)
         reload()
@@ -453,5 +471,29 @@ final class DisplayManager: ObservableObject {
                 self.restoring = false
             }
         }
+    }
+}
+
+// MARK: - Virtual HiDPI
+
+@MainActor
+extension DisplayManager {
+    func setVirtualHiDPI(_ on: Bool, for id: CGDirectDisplayID) {
+        guard let d = displays.first(where: { $0.id == id }), !d.isBuiltIn else { return }
+        var enabled = Defaults[.displayVirtualHiDPI]
+        if on {
+            guard VirtualHiDPI.shared.enable(physical: d.id, uuid: d.uuid, name: d.name) != nil else {
+                message = "macOS didn't create the HiDPI display for \(d.name)"
+                return
+            }
+            enabled.insert(d.uuid)
+            message = "Turning on HiDPI for \(d.name)…"
+        } else {
+            VirtualHiDPI.shared.disable(physical: d.id, uuid: d.uuid)
+            enabled.remove(d.uuid)
+            message = nil
+        }
+        Defaults[.displayVirtualHiDPI] = enabled
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.reload() }
     }
 }
