@@ -508,6 +508,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Displays tab (display changes) and the next-meeting chip.
         DisplayManager.shared.start()
         MeetingWatcher.shared.start()
+        // Hidden section for the menu bar (no-op unless turned on).
+        MenuBarTray.shared.start()
 
         #if DEBUG
         // Dev aid: `open NotchNerd.app --args -debugOpenTab storage` opens the notch on that tab,

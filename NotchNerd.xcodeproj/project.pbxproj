@@ -190,6 +190,7 @@
 		E3E7E0A839C22FA4C78209C2 /* OpenIslandCore in Frameworks */ = {isa = PBXBuildFile; productRef = B11E5C1F3836AF0C941BEAD6 /* OpenIslandCore */; };
 		E68DE5DB53EAEF44C49D386B /* MeetingWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D2D1B0341317E67E89B8C4 /* MeetingWatcher.swift */; };
 		E960AAD88A1EAD240D94F82D /* DisplayTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE47E51820F028140C36D979 /* DisplayTabView.swift */; };
+		EECD351A36E84FB9B4135B75 /* MenuBarTray.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7C35E4EF185C93A056F56A /* MenuBarTray.swift */; };
 		F38DE6482D8243E7008B5C6D /* BatteryActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */; };
 		F3DDF5A21F277CA22CDF13FE /* NotchModBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A289FC5D69F18616D09BD0 /* NotchModBridge.swift */; };
 		F67E0F125E8F8903F98EC9A1 /* AgentNotificationSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603CCB82C090912E8305411C /* AgentNotificationSound.swift */; };
@@ -369,6 +370,7 @@
 		9AB0C6BB2C73C9CB00F7CD30 /* NotchHomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotchHomeView.swift; sourceTree = "<group>"; };
 		9EA51FAE2D3E577A2639854B /* NotepadPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadPanel.swift; sourceTree = "<group>"; };
 		A8A289FC5D69F18616D09BD0 /* NotchModBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModBridge.swift; sourceTree = "<group>"; };
+		AB7C35E4EF185C93A056F56A /* MenuBarTray.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarTray.swift; sourceTree = "<group>"; };
 		AE47E51820F028140C36D979 /* DisplayTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisplayTabView.swift; sourceTree = "<group>"; };
 		B10348D82C74E56000475897 /* ConditionalModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConditionalModifier.swift; sourceTree = "<group>"; };
 		B10F84A22C6C9596009F3026 /* TestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestView.swift; sourceTree = "<group>"; };
@@ -726,6 +728,7 @@
 				D8B04AAD24E3225C8D37B9AC /* Storage */,
 				4F08868C87025A4780939154 /* Display */,
 				06A47D879BA6C262290CEDE5 /* Guard */,
+				82F69AFE14238C39A270A23B /* MenuBar */,
 			);
 			path = NotchNerd;
 			sourceTree = "<group>";
@@ -815,6 +818,15 @@
 			);
 			name = Display;
 			path = Display;
+			sourceTree = "<group>";
+		};
+		82F69AFE14238C39A270A23B /* MenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				AB7C35E4EF185C93A056F56A /* MenuBarTray.swift */,
+			);
+			name = MenuBar;
+			path = MenuBar;
 			sourceTree = "<group>";
 		};
 		9A0887332C7AFF7E00C160EA /* Tabs */ = {
@@ -1323,6 +1335,7 @@
 				BFF9F098568D4213BCDC0D89 /* GuardManager.swift in Sources */,
 				7323A4D70A92E453673D0CA6 /* GuardNotchView.swift in Sources */,
 				112AF2A4FEC37466FAA3DFFB /* GuardSettings.swift in Sources */,
+				EECD351A36E84FB9B4135B75 /* MenuBarTray.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

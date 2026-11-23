@@ -268,6 +268,10 @@ extension Defaults.Keys {
     static let displayPresets = Key<[DisplayPreset]>("displayPresets", default: [])
     static let displayVirtualHiDPI = Key<Set<String>>("displayVirtualHiDPI", default: [])
 
+    // MARK: Menu bar hidden section (MenuBar/MenuBarTray.swift)
+    static let menuBarTrayEnabled = Key<Bool>("menuBarTrayEnabled", default: false)
+    static let menuBarTrayAutoHideSeconds = Key<Int>("menuBarTrayAutoHideSeconds", default: 30)
+
     // Helper to determine the default media controller based on NowPlaying deprecation status
     static var defaultMediaController: MediaControllerType {
         if MusicManager.shared.isNowPlayingDeprecated {

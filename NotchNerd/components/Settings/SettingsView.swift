@@ -20,7 +20,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     // General group
     case general, appearance
     // Notch features group
-    case media, calendar, shelf, notepad, storage, displays, webcam, huds, battery, agent, guardian, mods
+    case media, calendar, shelf, notepad, storage, displays, webcam, huds, battery, agent, guardian, menuBar, mods
     // Advanced group
     case shortcuts, advanced
     // Meta
@@ -38,7 +38,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var group: Group? {
         switch self {
         case .general, .appearance: return .general
-        case .media, .calendar, .shelf, .notepad, .storage, .displays, .webcam, .huds, .battery, .agent, .guardian, .mods: return .features
+        case .media, .calendar, .shelf, .notepad, .storage, .displays, .webcam, .huds, .battery, .agent, .guardian, .menuBar, .mods: return .features
         case .shortcuts, .advanced: return .advanced
         case .about: return nil
         }
@@ -59,6 +59,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .battery: return "Battery"
         case .agent: return "Agent"
         case .guardian: return "Guard"
+        case .menuBar: return "Menu Bar"
         case .mods: return "Mods"
         case .shortcuts: return "Shortcuts"
         case .advanced: return "Advanced"
@@ -81,6 +82,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .battery: return "battery.100.bolt"
         case .agent: return "sparkles"
         case .guardian: return "faceid"
+        case .menuBar: return "menubar.rectangle"
         case .mods: return "puzzlepiece.extension"
         case .shortcuts: return "keyboard"
         case .advanced: return "gearshape.2"
@@ -163,6 +165,7 @@ struct SettingsView: View {
         case .webcam: WebcamSettings()
         case .agent: AgentSettings()
         case .guardian: GuardSettings()
+        case .menuBar: MenuBarTraySettings()
         case .mods: ModsSettings()
         case .shortcuts: Shortcuts()
         case .advanced: Advanced()
