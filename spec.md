@@ -101,6 +101,9 @@ NotchNerd/                          repo root
 │  │  ├─ NotepadView.swift          tab strip + TextEditor
 │  │  ├─ NotepadTabView.swift       in-notch Notes tab; pins notch open; NotchKeyMaker focus
 │  │  └─ NotesStore.swift           multi-note store (index.json + notes/<uuid>.md)
+│  ├─ Storage/                      Storage tab (v0.3.8)
+│  │  ├─ StorageManager.swift       free space, reclaimable categories, cleaners, low-space toast
+│  │  └─ StorageTabView.swift       tab UI + StorageSettings
 │  ├─ components/                   Notch/ Calendar/ Live activities/ Music/ Onboarding/
 │  │                                Settings/ Shelf/ Tabs/ Tips/ Webcam/
 │  │  └─ Notch/                     NotchNerdSkyLightWindow (runtime), NotchNerdWindow (legacy),
@@ -507,6 +510,25 @@ Sending… → Sent / "Waiting for Claude Code to pick it up". Presence polling 
 Agent tab is on screen; replies stranded >1 day are pruned once per launch. The composer reuses the
 QuestionCard key-focus dance (`NotchFreeformKeyMaker` + `allowsNotchKey` + `preventNotchClose`,
 Esc cancels). Session ids are validated (`^[A-Za-z0-9][A-Za-z0-9._-]*$`) on both sides.
+
+### Storage
+
+A native tab (`.storage`, `storageNotchSize` 640x300) plus a low-space watcher started from
+`AppDelegate`. `StorageManager` reads volume capacity every 5 minutes (`volumeAvailableCapacityForImportantUsage`,
+like Finder) and shows one `NotchToast` an hour when free space is under `storageLowSpaceGB` (default 15).
+The tab scans on open (if the last scan is older than 10 minutes) and lists categories that rebuild
+themselves or are history: Xcode DerivedData, simulators (`simctl erase all`, runtimes kept), package
+caches, idle node_modules (projects under `storageProjectRoots` with no file changed in `storageIdleDays`,
+ignoring dependency and build folders), Cursor chat history, app caches (not `com.apple.*`), Docker and Trash.
+Sizing and cleaning shell out to du, find, sqlite3, xcrun and docker off the main thread.
+
+- **Cursor:** only the chat rows of `cursorDiskKV` are deleted (prefixes agentKv, bubbleId, checkpointId,
+  codeBlockDiff, composerData, codeBlockPartialInlineDiffFates, messageRequestContext), then VACUUM;
+  `ItemTable` (sign-in, settings) stays. Refused while Cursor runs.
+- **Clean is two taps** (Clean, then Confirm within 4 s): the notch panel can't host a modal.
+- **Swipe-to-close is off** on Agent, Storage and Notes so their lists scroll (`ContentView`).
+- **Trash** empties through Finder (Automation prompt); sizing it needs Full Disk Access.
+- **Dev aid:** DEBUG builds accept `-debugOpenTab storage` to open the notch on a tab for screenshots.
 
 ### XPC helper
 
