@@ -608,6 +608,16 @@ own `Config`). NotchNerd owns, in `NotchNerd/Guard/`:
   windows stay on the lock screen (SkyLight) so the HUD has a home there. Debug builds:
   `-guardNotchDemo YES` plays every state without a camera.
 
+### Menu bar hidden section
+
+`MenuBar/MenuBarTray.swift`, off by default (`menuBarTrayEnabled`). A divider `NSStatusItem` (autosaveName
+`NotchNerdMenuBarDivider`, `behavior = []`); icons the user ⌘-drags to its left are pushed off-screen when it's
+collapsed (`length = 10_000`, no image) and return when expanded (14 pt chevron). `MenuBarTrayButton` sits first in
+the open notch's right-side buttons; auto-collapse after `menuBarTrayAutoHideSeconds` (0 = never). Ice's
+approach without its Ice Bar, so no Screen Recording or Accessibility permission. A new divider appears left of
+all icons, so turning it on hides nothing until the user moves icons. Dev tip: Defaults ignores `-key YES`
+launch arguments for Bool keys; pass `-menuBarTrayEnabled "<true/>"`.
+
 ### XPC helper
 
 `NotchNerdXPCHelper/` (5 files) is a separate XPC service `eth.7amza.notchnerd.XPCHelper`, built as
