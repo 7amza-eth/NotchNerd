@@ -104,6 +104,11 @@ NotchNerd/                          repo root
 │  ├─ Storage/                      Storage tab (v0.3.8)
 │  │  ├─ StorageManager.swift       free space, reclaimable categories, cleaners, low-space toast
 │  │  └─ StorageTabView.swift       tab UI + StorageSettings
+│  ├─ Display/                      Displays tab + meeting chip (v0.3.9)
+│  │  ├─ DisplayManager.swift       displays, modes (incl. HiDPI/hidden), brightness, mirror, main
+│  │  ├─ DDC.swift                  DDC/CI over IOAVService (private IOKit) for external monitors
+│  │  ├─ DisplayTabView.swift       tab UI + DisplaySettings + MeetingChipSettings
+│  │  └─ MeetingWatcher.swift       next-meeting countdown in the closed notch (EventKit)
 │  ├─ components/                   Notch/ Calendar/ Live activities/ Music/ Onboarding/
 │  │                                Settings/ Shelf/ Tabs/ Tips/ Webcam/
 │  │  └─ Notch/                     NotchNerdSkyLightWindow (runtime), NotchNerdWindow (legacy),
@@ -529,6 +534,27 @@ Sizing and cleaning shell out to du, find, sqlite3, xcrun and docker off the mai
 - **Swipe-to-close is off** on Agent, Storage and Notes so their lists scroll (`ContentView`).
 - **Trash** empties through Finder (Automation prompt); sizing it needs Full Disk Access.
 - **Dev aid:** DEBUG builds accept `-debugOpenTab storage` to open the notch on a tab for screenshots.
+
+### Displays and the meeting countdown
+
+A BetterDisplay replacement (`.display`, `displayNotchSize` 640x300). Storage and Displays are
+**right-side tabs** (`RightTabButtons` in TabSelectionView.swift, drawn in NotchNerdHeader beside the
+camera/notepad/settings buttons); the left bar keeps Home, Shelf, Agent, Notes.
+
+- **Brightness:** built-in through `BrightnessManager` (XPC helper, DisplayServices); externals through
+  DDC (`DDCChannel`, VCP 0x10/0x12/0x62/0x60, writes debounced 60 ms); monitors that don't answer DDC
+  fall back to gamma dimming (`CGSetDisplayTransferByFormula`, reset on quit). A moon slider dims below
+  the panel minimum.
+- **DDC mapping is by order:** external `DCPAVServiceProxy` services zipped with sorted external display
+  IDs. Right for one monitor, best effort for several (MonitorControl matches EDID; port that if it bites).
+- **Modes:** `CGDisplayCopyAllDisplayModes` with `kCGDisplayShowDuplicateLowResolutionModes`, split into
+  HiDPI and low-res sections. Mirror and make-main use `CGBeginDisplayConfiguration`.
+- **Not yet (BetterDisplay Pro):** XDR/EDR extra brightness, virtual screens for HiDPI on monitors
+  without it, PiP, presets, brightness keys for externals, EDID override.
+- **Meeting chip:** `MeetingWatcher` (30 s timer + EKEventStoreChanged) sets
+  `NotchModChipCenter.setNative(_:)`; the native chip shows only when no mod chip does, and yields to
+  music, timer, Claude working/needs-you like mod chips. Events count only with other attendees or a
+  call link, not declined. One toast at start; optional notes-app launch (`meetingNotesApp`, "Granola").
 
 ### XPC helper
 
