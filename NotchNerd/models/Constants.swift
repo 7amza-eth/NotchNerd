@@ -252,6 +252,13 @@ extension Defaults.Keys {
     static let storageIdleDays = Key<Int>("storageIdleDays", default: 14)
     static let storageProjectRoots = Key<[String]>("storageProjectRoots", default: ["~/Projects"])
 
+    // MARK: Displays (Display/DisplayManager.swift) and the meeting chip (Display/MeetingWatcher.swift)
+    static let displayTabEnabled = Key<Bool>("displayTabEnabled", default: true)
+    static let meetingChipEnabled = Key<Bool>("meetingChipEnabled", default: true)
+    static let meetingChipLeadMinutes = Key<Int>("meetingChipLeadMinutes", default: 60)
+    static let meetingOpenNotesApp = Key<Bool>("meetingOpenNotesApp", default: false)
+    static let meetingNotesApp = Key<String>("meetingNotesApp", default: "Granola")
+
     // Helper to determine the default media controller based on NowPlaying deprecation status
     static var defaultMediaController: MediaControllerType {
         if MusicManager.shared.isNowPlayingDeprecated {

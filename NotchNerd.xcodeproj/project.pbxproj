@@ -132,6 +132,7 @@
 		64F2126E830969FF9EB4D366 /* WorkflowAgentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */; };
 		69BF5F91BEC383D6036AAB34 /* ClaudeCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */; };
 		71DFCFE0CFC0C5439CE7C6CD /* GrokBotMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */; };
+		7A98EAE87A6E7A0F939A2A51 /* DisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A765E76AF9DDBB65947706 /* DisplayManager.swift */; };
 		7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */; };
 		7FD37B6D01C3489188DD4746 /* NotchModsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E892AF9C48D0D427F894A4 /* NotchModsSection.swift */; };
 		7FD50E9C43BB8876982812EC /* NotchModAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C333DD18C7D5B05C5BFED7B0 /* NotchModAPI.swift */; };
@@ -180,9 +181,12 @@
 		D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */; };
 		D94ACFA12B67969331B4E0A7 /* AddedMods.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D842BAB789ACFC86CC3C1F /* AddedMods.swift */; };
 		E3E7E0A839C22FA4C78209C2 /* OpenIslandCore in Frameworks */ = {isa = PBXBuildFile; productRef = B11E5C1F3836AF0C941BEAD6 /* OpenIslandCore */; };
+		E68DE5DB53EAEF44C49D386B /* MeetingWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D2D1B0341317E67E89B8C4 /* MeetingWatcher.swift */; };
+		E960AAD88A1EAD240D94F82D /* DisplayTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE47E51820F028140C36D979 /* DisplayTabView.swift */; };
 		F38DE6482D8243E7008B5C6D /* BatteryActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */; };
 		F3DDF5A21F277CA22CDF13FE /* NotchModBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A289FC5D69F18616D09BD0 /* NotchModBridge.swift */; };
 		F67E0F125E8F8903F98EC9A1 /* AgentNotificationSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603CCB82C090912E8305411C /* AgentNotificationSound.swift */; };
+		FA7A8195BA6C260FB3612E6F /* DDC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FB567798CAD44C91F4FF4D /* DDC.swift */; };
 		FF11EDF9050DB4E6A7FEBA39 /* AgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D0FD510B346C0ABAC10B21 /* AgentView.swift */; };
 /* End PBXBuildFile section */
 
@@ -318,6 +322,7 @@
 		14D570D12C5F6C6A0011E668 /* NotchNerdExtrasMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchNerdExtrasMenu.swift; sourceTree = "<group>"; };
 		14E9FEA92C70BF610062E83F /* DownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadView.swift; sourceTree = "<group>"; };
 		14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Button+Bouncing.swift"; sourceTree = "<group>"; };
+		14FB567798CAD44C91F4FF4D /* DDC.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DDC.swift; sourceTree = "<group>"; };
 		14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DataTypes+Extensions.swift"; sourceTree = "<group>"; };
 		1A6BC260493C09339D235B27 /* PlanTextLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanTextLoader.swift; sourceTree = "<group>"; };
 		2888C5285E2BE249A17F7EED /* ModsSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModsSettingsView.swift; sourceTree = "<group>"; };
@@ -329,6 +334,7 @@
 		3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadTabView.swift; sourceTree = "<group>"; };
 		430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowAgentReader.swift; sourceTree = "<group>"; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
+		50A765E76AF9DDBB65947706 /* DisplayManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisplayManager.swift; sourceTree = "<group>"; };
 		55CC912C5FCD244AC5342C52 /* NotchModStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModStore.swift; sourceTree = "<group>"; };
 		55E892AF9C48D0D427F894A4 /* NotchModsSection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModsSection.swift; sourceTree = "<group>"; };
 		56645EAC0345B21ADE649072 /* AgentReplyChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentReplyChannel.swift; sourceTree = "<group>"; };
@@ -342,6 +348,7 @@
 		624981F4EC004CA2504DB219 /* GrokBotMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GrokBotMonitor.swift; sourceTree = "<group>"; };
 		64A1335325669BA8E6668AF6 /* GhosttyJumpService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GhosttyJumpService.swift; sourceTree = "<group>"; };
 		7538835A1F722032A387A1CC /* AgentMonitorOnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentMonitorOnboardingView.swift; sourceTree = "<group>"; };
+		78D2D1B0341317E67E89B8C4 /* MeetingWatcher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingWatcher.swift; sourceTree = "<group>"; };
 		7B822991BC603F48F7F30F11 /* FeatureTourView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeatureTourView.swift; sourceTree = "<group>"; };
 		94D0606AAEA2000BEE38757E /* AgentSessionPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentSessionPresentation.swift; sourceTree = "<group>"; };
 		9963E5ED2A9B430AA5CF8617 /* ClaudeCLI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeCLI.swift; sourceTree = "<group>"; };
@@ -351,6 +358,7 @@
 		9AB0C6BB2C73C9CB00F7CD30 /* NotchHomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotchHomeView.swift; sourceTree = "<group>"; };
 		9EA51FAE2D3E577A2639854B /* NotepadPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadPanel.swift; sourceTree = "<group>"; };
 		A8A289FC5D69F18616D09BD0 /* NotchModBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModBridge.swift; sourceTree = "<group>"; };
+		AE47E51820F028140C36D979 /* DisplayTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisplayTabView.swift; sourceTree = "<group>"; };
 		B10348D82C74E56000475897 /* ConditionalModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConditionalModifier.swift; sourceTree = "<group>"; };
 		B10F84A22C6C9596009F3026 /* TestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestView.swift; sourceTree = "<group>"; };
 		B141C2402CA5F53E00AC8CC8 /* SparkleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleView.swift; sourceTree = "<group>"; };
@@ -691,6 +699,7 @@
 				C2A04E0A971E79551C2F789E /* Notepad */,
 				3CFF14CDCCEF65B1348D0CEB /* Mods */,
 				D8B04AAD24E3225C8D37B9AC /* Storage */,
+				4F08868C87025A4780939154 /* Display */,
 			);
 			path = NotchNerd;
 			sourceTree = "<group>";
@@ -765,6 +774,18 @@
 			);
 			name = Mods;
 			path = Mods;
+			sourceTree = "<group>";
+		};
+		4F08868C87025A4780939154 /* Display */ = {
+			isa = PBXGroup;
+			children = (
+				14FB567798CAD44C91F4FF4D /* DDC.swift */,
+				50A765E76AF9DDBB65947706 /* DisplayManager.swift */,
+				AE47E51820F028140C36D979 /* DisplayTabView.swift */,
+				78D2D1B0341317E67E89B8C4 /* MeetingWatcher.swift */,
+			);
+			name = Display;
+			path = Display;
 			sourceTree = "<group>";
 		};
 		9A0887332C7AFF7E00C160EA /* Tabs */ = {
@@ -1261,6 +1282,10 @@
 				5EADBA3DF92BC86AA93EBB06 /* NotchEventInbox.swift in Sources */,
 				8F67032A4B49FC8758C08ECC /* StorageManager.swift in Sources */,
 				4FC5DA21B344AB0CAF8611D7 /* StorageTabView.swift in Sources */,
+				FA7A8195BA6C260FB3612E6F /* DDC.swift in Sources */,
+				7A98EAE87A6E7A0F939A2A51 /* DisplayManager.swift in Sources */,
+				E960AAD88A1EAD240D94F82D /* DisplayTabView.swift in Sources */,
+				E68DE5DB53EAEF44C49D386B /* MeetingWatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

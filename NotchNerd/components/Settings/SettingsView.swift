@@ -20,7 +20,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     // General group
     case general, appearance
     // Notch features group
-    case media, calendar, shelf, notepad, storage, webcam, huds, battery, agent, mods
+    case media, calendar, shelf, notepad, storage, displays, webcam, huds, battery, agent, mods
     // Advanced group
     case shortcuts, advanced
     // Meta
@@ -38,7 +38,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var group: Group? {
         switch self {
         case .general, .appearance: return .general
-        case .media, .calendar, .shelf, .notepad, .storage, .webcam, .huds, .battery, .agent, .mods: return .features
+        case .media, .calendar, .shelf, .notepad, .storage, .displays, .webcam, .huds, .battery, .agent, .mods: return .features
         case .shortcuts, .advanced: return .advanced
         case .about: return nil
         }
@@ -53,6 +53,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .shelf: return "Shelf"
         case .notepad: return "Notepad"
         case .storage: return "Storage"
+        case .displays: return "Displays"
         case .webcam: return "Webcam"
         case .huds: return "HUDs"
         case .battery: return "Battery"
@@ -73,6 +74,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .shelf: return "books.vertical"
         case .notepad: return "note.text"
         case .storage: return "internaldrive"
+        case .displays: return "sun.max"
         case .webcam: return "web.camera"
         case .huds: return "dial.medium.fill"
         case .battery: return "battery.100.bolt"
@@ -155,6 +157,7 @@ struct SettingsView: View {
         case .shelf: Shelf()
         case .notepad: NotepadSettings()
         case .storage: StorageSettings()
+        case .displays: DisplaySettings()
         case .webcam: WebcamSettings()
         case .agent: AgentSettings()
         case .mods: ModsSettings()
@@ -811,6 +814,7 @@ struct CalendarSettings: View {
 
     var body: some View {
         Form {
+            MeetingChipSettings()
             Section {
                 Defaults.Toggle(key: .showCalendar) {
                     Text("Show calendar")

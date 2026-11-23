@@ -27,6 +27,9 @@ final class NotchModChipCenter: ObservableObject {
     static let shared = NotchModChipCenter()
 
     @Published private(set) var chips: [String: NotchModChip] = [:]
+    /// A built-in feature's chip (the meeting countdown), shown when no mod chip is.
+    @Published private(set) var native: NotchModChip?
+    static let nativeWidth: CGFloat = 110
     private var lastNotice: [String: Date] = [:]
 
     static let maxText = 24
@@ -44,7 +47,12 @@ final class NotchModChipCenter: ObservableObject {
                 return (chip, mod.manifest.chipWidth)
             }
         }
+        if let native { return (native, Self.nativeWidth) }
         return nil
+    }
+
+    func setNative(_ chip: NotchModChip?) {
+        if native != chip { native = chip }
     }
 
     func set(_ chip: NotchModChip, for modID: String) {

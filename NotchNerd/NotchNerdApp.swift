@@ -490,6 +490,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotchEventInbox.shared.start()
         // Watch free disk space for the Storage tab and the low-space toast.
         StorageManager.shared.start()
+        // Displays tab (display changes) and the next-meeting chip.
+        DisplayManager.shared.start()
+        MeetingWatcher.shared.start()
 
         #if DEBUG
         // Dev aid: `open NotchNerd.app --args -debugOpenTab storage` opens the notch on that tab,
@@ -498,7 +501,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 guard let self else { return }
                 let views: [String: NotchViews] = ["home": .home, "shelf": .shelf, "agent": .agent,
-                                                   "notepad": .notepad, "storage": .storage]
+                                                   "notepad": .notepad, "storage": .storage, "display": .display]
                 NotchNerdViewCoordinator.shared.currentView = views[tab] ?? .home
                 self.vm.open()
             }

@@ -25,6 +25,7 @@ struct TabSelectionView: View {
     @Default(.agentPanelEnabled) var agentPanelEnabled
     @Default(.notepadTabEnabled) var notepadTabEnabled
     @Default(.storageTabEnabled) var storageTabEnabled
+    @Default(.displayTabEnabled) var displayTabEnabled
     @Default(.notchModsEnabled) var notchModsEnabled
     @ObservedObject var notchMods = NotchModStore.shared
     @Namespace var animation
@@ -33,6 +34,7 @@ struct TabSelectionView: View {
         if agentPanelEnabled { result.append(TabModel(label: "Agent", icon: "sparkles", view: .agent)) }
         if notepadTabEnabled { result.append(TabModel(label: "Notes", icon: "note.text", view: .notepad)) }
         if storageTabEnabled { result.append(TabModel(label: "Storage", icon: "internaldrive", view: .storage)) }
+        if displayTabEnabled { result.append(TabModel(label: "Displays", icon: "sun.max", view: .display)) }
         _ = notchModsEnabled   // re-render when mods are turned on or off
         for mod in notchMods.enabledTabMods {
             let icon = mod.manifest.surfaces.tab?.icon.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil ? $0 : nil }
