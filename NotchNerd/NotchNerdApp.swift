@@ -488,6 +488,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotchModRuntimeManager.shared.start()
         // Show toasts and other events mods drop into Events/inbox/.
         NotchEventInbox.shared.start()
+        // Watch free disk space for the Storage tab and the low-space toast.
+        StorageManager.shared.start()
+
+        #if DEBUG
+        // Dev aid: `open NotchNerd.app --args -debugOpenTab storage` opens the notch on that tab,
+        // so a tab can be checked with a screenshot without hovering the notch.
+        if let tab = UserDefaults.standard.string(forKey: "debugOpenTab") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self else { return }
+                let views: [String: NotchViews] = ["home": .home, "shelf": .shelf, "agent": .agent,
+                                                   "notepad": .notepad, "storage": .storage]
+                NotchNerdViewCoordinator.shared.currentView = views[tab] ?? .home
+                self.vm.open()
+            }
+        }
+        #endif
 
         // Replay the feature tour on demand (menu-bar "Feature Tour" + Settings "Replay feature tour").
         NotificationCenter.default.addObserver(

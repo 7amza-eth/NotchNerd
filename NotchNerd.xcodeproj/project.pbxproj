@@ -118,6 +118,7 @@
 		3E9FB5C3B869477BC0701962 /* NotchModRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA91E7E376F3CA877652C5F /* NotchModRuntime.swift */; };
 		4198B98D545E26E3F15397FA /* AgentSessionPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D0606AAEA2000BEE38757E /* AgentSessionPresentation.swift */; };
 		4993B58384E469772BBB406F /* NotchModChips.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E6DEC8D95B3076DE14845E /* NotchModChips.swift */; };
+		4FC5DA21B344AB0CAF8611D7 /* StorageTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3CC439CCD370F49C95B81E /* StorageTabView.swift */; };
 		507266DB2C908E2E00A2D00D /* HoverButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 507266DA2C908E2E00A2D00D /* HoverButton.swift */; };
 		53CC753A8452134CF905FCBE /* UsageChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 601C6725C4CB1BF5E1C99B3F /* UsageChip.swift */; };
 		565A6E45BD59827314953E81 /* PlanTextLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6BC260493C09339D235B27 /* PlanTextLoader.swift */; };
@@ -134,6 +135,7 @@
 		7EEC3E1B342E615D114DB510 /* ActiveAgentProcessDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97687D279D6BE8D0D56E122 /* ActiveAgentProcessDiscovery.swift */; };
 		7FD37B6D01C3489188DD4746 /* NotchModsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E892AF9C48D0D427F894A4 /* NotchModsSection.swift */; };
 		7FD50E9C43BB8876982812EC /* NotchModAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C333DD18C7D5B05C5BFED7B0 /* NotchModAPI.swift */; };
+		8F67032A4B49FC8758C08ECC /* StorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAC1C0CA1AC6855ED0CEF52 /* StorageManager.swift */; };
 		92AFD0C0E17DB24E008AB87F /* NotepadWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58F360FDFA959505E7FF140 /* NotepadWindowController.swift */; };
 		960EFDD51C2E88B7320516E3 /* ModsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2888C5285E2BE249A17F7EED /* ModsSettingsView.swift */; };
 		9A0887322C7A693000C160EA /* TabButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887312C7A693000C160EA /* TabButton.swift */; };
@@ -319,9 +321,10 @@
 		14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DataTypes+Extensions.swift"; sourceTree = "<group>"; };
 		1A6BC260493C09339D235B27 /* PlanTextLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanTextLoader.swift; sourceTree = "<group>"; };
 		2888C5285E2BE249A17F7EED /* ModsSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModsSettingsView.swift; sourceTree = "<group>"; };
+		2BAC1C0CA1AC6855ED0CEF52 /* StorageManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StorageManager.swift; sourceTree = "<group>"; };
 		2EBBF33B3096E613DD622035 /* NotepadView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadView.swift; sourceTree = "<group>"; };
-		39B7CD21676B44BBFA2451F4 /* NotchModManifest.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModManifest.swift; sourceTree = "<group>"; };
 		34D842BAB789ACFC86CC3C1F /* AddedMods.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AddedMods.swift; sourceTree = "<group>"; };
+		39B7CD21676B44BBFA2451F4 /* NotchModManifest.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModManifest.swift; sourceTree = "<group>"; };
 		3AFCD29F43E3EFA6629578A3 /* ModCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModCatalog.swift; sourceTree = "<group>"; };
 		3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadTabView.swift; sourceTree = "<group>"; };
 		430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowAgentReader.swift; sourceTree = "<group>"; };
@@ -381,6 +384,7 @@
 		C9DB0DB877CB83B59501DD04 /* NotesStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotesStore.swift; sourceTree = "<group>"; };
 		D1E6DEC8D95B3076DE14845E /* NotchModChips.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModChips.swift; sourceTree = "<group>"; };
 		D40B3ECF7F69F23BD607D5A5 /* AgentSessionDetails.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentSessionDetails.swift; sourceTree = "<group>"; };
+		DA3CC439CCD370F49C95B81E /* StorageTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StorageTabView.swift; sourceTree = "<group>"; };
 		DBA91E7E376F3CA877652C5F /* NotchModRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModRuntime.swift; sourceTree = "<group>"; };
 		E470FD8D31287EA9B8148BD3 /* AutomationInfoView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AutomationInfoView.swift; sourceTree = "<group>"; };
 		E6DBF7837B002A75F1DC3B59 /* AgentBridgeManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentBridgeManager.swift; sourceTree = "<group>"; };
@@ -686,6 +690,7 @@
 				C0883F44AB4FEE2309C4F61D /* Agent */,
 				C2A04E0A971E79551C2F789E /* Notepad */,
 				3CFF14CDCCEF65B1348D0CEB /* Mods */,
+				D8B04AAD24E3225C8D37B9AC /* Storage */,
 			);
 			path = NotchNerd;
 			sourceTree = "<group>";
@@ -919,6 +924,16 @@
 			);
 			name = Notepad;
 			path = Notepad;
+			sourceTree = "<group>";
+		};
+		D8B04AAD24E3225C8D37B9AC /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				2BAC1C0CA1AC6855ED0CEF52 /* StorageManager.swift */,
+				DA3CC439CCD370F49C95B81E /* StorageTabView.swift */,
+			);
+			name = Storage;
+			path = Storage;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1244,6 +1259,8 @@
 				3E9FB5C3B869477BC0701962 /* NotchModRuntime.swift in Sources */,
 				D94ACFA12B67969331B4E0A7 /* AddedMods.swift in Sources */,
 				5EADBA3DF92BC86AA93EBB06 /* NotchEventInbox.swift in Sources */,
+				8F67032A4B49FC8758C08ECC /* StorageManager.swift in Sources */,
+				4FC5DA21B344AB0CAF8611D7 /* StorageTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

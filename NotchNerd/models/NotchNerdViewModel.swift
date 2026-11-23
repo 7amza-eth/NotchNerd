@@ -194,6 +194,7 @@ class NotchNerdViewModel: NSObject, ObservableObject {
     func openSize(for view: NotchViews) -> CGSize {
         switch view {
         case .agent: return agentNotchSize
+        case .storage: return storageNotchSize
         case .mod(let id):
             guard let mod = NotchModStore.shared.mod(id: id) else { return openNotchSize }
             return CGSize(width: openNotchSize.width, height: mod.manifest.tabHeight)

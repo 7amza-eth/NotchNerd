@@ -29,6 +29,7 @@ public enum NotchViews: Hashable {
     case shelf
     case agent
     case notepad
+    case storage
     /// A notch mod's tab, by mod id (see Mods/NotchModStore.swift).
     case mod(String)
 }

@@ -245,6 +245,13 @@ extension Defaults.Keys {
     // MARK: Notepad
     static let notepadTabEnabled = Key<Bool>("notepadTabEnabled", default: true)
 
+    // MARK: Storage (Storage/StorageManager.swift)
+    static let storageTabEnabled = Key<Bool>("storageTabEnabled", default: true)
+    static let storageLowSpaceAlerts = Key<Bool>("storageLowSpaceAlerts", default: true)
+    static let storageLowSpaceGB = Key<Int>("storageLowSpaceGB", default: 15)
+    static let storageIdleDays = Key<Int>("storageIdleDays", default: 14)
+    static let storageProjectRoots = Key<[String]>("storageProjectRoots", default: ["~/Projects"])
+
     // Helper to determine the default media controller based on NowPlaying deprecation status
     static var defaultMediaController: MediaControllerType {
         if MusicManager.shared.isNowPlayingDeprecated {

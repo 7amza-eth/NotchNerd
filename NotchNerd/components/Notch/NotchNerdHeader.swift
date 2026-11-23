@@ -16,7 +16,7 @@ struct NotchNerdHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             HStack {
-                if ((!tvm.isEmpty || coordinator.alwaysShowTabs) && Defaults[.shelfEnabled]) || Defaults[.agentPanelEnabled] || Defaults[.notepadTabEnabled] {
+                if ((!tvm.isEmpty || coordinator.alwaysShowTabs) && Defaults[.shelfEnabled]) || Defaults[.agentPanelEnabled] || Defaults[.notepadTabEnabled] || Defaults[.storageTabEnabled] {
                     TabSelectionView()
                 } else if vm.notchState == .open {
                     EmptyView()

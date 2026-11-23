@@ -20,7 +20,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     // General group
     case general, appearance
     // Notch features group
-    case media, calendar, shelf, notepad, webcam, huds, battery, agent, mods
+    case media, calendar, shelf, notepad, storage, webcam, huds, battery, agent, mods
     // Advanced group
     case shortcuts, advanced
     // Meta
@@ -38,7 +38,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var group: Group? {
         switch self {
         case .general, .appearance: return .general
-        case .media, .calendar, .shelf, .notepad, .webcam, .huds, .battery, .agent, .mods: return .features
+        case .media, .calendar, .shelf, .notepad, .storage, .webcam, .huds, .battery, .agent, .mods: return .features
         case .shortcuts, .advanced: return .advanced
         case .about: return nil
         }
@@ -52,6 +52,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .calendar: return "Calendar"
         case .shelf: return "Shelf"
         case .notepad: return "Notepad"
+        case .storage: return "Storage"
         case .webcam: return "Webcam"
         case .huds: return "HUDs"
         case .battery: return "Battery"
@@ -71,6 +72,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .calendar: return "calendar"
         case .shelf: return "books.vertical"
         case .notepad: return "note.text"
+        case .storage: return "internaldrive"
         case .webcam: return "web.camera"
         case .huds: return "dial.medium.fill"
         case .battery: return "battery.100.bolt"
@@ -152,6 +154,7 @@ struct SettingsView: View {
         case .battery: Battery()
         case .shelf: Shelf()
         case .notepad: NotepadSettings()
+        case .storage: StorageSettings()
         case .webcam: WebcamSettings()
         case .agent: AgentSettings()
         case .mods: ModsSettings()

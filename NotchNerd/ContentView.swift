@@ -238,7 +238,7 @@ struct ContentView: View {
                                 handleDownGesture(translation: translation, phase: phase)
                             }
                     }
-                    .conditionalModifier(Defaults[.closeGestureEnabled] && Defaults[.enableGestures] && coordinator.currentView != .agent) { view in
+                    .conditionalModifier(Defaults[.closeGestureEnabled] && Defaults[.enableGestures] && ![.agent, .storage, .notepad].contains(coordinator.currentView)) { view in
                         // The Agent tab scrolls; its swipe-up-to-close gesture installs a window-level
                         // scroll-wheel monitor that would otherwise hijack the list scroll and close the
                         // notch. Disable the close gesture there (hover-out still closes it).
@@ -520,6 +520,8 @@ struct ContentView: View {
                         AgentView()
                     case .notepad:
                         NotepadTabView()
+                    case .storage:
+                        StorageTabView()
                     case .mod(let id):
                         NotchModTabView(modID: id)
                     }
