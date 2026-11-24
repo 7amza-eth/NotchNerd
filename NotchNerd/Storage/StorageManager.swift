@@ -106,8 +106,13 @@ final class StorageManager: ObservableObject {
         refreshFreeSpace()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-            Task { @MainActor in StorageManager.shared.refreshFreeSpace() }
+            Task { @MainActor in
+                StorageManager.shared.refreshFreeSpace()
+                StorageManager.shared.autoCleanIfDue()
+            }
         }
+        // Give launch a minute to settle before a due weekly clean.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { self.autoCleanIfDue() }
     }
 
     func refreshFreeSpace() {
@@ -371,5 +376,59 @@ final class StorageManager: ObservableObject {
         f.countStyle = .file
         f.allowedUnits = bytes >= 1_000_000_000 ? [.useGB] : [.useMB, .useKB]
         return f.string(fromByteCount: bytes)
+    }
+}
+
+
+// MARK: - Weekly auto-clean
+
+@MainActor
+extension StorageManager {
+    /// What the weekly clean clears: only things that rebuild themselves without losing anything.
+    /// (Simulators: only devices for runtimes that are no longer installed, never `erase all`.)
+    static let autoCleanCategories: [StorageCategory.ID] = [.derivedData, .packageCaches]
+    static let autoCleanInterval: TimeInterval = 7 * 24 * 3600
+
+    var lastAutoClean: Date? {
+        let t = Defaults[.storageAutoCleanLastRun]
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+
+    func autoCleanIfDue() {
+        guard Defaults[.storageAutoCleanEnabled], cleaning == nil else { return }
+        if let last = lastAutoClean, Date().timeIntervalSince(last) < Self.autoCleanInterval { return }
+        runAutoClean()
+    }
+
+    /// Runs the weekly clean now (also the "Run now" button), then shows one toast with what it freed.
+    func runAutoClean() {
+        guard cleaning == nil else { return }
+        cleaning = .packageCaches
+        refreshFreeSpace()
+        let before = freeBytes
+        let roots = Self.projectRoots()
+        let idleDays = Defaults[.storageIdleDays]
+        queue.async {
+            // Measure what's there first: the volume's free-space number lags deletions and moves
+            // with whatever else is writing, so "free after - free before" under-reports.
+            let paths = Self.autoCleanCategories.flatMap { Self.paths(for: $0) }
+                .filter { FileManager.default.fileExists(atPath: $0) }
+            let measured = Self.duBytes(paths)
+            for id in Self.autoCleanCategories { _ = Self.performClean(id, idleDays: idleDays, roots: roots) }
+            _ = Self.run("/usr/bin/xcrun", ["simctl", "delete", "unavailable"], timeout: 120)
+            DispatchQueue.main.async {
+                self.cleaning = nil
+                self.refreshFreeSpace()
+                let freed = max(measured, self.freeBytes - before)
+                Defaults[.storageAutoCleanLastRun] = Date().timeIntervalSince1970
+                Defaults[.storageAutoCleanLastFreed] = Double(freed)
+                self.lastResult = "Weekly clean freed \(Self.format(freed))"
+                NotchEventInbox.shared.show(NotchToast(
+                    title: "Weekly clean",
+                    message: freed > 50_000_000 ? "Freed \(Self.format(freed)) of caches" : "Nothing much to clear",
+                    style: .success, symbol: "sparkles", duration: 5))
+                self.lastScan = nil   // the tab rescans next time it opens
+            }
+        }
     }
 }

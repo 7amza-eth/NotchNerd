@@ -173,6 +173,16 @@ struct StorageSettings: View {
     @Default(.storageLowSpaceGB) var lowSpaceGB
     @Default(.storageIdleDays) var idleDays
     @Default(.storageProjectRoots) var roots
+    @Default(.storageAutoCleanLastRun) var lastRun
+    @Default(.storageAutoCleanLastFreed) var lastFreed
+    @ObservedObject private var storage = StorageManager.shared
+
+    private var lastRunText: String {
+        if storage.cleaning != nil { return "Cleaning…" }
+        guard lastRun > 0 else { return "Hasn't run yet" }
+        let when = RelativeDateTimeFormatter().localizedString(for: Date(timeIntervalSince1970: lastRun), relativeTo: Date())
+        return "Last run \(when), freed \(StorageManager.format(Int64(lastFreed)))"
+    }
 
     var body: some View {
         Form {
@@ -184,6 +194,21 @@ struct StorageSettings: View {
                 Text("Storage")
             } footer: {
                 Text("Shows free space and the caches that are safe to clear. The warning shows at most once an hour.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                Defaults.Toggle(key: .storageAutoCleanEnabled) { Text("Clear rebuildable caches once a week") }
+                HStack {
+                    Text(lastRunText).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Run now") { StorageManager.shared.runAutoClean() }
+                        .disabled(storage.cleaning != nil)
+                }
+            } header: {
+                Text("Weekly clean")
+            } footer: {
+                Text("Clears the Xcode build cache, package caches (npm, pnpm, uv, Homebrew and others) and simulators for iOS versions you no longer have. All of it rebuilds itself when needed. Your simulators, node_modules and app data are left alone.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

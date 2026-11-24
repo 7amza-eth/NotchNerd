@@ -254,6 +254,9 @@ extension Defaults.Keys {
     static let storageLowSpaceGB = Key<Int>("storageLowSpaceGB", default: 15)
     static let storageIdleDays = Key<Int>("storageIdleDays", default: 14)
     static let storageProjectRoots = Key<[String]>("storageProjectRoots", default: ["~/Projects"])
+    static let storageAutoCleanEnabled = Key<Bool>("storageAutoCleanEnabled", default: false)
+    static let storageAutoCleanLastRun = Key<Double>("storageAutoCleanLastRun", default: 0)
+    static let storageAutoCleanLastFreed = Key<Double>("storageAutoCleanLastFreed", default: 0)
 
     // MARK: Displays (Display/DisplayManager.swift) and the meeting chip (Display/MeetingWatcher.swift)
     static let displayTabEnabled = Key<Bool>("displayTabEnabled", default: true)

@@ -542,6 +542,12 @@ Sizing and cleaning shell out to du, find, sqlite3, xcrun and docker off the mai
 - **Clean is two taps** (Clean, then Confirm within 4 s): the notch panel can't host a modal.
 - **Swipe-to-close is off** on Agent, Storage and Notes so their lists scroll (`ContentView`).
 - **Trash** empties through Finder (Automation prompt); sizing it needs Full Disk Access.
+- **Weekly clean** (`storageAutoCleanEnabled`, off by default): every 5-minute tick (and 60 s after launch)
+  `autoCleanIfDue()` runs `runAutoClean()` if 7 days passed since `storageAutoCleanLastRun`. It clears only
+  `.derivedData` + `.packageCaches` and `simctl delete unavailable` (never `erase all`, node_modules or app
+  caches), then shows one toast. "Freed" is the `du` size measured before deleting, because the volume's
+  free-space number lags deletions. Deleting a big pnpm/uv store with `FileManager.removeItem` can take
+  minutes; it runs on the storage queue. Settings, Storage: toggle, last run, Run now.
 - **Dev aid:** DEBUG builds accept `-debugOpenTab storage` to open the notch on a tab for screenshots.
 
 ### Displays and the meeting countdown
