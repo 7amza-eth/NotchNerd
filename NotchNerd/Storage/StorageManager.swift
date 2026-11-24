@@ -32,7 +32,7 @@ struct StorageCategory: Identifiable, Equatable {
         case .derivedData: return "Xcode build cache"
         case .simulators: return "iOS simulators"
         case .packageCaches: return "Package caches"
-        case .nodeModules: return "Idle node_modules"
+        case .nodeModules: return "Idle projects"
         case .cursorChats: return "Cursor chat history"
         case .appCaches: return "App caches"
         case .docker: return "Docker"
@@ -45,7 +45,7 @@ struct StorageCategory: Identifiable, Equatable {
         case .derivedData: return "hammer"
         case .simulators: return "iphone"
         case .packageCaches: return "shippingbox"
-        case .nodeModules: return "folder.badge.minus"
+        case .nodeModules: return "parkingsign.circle"
         case .cursorChats: return "bubble.left.and.text.bubble.right"
         case .appCaches: return "internaldrive"
         case .docker: return "cube"
@@ -59,7 +59,7 @@ struct StorageCategory: Identifiable, Equatable {
         case .derivedData: return "Rebuilt on next build"
         case .simulators: return "Erases devices only"
         case .packageCaches: return "npm, pnpm, uv, Homebrew"
-        case .nodeModules: return "Projects idle \(Defaults[.storageIdleDays])+ days"
+        case .nodeModules: return "Park ones idle \(Defaults[.storageIdleDays])+ days"
         case .cursorChats: return "Old chats; sign-in stays"
         case .appCaches: return "Library caches, not Apple's"
         case .docker: return "Unused images and cache"
@@ -225,9 +225,10 @@ final class StorageManager: ObservableObject {
         var cat = StorageCategory(id: id)
         switch id {
         case .nodeModules:
-            let dirs = idleNodeModules(idleDays: idleDays, roots: roots)
-            cat.bytes = duBytes(dirs)
-            cat.detail = dirs.isEmpty ? "" : "\(dirs.count) folder\(dirs.count == 1 ? "" : "s")"
+            // Idle projects: measured by ProjectParking so the row and the review list agree.
+            let found = ProjectParking.findIdle(idleDays: idleDays, roots: ProjectParking.roots()).filter { !$0.inUse }
+            cat.bytes = found.map(\.bytes).reduce(0, +)
+            cat.detail = found.isEmpty ? "" : "\(found.count) project\(found.count == 1 ? "" : "s")"
         case .docker:
             guard let docker = which("docker") else { cat.bytes = 0; cat.unavailable = "Docker not installed"; return cat }
             let (code, out) = run(docker, ["system", "df", "--format", "{{.Reclaimable}}"], timeout: 20)
@@ -255,7 +256,9 @@ final class StorageManager: ObservableObject {
             for p in paths(for: id) where fm.fileExists(atPath: p) { try? fm.removeItem(atPath: p) }
             return nil
         case .nodeModules:
-            for d in idleNodeModules(idleDays: idleDays, roots: roots) { try? fm.removeItem(atPath: d) }
+            for p in ProjectParking.findIdle(idleDays: idleDays, roots: ProjectParking.roots()) where !p.inUse {
+                _ = ProjectParking.performPark(p)
+            }
             return nil
         case .simulators:
             _ = run("/usr/bin/xcrun", ["simctl", "shutdown", "all"], timeout: 60)
@@ -287,39 +290,6 @@ final class StorageManager: ObservableObject {
     }
 
     // MARK: Helpers
-
-    /// node_modules folders (up to 4 levels under each root) whose project has no file changed in
-    /// `idleDays`, ignoring dependency and build folders.
-    nonisolated static func idleNodeModules(idleDays: Int, roots: [String]) -> [String] {
-        guard !roots.isEmpty else { return [] }
-        let (_, found) = run("/usr/bin/find", roots + ["-maxdepth", "4", "-name", "node_modules", "-type", "d", "-prune"], timeout: 120)
-        var result: [String] = []
-        var checked: [String: Bool] = [:]
-        for nm in found.split(separator: "\n").map(String.init) where !nm.isEmpty {
-            let parent = (nm as NSString).deletingLastPathComponent
-            let project = repoRoot(of: parent, stopAt: roots) ?? parent
-            let idle: Bool
-            if let cached = checked[project] { idle = cached } else {
-                let (_, recent) = run("/usr/bin/find", [project, "-maxdepth", "4",
-                    "(", "-name", "node_modules", "-o", "-name", ".git", "-o", "-name", ".next", "-o", "-name", ".turbo",
-                    "-o", "-name", "dist", "-o", "-name", "build", "-o", "-name", ".open-next", ")", "-prune",
-                    "-o", "-type", "f", "-mtime", "-\(idleDays)", "-print", "-quit"], timeout: 60)
-                idle = recent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                checked[project] = idle
-            }
-            if idle { result.append(nm) }
-        }
-        return result
-    }
-
-    nonisolated private static func repoRoot(of dir: String, stopAt roots: [String]) -> String? {
-        var d = dir
-        while d != "/" && !roots.contains(d) {
-            if FileManager.default.fileExists(atPath: "\(d)/.git") { return d }
-            d = (d as NSString).deletingLastPathComponent
-        }
-        return nil
-    }
 
     nonisolated private static func duBytes(_ paths: [String]) -> Int64 {
         guard !paths.isEmpty else { return 0 }

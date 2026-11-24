@@ -103,6 +103,8 @@ NotchNerd/                          repo root
 │  │  └─ NotesStore.swift           multi-note store (index.json + notes/<uuid>.md)
 │  ├─ Storage/                      Storage tab (v0.3.8)
 │  │  ├─ StorageManager.swift       free space, reclaimable categories, cleaners, low-space toast
+│  │  ├─ ProjectParking.swift       idle-project scan, park (delete rebuildables) + wake (reinstall)
+│  │  ├─ ProjectParkingList.swift   the "Idle projects" review list inside the tab
 │  │  └─ StorageTabView.swift       tab UI + StorageSettings
 │  ├─ Display/                      Displays tab + meeting chip (v0.3.9)
 │  │  ├─ DisplayManager.swift       displays, modes (incl. HiDPI/hidden), brightness, mirror, main
@@ -532,8 +534,7 @@ A native tab (`.storage`, `storageNotchSize` 640x300) plus a low-space watcher s
 like Finder) and shows one `NotchToast` an hour when free space is under `storageLowSpaceGB` (default 15).
 The tab scans on open (if the last scan is older than 10 minutes) and lists categories that rebuild
 themselves or are history: Xcode DerivedData, simulators (`simctl erase all`, runtimes kept), package
-caches, idle node_modules (projects under `storageProjectRoots` with no file changed in `storageIdleDays`,
-ignoring dependency and build folders), Cursor chat history, app caches (not `com.apple.*`), Docker and Trash.
+caches, idle projects (see Parking below), Cursor chat history, app caches (not `com.apple.*`), Docker and Trash.
 Sizing and cleaning shell out to du, find, sqlite3, xcrun and docker off the main thread.
 
 - **Cursor:** only the chat rows of `cursorDiskKV` are deleted (prefixes agentKv, bubbleId, checkpointId,
@@ -548,7 +549,24 @@ Sizing and cleaning shell out to du, find, sqlite3, xcrun and docker off the mai
   caches), then shows one toast. "Freed" is the `du` size measured before deleting, because the volume's
   free-space number lags deletions. Deleting a big pnpm/uv store with `FileManager.removeItem` can take
   minutes; it runs on the storage queue. Settings, Storage: toggle, last run, Run now.
-- **Dev aid:** DEBUG builds accept `-debugOpenTab storage` to open the notch on a tab for screenshots.
+- **Parking idle projects** (v0.5.3, the "offload" for code): the Idle projects row has Review instead of
+  Clean and swaps the right side for `ProjectParkingList`. Roots are `storageProjectRoots` plus any
+  `~/.…worktrees` folder; each direct child is a candidate. Idle = no file outside rebuildable folders,
+  .git, .wrangler, dist and build changed in `storageIdleDays` (ignoring .DS_Store and *.tsbuildinfo), and
+  no process of the user's has its cwd inside (`lsof -d cwd`, re-checked right before deleting). Park
+  deletes node_modules, .next, .turbo, .open-next, .expo, .svelte-kit, .parcel-cache, .nuxt, .output,
+  .angular, Pods, .gradle, DerivedData and SwiftPM .build (only beside a Package.swift); never source,
+  .git, env files, .wrangler (local D1/KV state), .vercel, dist or build. Under 20 MB isn't listed.
+  Records go to `~/Library/Application Support/NotchNerd/parked-projects.json` (nothing written in the
+  repo) with the restore commands: one install per lockfile root (pnpm/bun/yarn/npm, so monorepos install
+  once and a folder holding several repos installs each) plus `pod install` per Podfile. Wake runs them via
+  `zsh -lc` (Homebrew/rbenv on PATH, 20 min cap) and toasts the result; entries whose node_modules came
+  back by hand are pruned on scan. Cold personal files were looked at and skipped: Documents is already
+  iCloud-optimized (dataless) and cold big files came to under 1 GB, while ~68 of 92 GB in ~/Projects
+  was rebuildable output.
+- **Dev aid:** DEBUG builds accept `-debugOpenTab storage` (or `storage-projects` for the review list) to
+  open the notch on a tab for screenshots; `-debugParkingDump YES` writes the idle scan to
+  /tmp/notchnerd-parking.txt; `-debugParkingSelfTest <root>` parks then wakes everything idle under <root>.
 
 ### Displays and the meeting countdown
 

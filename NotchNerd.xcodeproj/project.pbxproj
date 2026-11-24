@@ -153,6 +153,7 @@
 		9ADC85C9AE3F3B0E4C85F8BD /* NotepadPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EA51FAE2D3E577A2639854B /* NotepadPanel.swift */; };
 		9D156590C7889AF9E73C7110 /* VirtualHiDPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17B8F94CE29029521D76F6A /* VirtualHiDPI.swift */; };
 		A6A213C9133CACB3B39CEF61 /* NotchModStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55CC912C5FCD244AC5342C52 /* NotchModStore.swift */; };
+		AFD9CBA5438EE75F3D19CDF2 /* ProjectParkingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42FDE927F6650470AA4050DF /* ProjectParkingList.swift */; };
 		B10348D92C74E56000475897 /* ConditionalModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10348D82C74E56000475897 /* ConditionalModifier.swift */; };
 		B10F84A32C6C9596009F3026 /* TestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10F84A22C6C9596009F3026 /* TestView.swift */; };
 		B141C2412CA5F53F00AC8CC8 /* SparkleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B141C2402CA5F53E00AC8CC8 /* SparkleView.swift */; };
@@ -183,6 +184,7 @@
 		B54D100E683F3C3734A28A44 /* NotchModTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F14A31613C0C91A6180309 /* NotchModTabView.swift */; };
 		BF52E90305AF5F26B60F35A9 /* AgentReplyChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56645EAC0345B21ADE649072 /* AgentReplyChannel.swift */; };
 		BFF9F098568D4213BCDC0D89 /* GuardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D214D816407B7B4AC2E8B7B /* GuardManager.swift */; };
+		C5F77289D4646622FA2D14FF /* ProjectParking.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C707D04ED9C4445DB1EC0C /* ProjectParking.swift */; };
 		D4B34A341EAAC48470D3C113 /* TerminalAppJumpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6119E109AC81B2ADF43B8ABC /* TerminalAppJumpService.swift */; };
 		D5287D99FDCD8AC32A17E88D /* AgentUsageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A629446A5E38FC2A7B34B2F /* AgentUsageManager.swift */; };
 		D7AFA987413B3B3EAD218FCF /* AgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD69FA5C99D7C0FAD14D6DC /* AgentActivity.swift */; };
@@ -341,6 +343,7 @@
 		39B7CD21676B44BBFA2451F4 /* NotchModManifest.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModManifest.swift; sourceTree = "<group>"; };
 		3AFCD29F43E3EFA6629578A3 /* ModCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModCatalog.swift; sourceTree = "<group>"; };
 		3EEBC596B4CF86F9AC0FFA7E /* NotepadTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadTabView.swift; sourceTree = "<group>"; };
+		42FDE927F6650470AA4050DF /* ProjectParkingList.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProjectParkingList.swift; sourceTree = "<group>"; };
 		430ED62C0ECBC6CEC5D04F9F /* WorkflowAgentReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowAgentReader.swift; sourceTree = "<group>"; };
 		4C206599DFEF4086B6F14823 /* DisplayPresets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisplayPresets.swift; sourceTree = "<group>"; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
@@ -369,6 +372,7 @@
 		9A987A032C73CA66005CA465 /* ShelfView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfView.swift; sourceTree = "<group>"; };
 		9AB0C6BB2C73C9CB00F7CD30 /* NotchHomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotchHomeView.swift; sourceTree = "<group>"; };
 		9EA51FAE2D3E577A2639854B /* NotepadPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotepadPanel.swift; sourceTree = "<group>"; };
+		A6C707D04ED9C4445DB1EC0C /* ProjectParking.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProjectParking.swift; sourceTree = "<group>"; };
 		A8A289FC5D69F18616D09BD0 /* NotchModBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchModBridge.swift; sourceTree = "<group>"; };
 		AB7C35E4EF185C93A056F56A /* MenuBarTray.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarTray.swift; sourceTree = "<group>"; };
 		AE47E51820F028140C36D979 /* DisplayTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisplayTabView.swift; sourceTree = "<group>"; };
@@ -993,6 +997,8 @@
 			children = (
 				2BAC1C0CA1AC6855ED0CEF52 /* StorageManager.swift */,
 				DA3CC439CCD370F49C95B81E /* StorageTabView.swift */,
+				A6C707D04ED9C4445DB1EC0C /* ProjectParking.swift */,
+				42FDE927F6650470AA4050DF /* ProjectParkingList.swift */,
 			);
 			name = Storage;
 			path = Storage;
@@ -1336,6 +1342,8 @@
 				7323A4D70A92E453673D0CA6 /* GuardNotchView.swift in Sources */,
 				112AF2A4FEC37466FAA3DFFB /* GuardSettings.swift in Sources */,
 				EECD351A36E84FB9B4135B75 /* MenuBarTray.swift in Sources */,
+				C5F77289D4646622FA2D14FF /* ProjectParking.swift in Sources */,
+				AFD9CBA5438EE75F3D19CDF2 /* ProjectParkingList.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

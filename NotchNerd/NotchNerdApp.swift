@@ -512,14 +512,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MenuBarTray.shared.start()
 
         #if DEBUG
-        // Dev aid: `open NotchNerd.app --args -debugOpenTab storage` opens the notch on that tab,
+        // Dev aid: `open NotchNerd.app --args -debugOpenTab storage` (or `storage-projects`) opens the notch on that tab,
         // so a tab can be checked with a screenshot without hovering the notch.
         if UserDefaults.standard.bool(forKey: "debugVirtualProbe") { VirtualHiDPI.shared.debugProbe() }
+        // `-debugParkingDump YES`: write the idle-project scan to /tmp/notchnerd-parking.txt (deletes nothing).
+        if UserDefaults.standard.bool(forKey: "debugParkingDump") {
+            ProjectParking.shared.scan {
+                let lines = ProjectParking.shared.idle.map { p in
+                    "\(StorageManager.format(p.bytes))\t\(p.inUse ? "IN USE" : "idle")\t\(p.path)\t\(p.restore.joined(separator: "; "))\t"
+                        + p.removable.map { String($0.dropFirst(p.path.count + 1)) }.joined(separator: ",")
+                }
+                try? lines.joined(separator: "\n").write(toFile: "/tmp/notchnerd-parking.txt", atomically: true, encoding: .utf8)
+            }
+        }
+        // `-debugParkingSelfTest <root>`: park then wake every idle project under <root>, log to /tmp.
+        if let root = UserDefaults.standard.string(forKey: "debugParkingSelfTest") {
+            DispatchQueue.global().async {
+                var log: [String] = []
+                for p in ProjectParking.findIdle(idleDays: 14, roots: [root]) {
+                    log.append("found \(p.name) \(p.bytes) restore=\(p.restore)")
+                    switch ProjectParking.performPark(p) {
+                    case .success(let e):
+                        log.append("parked removed=\(e.removed) nm_exists=\(FileManager.default.fileExists(atPath: p.path + "/node_modules"))")
+                        log.append("wake=\(ProjectParking.performWake(e) ?? "ok") nm_exists=\(FileManager.default.fileExists(atPath: p.path + "/node_modules"))")
+                        ProjectParking.saveRegistry(ProjectParking.loadRegistry().filter { $0.path != e.path })
+                    case .failure(let err): log.append("park failed: \(err.localizedDescription)")
+                    }
+                }
+                try? log.joined(separator: "\n").write(toFile: "/tmp/notchnerd-parking-selftest.txt", atomically: true, encoding: .utf8)
+            }
+        }
         if let tab = UserDefaults.standard.string(forKey: "debugOpenTab") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 guard let self else { return }
                 let views: [String: NotchViews] = ["home": .home, "shelf": .shelf, "agent": .agent,
-                                                   "notepad": .notepad, "storage": .storage, "display": .display]
+                                                   "notepad": .notepad, "storage": .storage, "storage-projects": .storage, "display": .display]
                 NotchNerdViewCoordinator.shared.currentView = views[tab] ?? .home
                 self.vm.open()
             }
